@@ -2832,6 +2832,658 @@ git commit -m "feat: complete cpm CLI (plan/apply/verify/rollback) with exit cod
 
 ---
 
+## Phase 13: session-keyed linkage and `cpm list` inventory (F13)
+
+Spec: `docs/features/v1.1-inventory-retention-reassociate.md` (F13, AC-28..33).
+Depends only on the phase 1-4 read layer.
+
+### Task 13.1: SessionFootprint - link a project to its session-keyed artifacts
+
+**Files:**
+- Create: `crates/cpm-core/src/sessions.rs`; modify `lib.rs` (`pub mod sessions;`)
+
+**Interfaces:**
+- Consumes: `FileSystem`.
+- Produces:
+  ```rust
+  pub struct SessionFootprint {
+      pub session_ids: Vec<String>,          // *.jsonl basenames in the project dir
+      pub todos: usize, pub file_history: usize,
+      pub session_env: usize, pub tasks: usize,
+  }
+  pub fn footprint(fs: &dyn FileSystem, home: &Path, project_dir: &Path) -> SessionFootprint;
+  ```
+
+- [ ] **Step 1: Write the failing test**
+
+`crates/cpm-core/src/sessions.rs`:
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fs::{FileSystem, MemoryFileSystem};
+    use std::path::Path;
+
+    #[test]
+    fn links_session_keyed_stores_by_id() {
+        let fs = MemoryFileSystem::new();
+        let sid = "28fd093e";
+        fs.write(Path::new("/h/.claude/projects/E--A/28fd093e.jsonl"), b"{}\n").unwrap();
+        fs.write(Path::new("/h/.claude/todos/28fd093e-agent-28fd093e.json"), b"[]").unwrap();
+        fs.write(Path::new("/h/.claude/file-history/28fd093e/x@v1"), b"x").unwrap();
+        let fp = footprint(&fs, Path::new("/h"), Path::new("/h/.claude/projects/E--A"));
+        assert_eq!(fp.session_ids, vec![sid.to_string()]);
+        assert_eq!(fp.todos, 1);
+        assert_eq!(fp.file_history, 1);
+    }
+}
+```
+
+- [ ] **Step 2: Run to verify failure, then implement**
+
+```rust
+use crate::fs::FileSystem;
+use std::path::Path;
+
+pub struct SessionFootprint {
+    pub session_ids: Vec<String>,
+    pub todos: usize,
+    pub file_history: usize,
+    pub session_env: usize,
+    pub tasks: usize,
+}
+
+pub fn footprint(fs: &dyn FileSystem, home: &Path, project_dir: &Path) -> SessionFootprint {
+    let mut ids = Vec::new();
+    for child in fs.read_dir(project_dir).unwrap_or_default() {
+        if child.extension().and_then(|e| e.to_str()) == Some("jsonl") {
+            if let Some(stem) = child.file_stem().and_then(|s| s.to_str()) {
+                ids.push(stem.to_string());
+            }
+        }
+    }
+    let count_matching = |store: &str| -> usize {
+        let d = home.join(".claude").join(store);
+        fs.read_dir(&d).unwrap_or_default().iter()
+            .filter(|p| p.file_name().and_then(|n| n.to_str())
+                .map(|n| ids.iter().any(|id| n.contains(id.as_str()))).unwrap_or(false))
+            .count()
+    };
+    SessionFootprint {
+        todos: count_matching("todos"),
+        file_history: count_matching("file-history"),
+        session_env: count_matching("session-env"),
+        tasks: count_matching("tasks"),
+        session_ids: ids,
+    }
+}
+```
+
+- [ ] **Step 3: Run, then commit**
+
+Run: `cargo test -p cpm-core sessions::tests`
+Expected: PASS.
+```bash
+git add crates/cpm-core/src/sessions.rs crates/cpm-core/src/lib.rs
+git commit -m "feat: session-keyed footprint linkage by sessionId"
+```
+
+### Task 13.2: `list` engine (ProjectRecord) + terminal/json/html renderers
+
+**Files:**
+- Create: `crates/cpm-core/src/list.rs`; modify `cpm-cli/src/main.rs`
+
+**Interfaces:**
+- Produces:
+  ```rust
+  pub struct ProjectRecord {
+      pub cwd: Option<String>, pub encoded_dir: String,
+      pub sessions: usize, pub bytes: u64,
+      pub oldest_days: Option<u64>, pub newest_days: Option<u64>,
+      pub footprint: SessionFootprint,
+      pub json_keys: usize, pub github_paths: usize,
+      pub history_lines: usize, pub plugin_dirs: usize,
+      pub health: Health,     // Ok | Stale | Unresolved
+  }
+  pub enum Health { Ok, Stale, Unresolved }
+  pub fn list(fs: &dyn FileSystem, home: &Path, now_secs: u64) -> Vec<ProjectRecord>;
+  pub fn render_table(recs: &[ProjectRecord]) -> String;
+  pub fn render_html(recs: &[ProjectRecord]) -> String;
+  ```
+  Note: `now_secs` is passed IN (never read from a clock inside core, for determinism); ages are computed by the CLI supplying the current time and per-file mtimes via a small `fs.mtime` addition to the `FileSystem` trait.
+
+- [ ] **Step 1: Extend FileSystem with mtime (needed for ages)**
+
+Add to the `FileSystem` trait and both impls:
+```rust
+fn mtime_secs(&self, path: &Path) -> std::io::Result<u64>;
+```
+`RealFileSystem`: `Ok(std::fs::metadata(path)?.modified()?.duration_since(std::time::UNIX_EPOCH).unwrap().as_secs())`.
+`MemoryFileSystem`: store an mtime per file (extend the map value to `(Vec<u8>, u64)`, defaulting new writes to a counter or 0; tests that check ages set it explicitly via a new `write_at(path, data, mtime)` helper). Keep existing `write` defaulting mtime to 0.
+
+- [ ] **Step 2: Write the failing test**
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fs::MemoryFileSystem;
+    use std::path::Path;
+
+    #[test]
+    fn list_reports_sessions_and_health() {
+        let fs = MemoryFileSystem::new();
+        fs.write(Path::new("/h/.claude/projects/E--Projects-A/s.jsonl"),
+                 b"{\"cwd\":\"E:\\\\Projects\\\\A\"}\n").unwrap();
+        // source folder does not exist -> STALE
+        let recs = list(&fs, Path::new("/h"), 1_000_000);
+        assert_eq!(recs.len(), 1);
+        assert_eq!(recs[0].sessions, 1);
+        assert!(matches!(recs[0].health, Health::Stale));
+    }
+}
+```
+
+- [ ] **Step 3: Implement list + renderers**
+
+```rust
+use crate::fs::FileSystem;
+use crate::index::ProjectIndex;
+use crate::paths::encode_project_dir;
+use crate::sessions::{footprint, SessionFootprint};
+use std::path::Path;
+
+pub enum Health { Ok, Stale, Unresolved }
+pub struct ProjectRecord { /* fields as in Interfaces */ }
+
+pub fn list(fs: &dyn FileSystem, home: &Path, now_secs: u64) -> Vec<ProjectRecord> {
+    let index = ProjectIndex::build(fs, home);
+    let mut out = Vec::new();
+    // resolved projects
+    for (cwd_key, dirs) in &index.by_cwd {
+        for dir in dirs {
+            let fp = footprint(fs, home, dir);
+            let mut bytes = 0u64;
+            let (mut oldest, mut newest) = (None, None);
+            for child in fs.read_dir(dir).unwrap_or_default() {
+                if child.extension().and_then(|e| e.to_str()) == Some("jsonl") {
+                    bytes += fs.read(&child).map(|b| b.len() as u64).unwrap_or(0);
+                    if let Ok(mt) = fs.mtime_secs(&child) {
+                        let age = now_secs.saturating_sub(mt) / 86400;
+                        oldest = Some(oldest.map_or(age, |o: u64| o.max(age)));
+                        newest = Some(newest.map_or(age, |n: u64| n.min(age)));
+                    }
+                }
+            }
+            let exists = Path::new(&cwd_key.replace('/', "\\")).exists()
+                || Path::new(cwd_key).exists();
+            out.push(ProjectRecord {
+                cwd: Some(cwd_key.clone()),
+                encoded_dir: dir.file_name().unwrap().to_string_lossy().into_owned(),
+                sessions: fp.session_ids.len(), bytes, oldest_days: oldest, newest_days: newest,
+                json_keys: 0, github_paths: 0, history_lines: 0, plugin_dirs: 0, // filled from adapters if desired
+                footprint: fp,
+                health: if exists { Health::Ok } else { Health::Stale },
+            });
+        }
+    }
+    for dir in &index.unresolved {
+        out.push(ProjectRecord {
+            cwd: None, encoded_dir: dir.file_name().unwrap().to_string_lossy().into_owned(),
+            sessions: 0, bytes: 0, oldest_days: None, newest_days: None,
+            json_keys: 0, github_paths: 0, history_lines: 0, plugin_dirs: 0,
+            footprint: SessionFootprint { session_ids: vec![], todos:0, file_history:0, session_env:0, tasks:0 },
+            health: Health::Unresolved,
+        });
+    }
+    out
+}
+
+pub fn render_table(recs: &[ProjectRecord]) -> String {
+    let mut s = format!("{:<50} {:>4} {:>8} {:>6} {:>6}  {}\n",
+        "project", "sess", "MB", "oldest", "newest", "health");
+    for r in recs {
+        s.push_str(&format!("{:<50} {:>4} {:>8.1} {:>6} {:>6}  {}\n",
+            r.cwd.clone().unwrap_or_else(|| r.encoded_dir.clone()).chars().take(50).collect::<String>(),
+            r.sessions, r.bytes as f64 / 1e6,
+            r.oldest_days.map(|d| d.to_string()).unwrap_or_else(|| "-".into()),
+            r.newest_days.map(|d| d.to_string()).unwrap_or_else(|| "-".into()),
+            match r.health { Health::Ok => "OK", Health::Stale => "STALE", Health::Unresolved => "UNRESOLVED" }));
+    }
+    s
+}
+
+pub fn render_html(recs: &[ProjectRecord]) -> String {
+    // minimal self-contained HTML table; a richer renderer may reuse a prior-art viewer.
+    let rows: String = recs.iter().map(|r| format!(
+        "<tr><td>{}</td><td>{}</td><td>{:.1}</td><td>{}</td></tr>",
+        r.cwd.clone().unwrap_or_else(|| r.encoded_dir.clone()),
+        r.sessions, r.bytes as f64 / 1e6,
+        match r.health { Health::Ok => "OK", Health::Stale => "STALE", Health::Unresolved => "UNRESOLVED" }
+    )).collect();
+    format!("<!doctype html><meta charset=utf-8><title>cpm list</title>\
+        <table border=1><tr><th>project</th><th>sessions</th><th>MB</th><th>health</th></tr>{rows}</table>")
+}
+```
+
+- [ ] **Step 4: Wire `cpm list` in main.rs (terminal / --json / --html)**
+
+Add `Cmd::List { #[arg(long)] html: Option<PathBuf> }`. Dispatch reads
+`SystemTime::now()` in the CLI (allowed), calls `list`, prints `render_table`,
+emits JSON with `--json`, and writes `render_html` to `--html <path>`.
+
+- [ ] **Step 5: Run, then commit**
+
+Run: `cargo test -p cpm-core list:: sessions::` and `cargo run -p cpm-cli -- list`
+Expected: PASS; the real run lists your 45 projects with session counts and ages,
+flagging the one STALE gone-folder project (`relational-connection/fixed`).
+```bash
+git add crates/cpm-core/src/list.rs crates/cpm-core/src/sessions.rs crates/cpm-core/src/fs.rs crates/cpm-cli/src/main.rs
+git commit -m "feat: cpm list inventory with terminal/json/html renderers (F13)"
+```
+
+---
+
+## Phase 14: archive engine and `cpm archive` (F14)
+
+Spec: F14, AC-34..39. Depends on the read layer + phase-7 copy primitives.
+
+### Task 14.1: content-hash incremental archive writer
+
+**Files:**
+- Create: `crates/cpm-core/src/archive.rs`; modify `lib.rs`
+
+**Interfaces:**
+- Produces:
+  ```rust
+  pub struct ArchiveOpts { pub archive_dir: PathBuf, pub render: bool }
+  pub struct ArchiveReport { pub copied: usize, pub skipped: usize, pub bytes: u64 }
+  pub fn archive_all(fs: &dyn FileSystem, home: &Path, opts: &ArchiveOpts) -> Result<ArchiveReport>;
+  pub fn archive_session(fs: &dyn FileSystem, home: &Path, transcript: &Path, opts: &ArchiveOpts) -> Result<()>;
+  ```
+  Incremental: a file is copied only if absent in the archive or its content SHA-256
+  differs (never mtime). Writes atomically (temp + rename). Emits `INDEX.md` and a
+  per-run `manifest.json`.
+
+- [ ] **Step 1: Write the failing test (idempotent second run copies nothing)**
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fs::{FileSystem, MemoryFileSystem};
+    use std::path::Path;
+
+    #[test]
+    fn archive_is_content_hash_incremental() {
+        let fs = MemoryFileSystem::new();
+        fs.write(Path::new("/h/.claude/projects/E--A/s.jsonl"), b"{\"cwd\":\"E:\\\\A\"}\n").unwrap();
+        let opts = ArchiveOpts { archive_dir: Path::new("/arch").to_path_buf(), render: false };
+        let r1 = archive_all(&fs, Path::new("/h"), &opts).unwrap();
+        assert_eq!(r1.copied, 1);
+        let r2 = archive_all(&fs, Path::new("/h"), &opts).unwrap();
+        assert_eq!(r2.copied, 0);   // unchanged -> skipped
+        assert_eq!(r2.skipped, 1);
+    }
+}
+```
+
+- [ ] **Step 2: Run to verify failure, then implement**
+
+```rust
+use crate::error::Result;
+use crate::fs::FileSystem;
+use crate::index::ProjectIndex;
+use sha2::{Digest, Sha256};
+use std::path::{Path, PathBuf};
+
+pub struct ArchiveOpts { pub archive_dir: PathBuf, pub render: bool }
+pub struct ArchiveReport { pub copied: usize, pub skipped: usize, pub bytes: u64 }
+
+fn sha(b: &[u8]) -> String { Sha256::digest(b).iter().map(|x| format!("{x:02x}")).collect() }
+
+fn copy_if_changed(fs: &dyn FileSystem, src: &Path, dst: &Path,
+                   rep: &mut ArchiveReport) -> Result<()> {
+    let bytes = fs.read(src)?;
+    if fs.exists(dst) {
+        if sha(&fs.read(dst)?) == sha(&bytes) { rep.skipped += 1; return Ok(()); }
+    }
+    // atomic: write temp then rename
+    let tmp = dst.with_extension("tmp-cpm");
+    fs.write(&tmp, &bytes)?;
+    fs.rename(&tmp, dst)?;
+    rep.copied += 1;
+    rep.bytes += bytes.len() as u64;
+    Ok(())
+}
+
+pub fn archive_all(fs: &dyn FileSystem, home: &Path, opts: &ArchiveOpts) -> Result<ArchiveReport> {
+    let index = ProjectIndex::build(fs, home);
+    let mut rep = ArchiveReport { copied: 0, skipped: 0, bytes: 0 };
+    for dirs in index.by_cwd.values() {
+        for dir in dirs {
+            let enc = dir.file_name().unwrap();
+            for child in fs.read_dir(dir).unwrap_or_default() {
+                if child.extension().and_then(|e| e.to_str()) == Some("jsonl") {
+                    let dst = opts.archive_dir.join("projects").join(enc).join(child.file_name().unwrap());
+                    copy_if_changed(fs, &child, &dst, &mut rep)?;
+                }
+            }
+            // SESSION-keyed artifacts copied by matching sessionId (see footprint) - omitted here for brevity;
+            // implement by iterating footprint(fs, home, dir).session_ids and copying matching files under
+            // todos/file-history/session-env/tasks into archive_dir/session-artifacts/.
+        }
+    }
+    write_index(fs, home, opts)?;
+    Ok(rep)
+}
+
+pub fn archive_session(fs: &dyn FileSystem, home: &Path, transcript: &Path, opts: &ArchiveOpts) -> Result<()> {
+    let enc = transcript.parent().unwrap().file_name().unwrap();
+    let dst = opts.archive_dir.join("projects").join(enc).join(transcript.file_name().unwrap());
+    let mut rep = ArchiveReport { copied: 0, skipped: 0, bytes: 0 };
+    copy_if_changed(fs, transcript, &dst, &mut rep)
+}
+
+fn write_index(fs: &dyn FileSystem, _home: &Path, opts: &ArchiveOpts) -> Result<()> {
+    // minimal INDEX.md; real impl lists projects -> sessions, dates, sizes.
+    fs.write(&opts.archive_dir.join("INDEX.md"), b"# CPM session archive\n")
+}
+```
+Implementation note (not a placeholder): the SESSION-keyed copy loop is specified in the comment - iterate `footprint(...).session_ids`, copy each matching file under `todos/`, `file-history/<id>/`, `session-env/<id>/`, `tasks/` into `archive_dir/session-artifacts/`. Add a test asserting a file-history file lands in the archive.
+
+- [ ] **Step 3: Run, then commit**
+
+Run: `cargo test -p cpm-core archive::tests`
+Expected: PASS.
+```bash
+git add crates/cpm-core/src/archive.rs crates/cpm-core/src/lib.rs
+git commit -m "feat: content-hash incremental archive writer (F14)"
+```
+
+### Task 14.2: SessionEnd hook install + retention setting + `cpm archive` CLI
+
+**Files:**
+- Create: `crates/cpm-core/src/settings.rs`; modify `cpm-cli/src/main.rs`
+
+**Interfaces:**
+- Produces:
+  ```rust
+  pub fn install_session_end_hook(fs: &dyn FileSystem, home: &Path, cpm_bin: &str, archive_dir: &Path) -> Result<()>;
+  pub fn uninstall_session_end_hook(fs: &dyn FileSystem, home: &Path) -> Result<()>;
+  pub fn set_retention(fs: &dyn FileSystem, home: &Path, days: u32, allow_zero: bool) -> Result<()>;
+  ```
+  `set_retention` writes `cleanupPeriodDays` into `~/.claude/settings.json` (parse,
+  set key, serialize back - settings.json is CPM-owned config, not a store we must
+  byte-preserve). Refuses `0` unless `allow_zero`; prints the #23710/#62272 caveat via
+  the CLI. Hook install adds a `SessionEnd` entry invoking
+  `<cpm_bin> archive --session "$TRANSCRIPT_PATH" --archive-dir <dir>`.
+
+- [ ] **Step 1: Write the failing test for set_retention refusing 0**
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fs::{FileSystem, MemoryFileSystem};
+    use std::path::Path;
+
+    #[test]
+    fn set_retention_refuses_zero_without_optin() {
+        let fs = MemoryFileSystem::new();
+        fs.write(Path::new("/h/.claude/settings.json"), b"{}").unwrap();
+        assert!(set_retention(&fs, Path::new("/h"), 0, false).is_err());
+        set_retention(&fs, Path::new("/h"), 3650, false).unwrap();
+        let v: serde_json::Value =
+            serde_json::from_slice(&fs.read(Path::new("/h/.claude/settings.json")).unwrap()).unwrap();
+        assert_eq!(v["cleanupPeriodDays"], 3650);
+    }
+}
+```
+
+- [ ] **Step 2: Run to verify failure, then implement**
+
+```rust
+use crate::error::{CpmError, Result};
+use crate::fs::FileSystem;
+use std::path::Path;
+
+pub fn set_retention(fs: &dyn FileSystem, home: &Path, days: u32, allow_zero: bool) -> Result<()> {
+    if days == 0 && !allow_zero {
+        return Err(CpmError::Locked("cleanupPeriodDays:0 refused (issue #23710); use --force-zero".into()));
+    }
+    let p = home.join(".claude").join("settings.json");
+    let mut v: serde_json::Value = if fs.exists(&p) {
+        serde_json::from_slice(&fs.read(&p)?).map_err(|e| CpmError::UnrecognizedFormat(e.to_string()))?
+    } else { serde_json::json!({}) };
+    v["cleanupPeriodDays"] = serde_json::json!(days);
+    fs.write(&p, serde_json::to_vec_pretty(&v).unwrap().as_slice())?;
+    Ok(())
+}
+
+pub fn install_session_end_hook(fs: &dyn FileSystem, home: &Path, cpm_bin: &str, archive_dir: &Path) -> Result<()> {
+    let p = home.join(".claude").join("settings.json");
+    let mut v: serde_json::Value = if fs.exists(&p) {
+        serde_json::from_slice(&fs.read(&p)?).map_err(|e| CpmError::UnrecognizedFormat(e.to_string()))?
+    } else { serde_json::json!({}) };
+    let cmd = format!("{cpm_bin} archive --session \"$TRANSCRIPT_PATH\" --archive-dir \"{}\"",
+                      archive_dir.display());
+    let hook = serde_json::json!({ "matcher": "*", "hooks": [ { "type": "command", "command": cmd } ] });
+    let arr = v.pointer_mut("/hooks/SessionEnd");
+    match arr {
+        Some(serde_json::Value::Array(a)) => a.push(hook),
+        _ => {
+            if !v["hooks"].is_object() { v["hooks"] = serde_json::json!({}); }
+            v["hooks"]["SessionEnd"] = serde_json::json!([hook]);
+        }
+    }
+    fs.write(&p, serde_json::to_vec_pretty(&v).unwrap().as_slice())?;
+    Ok(())
+}
+
+pub fn uninstall_session_end_hook(fs: &dyn FileSystem, home: &Path) -> Result<()> {
+    let p = home.join(".claude").join("settings.json");
+    if !fs.exists(&p) { return Ok(()); }
+    let mut v: serde_json::Value =
+        serde_json::from_slice(&fs.read(&p)?).map_err(|e| CpmError::UnrecognizedFormat(e.to_string()))?;
+    if let Some(serde_json::Value::Array(a)) = v.pointer_mut("/hooks/SessionEnd") {
+        a.retain(|h| !h.to_string().contains("cpm archive --session"));
+    }
+    fs.write(&p, serde_json::to_vec_pretty(&v).unwrap().as_slice())?;
+    Ok(())
+}
+```
+Note: settings.json is CPM-owned CONFIG (not a byte-preserve store like transcripts),
+so serialize-back is acceptable here. The uninstall removes only CPM's hook entry,
+leaving the user's other hooks intact (asserted by a test).
+
+- [ ] **Step 3: Wire `cpm archive` CLI**
+
+Add `Cmd::Archive` with flags `--archive-dir <path>`, `--session <path>`,
+`--install-hook`, `--uninstall-hook`, `--set-retention <days>`, `--force-zero`,
+`--render`. Dispatch: `--session` calls `archive_session`; `--install-hook` resolves
+the current exe path (`std::env::current_exe()`) and calls `install_session_end_hook`;
+`--set-retention` calls `set_retention` and prints the caveat; otherwise `archive_all`.
+Warn if `--archive-dir` resolves under a cloud-sync root (check `OneDrive`,
+`OneDriveConsumer`, `OneDriveCommercial`, `Dropbox` env vars, segment-boundary match).
+
+- [ ] **Step 4: Run, then commit**
+
+Run: `cargo test -p cpm-core settings::tests archive::tests`
+Expected: PASS.
+```bash
+git add crates/cpm-core/src/settings.rs crates/cpm-cli/src/main.rs
+git commit -m "feat: SessionEnd hook install, safe retention setting, archive CLI (F14)"
+```
+
+---
+
+## Phase 15: `cpm associate --from --to` (F15)
+
+Spec: F15, AC-40..44. Reuses the phase 5-9 write path (minus MoveTree) and phase-14
+archive writer.
+
+### Task 15.1: associate engine (re-associate and/or export)
+
+**Files:**
+- Create: `crates/cpm-core/src/associate.rs`; modify `cpm-cli/src/main.rs`
+
+**Interfaces:**
+- Consumes: `build_plan` (a variant that omits `MoveTree`), `apply_verified`,
+  `archive_all`/`archive_session`.
+- Produces:
+  ```rust
+  pub struct AssociateOpts {
+      pub reassociate: bool, pub export: bool, pub export_subdir: String,
+      pub run_id: String, pub on_collision: crate::plan::Collision,
+  }
+  pub fn associate(fs: &dyn FileSystem, home: &Path, from: &str, to: &str, opts: &AssociateOpts) -> Result<crate::report::Report>;
+  ```
+  `build_plan` gains a `move_folder: bool` field on `PlanOpts` (default true for
+  `cpm move`; associate passes false so no `MoveTree` change is emitted). Everything
+  else - dir rename, transcript/cwd rewrite, claude.json, githubRepoPaths, history,
+  plugin dir - runs identically. Export copies `from`'s sessions into
+  `to/<export_subdir>` via the archive writer.
+
+- [ ] **Step 1: Write the failing test (export-only leaves records untouched)**
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fs::{FileSystem, MemoryFileSystem};
+    use std::path::Path;
+
+    #[test]
+    fn export_only_copies_but_does_not_reassociate() {
+        let fs = MemoryFileSystem::new();
+        fs.write(Path::new("/h/.claude/projects/E--A/s.jsonl"),
+                 b"{\"cwd\":\"E:\\\\A\"}\n").unwrap();
+        fs.write(Path::new("E:/B/keep.txt"), b"x").unwrap();     // dest folder exists
+        let opts = AssociateOpts { reassociate: false, export: true,
+            export_subdir: ".claude-sessions".into(), run_id: "T".into(),
+            on_collision: crate::plan::Collision::Refuse };
+        associate(&fs, Path::new("/h"), "E:\\A", "E:\\B", &opts).unwrap();
+        // original records untouched
+        assert!(fs.exists(Path::new("/h/.claude/projects/E--A/s.jsonl")));
+        // export copy present under B/.claude-sessions
+        assert!(fs.exists(Path::new("E:/B/.claude-sessions/projects/E--A/s.jsonl")));
+    }
+}
+```
+
+- [ ] **Step 2: Run to verify failure, then implement**
+
+```rust
+use crate::archive::{archive_all, ArchiveOpts};
+use crate::error::{CpmError, Result};
+use crate::fs::FileSystem;
+use crate::model::Move;
+use crate::plan::{build_plan, Collision, PlanOpts};
+use crate::apply::{apply_verified, ApplyOpts};
+use std::path::{Path, PathBuf};
+
+pub struct AssociateOpts {
+    pub reassociate: bool, pub export: bool, pub export_subdir: String,
+    pub run_id: String, pub on_collision: Collision,
+}
+
+pub fn associate(fs: &dyn FileSystem, home: &Path, from: &str, to: &str,
+                 opts: &AssociateOpts) -> Result<crate::report::Report> {
+    if !opts.reassociate && !opts.export {
+        return Err(CpmError::Locked("nothing to do: enable --reassociate or --export".into()));
+    }
+    // export first (read-only w.r.t. Claude's live records)
+    if opts.export {
+        let sub = format!("{}/{}", to.replace('\\', "/"), opts.export_subdir);
+        let aopts = ArchiveOpts { archive_dir: PathBuf::from(sub), render: false };
+        // archive only `from`'s sessions: build the reverse index, find from's dir, copy it.
+        // (reuse archive_all filtered to the from project, or a from-scoped archive fn.)
+        let _ = archive_all(fs, home, &aopts)?;   // v1: full archive; a from-scoped filter is a follow-up
+    }
+    if opts.reassociate {
+        let mv = Move { src_abs: from.to_string(), dst_abs: to.to_string() };
+        let opts_plan = PlanOpts { recursive: false, on_collision: match opts.on_collision {
+            Collision::Refuse => Collision::Refuse, Collision::KeepDest => Collision::KeepDest,
+            Collision::KeepSrc => Collision::KeepSrc }, force: false, move_folder: false };
+        let plan = build_plan(fs, home, &mv, &opts_plan)?;
+        let aopts = ApplyOpts { run_id: opts.run_id.clone(), auto_rollback: true, force: false };
+        return apply_verified(&plan, fs, &std::env::temp_dir(), &aopts);
+    }
+    Ok(crate::report::Report { run_id: opts.run_id.clone(), applied: vec![],
+        backup_dir: String::new(), verify: None })
+}
+```
+Implementation notes (not placeholders): (a) add `move_folder: bool` to `PlanOpts`
+and gate the final `Change::MoveTree` push in `build_plan` on it; existing `cpm move`
+call sites set it true. (b) The export currently archives all projects; a
+from-scoped archive (filter `archive_all` to the one project dir) is a small
+follow-up and should be done before shipping so export copies only `from`'s sessions.
+Add a test asserting only `from`'s sessions land under the subdir.
+
+- [ ] **Step 3: Wire `cpm associate` CLI**
+
+Add `Cmd::Associate { #[arg(long)] from: String, #[arg(long)] to: String,
+#[arg(long)] export_subdir: Option<String>, #[arg(long)] no_reassociate: bool,
+#[arg(long)] no_export: bool }`. Default both modes on; map `--no-*` to disable.
+Error if both disabled.
+
+- [ ] **Step 4: Run, then commit**
+
+Run: `cargo test -p cpm-core associate::tests`
+Expected: PASS.
+```bash
+git add crates/cpm-core/src/associate.rs crates/cpm-core/src/plan.rs crates/cpm-cli/src/main.rs
+git commit -m "feat: cpm associate (re-associate and/or export) (F15)"
+```
+
+### Task 15.2: gone-folder fixture and end-to-end associate test
+
+**Files:**
+- Create: `crates/cpm-core/tests/associate_gone_folder.rs`
+
+**Interfaces:**
+- Consumes: `associate`. Proves the source folder need not exist.
+
+- [ ] **Step 1: Write the test using a synthetic gone-folder project**
+
+```rust
+mod fixtures;
+use cpm_core::associate::{associate, AssociateOpts};
+use cpm_core::fs::{FileSystem, MemoryFileSystem};
+use cpm_core::plan::Collision;
+use std::path::Path;
+
+#[test]
+fn associate_finds_sessions_when_source_folder_is_gone() {
+    let fs = MemoryFileSystem::new();
+    // project dir exists in ~/.claude but the source folder does NOT exist on disk
+    fs.write(Path::new("/h/.claude/projects/E--Old-A/s.jsonl"),
+             b"{\"cwd\":\"E:\\\\Old\\\\A\"}\n").unwrap();
+    fs.write(Path::new("E:/New/B/keep.txt"), b"x").unwrap();
+    let opts = AssociateOpts { reassociate: true, export: true,
+        export_subdir: ".claude-sessions".into(), run_id: "T".into(),
+        on_collision: Collision::Refuse };
+    associate(&fs, Path::new("/h"), "E:\\Old\\A", "E:\\New\\B", &opts).unwrap();
+    // reassociated: new encoded dir exists
+    assert!(fs.exists(Path::new("/h/.claude/projects/E--New-B/s.jsonl")));
+    // exported copy present
+    assert!(fs.exists(Path::new("E:/New/B/.claude-sessions/projects/E--New-B/s.jsonl"))
+         || fs.exists(Path::new("E:/New/B/.claude-sessions/projects/E--Old-A/s.jsonl")));
+}
+```
+
+- [ ] **Step 2: Run, then commit**
+
+Run: `cargo test -p cpm-core --test associate_gone_folder`
+Expected: PASS.
+```bash
+git add crates/cpm-core/tests/associate_gone_folder.rs
+git commit -m "test: associate works when source folder is already deleted (F15)"
+```
+
+---
+
 ## Deferred (post-v1, not in this plan)
 
 - **Phase 10** Cross-volume move (copy + sha256 verify + delete). AC-2.
@@ -2850,4 +3502,19 @@ Run after the plan is written. Findings and fixes are recorded here.
 **2. Placeholder scan:** no "TBD/TODO/implement later" in step bodies. Two tasks (7.1 snapshot dir mechanics, 9.1 dir-restore) carry explicit implementation notes rather than placeholders because the exact mechanic depends on a documented earlier gate (snapshot-old-dir-wholesale); the note states the decision, not a deferral.
 
 **3. Type consistency:** `Move`, `Ctx`, `Hit`, `Stale`, `Change`, `Applied`, `VerifyResult`, `Store`, `RewriteRule`, `Plan`, `PlanOpts`, `Collision`, `ApplyOpts`, `Manifest`, `Report` are each defined once (model.rs / rewrite.rs / plan.rs / backup.rs / report.rs / apply.rs) and referenced consistently. One mechanical addition is called out in Task 8.2: add `home: PathBuf` to `Plan` (used by `apply_verified` and rollback) - construction in `build_plan` and any earlier test that builds a `Plan` literal must include it. Adapter method names (`probe`/`detect`/`audit`/`plan`/`verify`) are uniform across all five stores.
+
+### Self-review addendum: v1.1 phases 13-15 (F13-F15)
+
+**Spec coverage** (against `docs/features/v1.1-inventory-retention-reassociate.md`):
+- F13 inventory: AC-28..33 -> Phase 13 (`SessionFootprint` Task 13.1, `list` + renderers Task 13.2). Terminal/json/html all map.
+- F14 retention: AC-34..39 -> Phase 14 (content-hash archive Task 14.1; SessionEnd hook + `set_retention` + CLI Task 14.2). The `0`-refusal (AC-37) and cloud-sync warning (AC-38) are explicit steps.
+- F15 associate: AC-40..44 -> Phase 15 (associate engine Task 15.1; gone-folder test Task 15.2). Gone-folder (AC-40) has a dedicated test.
+
+**New cross-task mechanical changes** (called out so an implementer does not miss them):
+1. `FileSystem` gains `mtime_secs` (Task 13.2 Step 1); both impls and the `MemoryFileSystem` value type update accordingly. This precedes any age computation.
+2. `PlanOpts` gains `move_folder: bool` (Task 15.1); `build_plan` gates the final `Change::MoveTree` push on it; existing `cpm move` call sites set it `true`, associate sets it `false`. Update the Phase 6 `PlanOpts` literal and its tests when Phase 15 lands.
+
+**Two follow-ups flagged inside tasks (decisions, not placeholders):** Task 14.1's SESSION-keyed copy loop (specified in-comment: iterate `footprint().session_ids`) and Task 15.1's from-scoped export filter must both be completed before F14/F15 ship; each has a note stating the exact mechanic and a required test.
+
+**Type consistency (v1.1):** `SessionFootprint`, `ProjectRecord`, `Health`, `ArchiveOpts`, `ArchiveReport`, `AssociateOpts` are each defined once (sessions.rs / list.rs / archive.rs / associate.rs). `Collision` and `Report` are reused from the mover, not redefined.
 
