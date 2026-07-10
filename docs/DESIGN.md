@@ -213,8 +213,10 @@ Apply is one ordered, backup-first, fully reversible transaction:
 
 ## 7. CLI surface and exit codes
 
-Commands: `doctor` (no args), `scan --src`, `plan --src --dst`,
+Mover commands: `doctor` (no args), `scan --src`, `plan --src --dst`,
 `apply --src --dst`, `verify --src --dst`, `rollback --report`.
+Feature commands (v1.1, see Section 11): `list` (inventory), `archive`
+(retention), `associate --from --to` (re-associate/export).
 Global flags: `--home` (default `os.homedir()`), `--backup-root`, `--force`,
 `--scope=minimal|standard|full`, `--on-collision`, `--recursive`,
 `--attribute=fork|base|both`, `--json`, `--no-auto-rollback`.
@@ -236,7 +238,8 @@ Exit codes: `0` success; `2` guard/refusal; `3` verification failed;
 
 ## 9. Phase plan
 
-v1 = phases 1-9; `doctor` shippable at phase 4. Deferred = 10-12.
+v1.0 (mover) = phases 1-9; `doctor` shippable at phase 4. v1.1 (features F13-F15)
+= phases 13-16, most needing only the read layer. Deferred = 10-12.
 
 | Phase | Delivers | Milestone |
 |---|---|---|
@@ -249,6 +252,9 @@ v1 = phases 1-9; `doctor` shippable at phase 4. Deferred = 10-12.
 | 7 | `snapshot`/backup + manifest, transactional `apply`, folder-move-last | |
 | 8 | `verify` + auto-rollback, idempotency, hard-fail, lock detect | |
 | 9 | `rollback` from manifest, CLI complete, exit-code contract | v1.0 |
+| 13 | Session-keyed linkage + `cpm list` (terminal/json/html) | F13, v1.1 |
+| 14 | Archive engine + content-hash dedup + `cpm archive` bulk/hook/retention | F14, v1.1 |
+| 15 | `cpm associate --from --to` (re-associate and/or export) | F15, v1.1 |
 | 10 | Cross-volume copy + checksum-verify + delete | deferred |
 | 11 | Codex + Gemini adapters, opt-in behind flags | deferred |
 | 12 | Tauri + React GUI over the identical core | deferred |
@@ -256,13 +262,51 @@ v1 = phases 1-9; `doctor` shippable at phase 4. Deferred = 10-12.
 Phase 4 is the honesty checkpoint: `doctor` on the real machine must report exactly
 the residue found by hand (6 stale `githubRepoPaths`, 11 stale history values, the
 orphaned plugin dir). If it does, the read layer is trustworthy and phases 5-9 build
-writes on proven ground.
+writes on proven ground. Phases 13-14 depend only on the phase 1-4 read layer plus
+phase 7 copy primitives, so they can land close to the doctor milestone; phase 15
+reuses the full phase 5-9 write path plus phase 14's archive writer.
 
-## 10. Non-goals (v1)
+## 10. v1.1 features (F13-F15)
+
+Added 2026-07-10. Full spec: `docs/features/v1.1-inventory-retention-reassociate.md`.
+Reference: `docs/reference/claude-data-model.md`, `docs/reference/existing-solutions.md`.
+Claude-only in v1.1, same adapter boundary; determinism and no-network apply.
+
+- **F13 `cpm list` (inventory).** Report every project Claude has state for, with
+  session counts, sizes, transcript ages (so the 30-day cliff is visible), linked
+  SESSION-keyed stores, PATH-keyed declarations, and a health flag (OK/STALE/
+  UNRESOLVED). Renders terminal / `--json` / `--html`. Needs only the read layer.
+- **F14 `cpm archive` (retention).** Copy transcripts and SESSION-keyed artifacts to
+  a user-defined archive folder before the 30-day cleanup deletes them; incremental,
+  deduped by content SHA-256 (not mtime). `--install-hook` adds a `SessionEnd` hook
+  so new sessions auto-archive. `--set-retention <days>` writes a large finite
+  `cleanupPeriodDays` as a safety net. The tool is git-agnostic (user's folder, user's
+  choice of git/sync); atomic writes; warns on cloud-sync roots.
+- **F15 `cpm associate --from A --to B` (re-associate/export).** Keep A's history with
+  B when A is being deprecated. `--reassociate` runs the mover's state migration
+  minus the folder move; `--export` drops a portable copy into `B/<subdir>` (F14
+  format). Both default on and independently disableable. Finds A's sessions via
+  stored `cwd` even when A's folder is already gone.
+
+New acceptance criteria AC-28 through AC-44 live in the feature spec.
+
+### The retention hazard (design-shaping)
+
+Transcripts auto-delete at `cleanupPeriodDays` (default 30, on startup); measured
+2026-07-10, nothing on this machine survives past 30 days. `history.jsonl` never
+expires. **`cleanupPeriodDays: 0` is unsafe to rely on** (issue #23710: it may
+disable transcript writing; #62272: cleanup keys off mtime). So archive-out is the
+real durability mechanism; CPM sets only a large finite retention value and refuses
+`0` without an explicit override. See `claude-data-model.md` Section 5.
+
+## 11. Non-goals (v1)
 
 - Rewriting opaque SQLite telemetry (`usage.db`, Codex `logs_2.sqlite`).
   Inspect read-only at most.
 - Any LLM/network call in the migration path.
 - Editing project-internal files that move with the folder (unless they hardcode
   their own abs path -> REVIEW, not auto-rewrite).
-- Cross-machine sync, general backup/restore product, batch mode.
+- Cross-machine sync as a general product, and multi-project batch mode, in v1.
+  (F14 archival is not general cross-machine sync; it is local archive-out.)
+- Building a transcript viewer/renderer from scratch: reuse prior art
+  (`existing-solutions.md` Section D) for F13's HTML.
