@@ -4,6 +4,7 @@ _local/
 # Tool state directories
 .memsearch/
 .impeccable/
+.superpowers/
 
 # Rust build output
 target/
