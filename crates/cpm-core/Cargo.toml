@@ -1,0 +1,15 @@
+[package]
+name = "cpm-core"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde_json.workspace = true
+sha2.workspace = true
+dunce.workspace = true
+walkdir.workspace = true
+tempfile.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
