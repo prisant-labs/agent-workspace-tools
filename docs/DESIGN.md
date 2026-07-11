@@ -4,6 +4,9 @@ Status: approved design (brainstorming output), 2026-07-10.
 Supersedes the tech-stack and encoding claims in `_local/initial-discovery/03-05`.
 Evidence base: `_local/initial-discovery/01-02` plus direct empirical verification
 of `~/.claude` on this machine, 2026-07-09/10 (probes recorded in the session).
+The `_local/initial-discovery/*` files are intentionally NOT committed; Section 2 below
+inlines the authoritative extraction of their load-bearing findings, so every correction
+is independently checkable in-repo without the raw notes.
 
 ## 1. Problem
 
@@ -79,6 +82,11 @@ v1 crates: `clap`, `serde_json` (validate-only), `sha2`, `dunce` (Windows
 verbatim-path stripping, proven in repo-sync-tool), `walkdir`, `tempfile`, `insta`
 (golden snapshots). No tokio, no sqlx, no git2. Toolchain present: cargo 1.96.0.
 
+**Platform scope:** v1 targets Windows only. macOS/Linux bring-up is deferred and
+tracked: path encoding, `same_volume`, cloud-sync detection, and the CI matrix each need
+macOS-specific work (POSIX path forms, mount/device volume detection, iCloud Drive under
+`~/Library/Mobile Documents`) before that scope opens.
+
 ## 4. Architecture
 
 ```
@@ -125,18 +133,22 @@ only to NAME a destination dir, never to look one up. Dirs with no transcripts
 ```rust
 trait Store {
     fn id(&self) -> &'static str;
-    fn probe(&self, ctx: &Ctx)  -> Result<Shape>;      // hard-fail on unknown shape, pre-write
-    fn detect(&self, ctx: &Ctx) -> Result<Vec<Hit>>;   // state for one project
-    fn audit(&self, ctx: &Ctx)  -> Result<Vec<Stale>>; // doctor: refs to gone paths
-    fn plan(&self, mv: &Move, hit: &Hit) -> Result<Vec<Change>>;
-    fn apply(&self, c: &Change, fs: &dyn FileSystem) -> Result<Applied>;
-    fn verify(&self, c: &Change, fs: &dyn FileSystem) -> Result<VerifyResult>;
+    fn probe(&self, ctx: &Ctx)  -> Result<()>;                    // hard-fail on unknown shape, pre-write
+    fn detect(&self, ctx: &Ctx, mv: &Move) -> Result<Vec<Hit>>;   // state for one project
+    fn audit(&self, ctx: &Ctx)  -> Result<Vec<Stale>>;            // doctor: refs to gone paths
+    fn plan(&self, ctx: &Ctx, mv: &Move, hit: &Hit) -> Result<Vec<Change>>;
+    fn verify(&self, ctx: &Ctx, mv: &Move) -> Result<Vec<VerifyResult>>;
 }
 ```
 
-`Change` is a closed enum, each variant carrying expected counts so apply refuses
-when reality disagrees: `MoveTree`, `RenameDir`, `RewriteFile { rules, counts }`,
-`RenameJsonKey`, `RewriteJsonArrayValue`.
+`apply` is NOT a `Store` method: it is centralized in the engine, matching over the
+closed `Change` enum, so backup, folder-move-last ordering, and count-checked writes
+live in exactly one place rather than being re-implemented per adapter. `probe` returns
+`()` in v1: it hard-fails on an unrecognized shape and otherwise reports nothing, because
+Shape reporting (format-drift classification) is deferred. `Change` is a closed enum,
+each variant carrying expected counts so apply refuses when reality disagrees:
+`MoveTree`, `RenameDir`, `RewriteFile { rules, counts }`, `RenameJsonKey`,
+`RewriteJsonArrayValue`.
 
 ### v1 store registry
 
@@ -221,8 +233,8 @@ Global flags: `--home` (default `os.homedir()`), `--backup-root`, `--force`,
 `--scope=minimal|standard|full`, `--on-collision`, `--recursive`,
 `--attribute=fork|base|both`, `--json`, `--no-auto-rollback`.
 
-Exit codes: `0` success; `2` guard/refusal; `3` verification failed;
-`4` unrecognized format.
+Exit codes: `0` success; `1` unexpected I/O error; `2` guard/refusal;
+`3` verification failed; `4` unrecognized format.
 
 ## 8. Testing
 
@@ -230,7 +242,10 @@ Exit codes: `0` success; `2` guard/refusal; `3` verification failed;
   Anchor: `test/fixtures/reference-move/{before,after}/` from
   `E:\tmp\claude-move-backup-20260709-090053` and current migrated files.
 - **`insta` snapshots** lock every `plan` render and `report.json`.
-- **No-network test** asserts zero outbound requests across plan+apply+verify.
+- **No-network guarantee** is structural: the CI dependency gate
+  (`cargo tree -p cpm-core | grep -iE 'reqwest|ureq|hyper|curl'`) forbids any
+  network-capable crate from entering `cpm-core`, and `cargo audit` catches
+  RUSTSEC advisories. No runtime outbound-request test is required.
 - **Parity test** (post-GUI) asserts GUI plan model == `cpm plan --json`.
 - **Three fixtures captured now** (irreproducible later): the markdown before/after
   move; a `claude.json` with the 3 variant groups + 6 stale `githubRepoPaths`; the

@@ -17,6 +17,7 @@
 - Every path replacement is boundary-anchored (exact `"cwd":"<path>"` field, or a path prefix immediately followed by a separator) and count-checked. Never a bare-substring replace.
 - Path-dir encoding rule: `encode_project_dir(abs)` maps every character that is not ASCII `[A-Za-z0-9]` to `-`. Forward-only; never used to look up an existing directory.
 - Store files store Windows paths JSON-escaped: a single `\` on disk in a path becomes `\\` in the JSON text. Match the `\\` form.
+- Store files must be valid UTF-8. Invalid UTF-8 anywhere in a store file is an unrecognized format (exit 4, nothing written); the write path never lossily converts bytes it is about to splice and rewrite.
 - Never rewrite a transcript that belongs to a different project, even if it mentions the old path. Only the moved project's own path-keyed state is rewritten.
 - No em-dashes (U+2014) or en-dashes (U+2013) anywhere, including code comments and commit messages. Use " - " or restructure.
 - Commit messages end with the two trailers used in this repo (`Co-Authored-By:` and `Claude-Session:`), matching `git log`.
@@ -77,11 +78,12 @@ claude-project-mover/
         exit.rs                   ExitCode mapping from CpmError
   test/fixtures/
     reference-move/
-      before/                     seeded from the backup (2 transcripts + claude.json.bak)
-      after/                      current migrated live files
+      before/                     2 sanitized transcripts from the backup
+      after/                      2 sanitized migrated transcripts + minimized synthetic claude.json
       move.json                   { src_abs, dst_abs, expected counts }
-    claude-json-variants/         claude.json with the 3 real key-variant groups + 6 stale githubRepoPaths
-    plugin-state/                 markdown-for-humans-e854827f52137cd9/state.json
+      README.md                   provenance + sanitization record (never refresh from live files)
+    claude-json-variants/         minimized synthetic claude.json: 3 key-variant groups + 6 stale githubRepoPaths
+    plugin-state/                 markdown-for-humans-e854827f52137cd9/state.json (minimized synthetic)
 ```
 
 Each store file owns exactly one fragile format so a format change is localized to one adapter with its own golden test.
@@ -184,6 +186,14 @@ jobs:
           if cargo tree -p cpm-core | grep -iE 'tauri|clap'; then
             echo "cpm-core must not depend on tauri or clap"; exit 1
           fi
+      - name: no-network gate
+        shell: bash
+        run: |
+          if cargo tree -p cpm-core | grep -iE 'reqwest|ureq|hyper|curl'; then
+            echo "cpm-core must not depend on any network-capable crate"; exit 1
+          fi
+      - name: advisory audit (RUSTSEC)
+        run: cargo install cargo-audit --locked && cargo audit
 ```
 
 - [ ] **Step 5: Verify it compiles**
@@ -394,32 +404,37 @@ git commit -m "feat: FileSystem trait with real and in-memory implementations"
 ### Task 1.3: Capture golden fixtures from the real backup
 
 **Files:**
-- Create: `test/fixtures/reference-move/before/*`, `test/fixtures/reference-move/after/*`, `test/fixtures/reference-move/move.json`
+- Create: `test/fixtures/reference-move/before/*`, `test/fixtures/reference-move/after/*`, `test/fixtures/reference-move/move.json`, `test/fixtures/reference-move/README.md`
 - Create: `test/fixtures/claude-json-variants/claude.json`, `test/fixtures/plugin-state/markdown-for-humans-e854827f52137cd9/state.json`
 - Create: `crates/cpm-core/tests/fixtures.rs`
 
 **Interfaces:**
 - Produces: `fn seed_memory_fs_from(dir: &Path) -> MemoryFileSystem` helper for tests, and on-disk fixture bytes the golden tests in later phases assert against.
 
-- [ ] **Step 1: Copy the reference transcripts and config into `before/`**
+- [ ] **Step 1: Copy the reference transcripts into `before/`**
 
 Run (bash):
 ```bash
 mkdir -p test/fixtures/reference-move/before/projects/E--Projects-Github-Repos-markdown-for-humans
 cp "E:/tmp/claude-move-backup-20260709-090053/transcripts_markdown-for-humans/"*.jsonl \
    test/fixtures/reference-move/before/projects/E--Projects-Github-Repos-markdown-for-humans/
-cp "E:/tmp/claude-move-backup-20260709-090053/claude.json.bak" \
-   test/fixtures/reference-move/before/claude.json
 ```
+No `claude.json` is copied into `before/`: the authoritative `claude.json` fixture is the minimized synthetic file written in Step 4. Never commit the live `~/.claude.json` or its `.bak` (LEAD-09). These transcripts are sanitized in Step 6 before they are committed.
 
-- [ ] **Step 2: Copy the current migrated live files into `after/`**
+- [ ] **Step 2: Copy the migrated transcripts into `after/` and write a minimized `claude.json`**
 
-Run (bash):
+Run (bash) - transcripts only (they are sanitized in Step 6):
 ```bash
 mkdir -p test/fixtures/reference-move/after/projects/E--Projects-prisant-labs-vs-code-markdown-max
 cp "C:/Users/jpris/.claude/projects/E--Projects-prisant-labs-vs-code-markdown-max/"*.jsonl \
    test/fixtures/reference-move/after/projects/E--Projects-prisant-labs-vs-code-markdown-max/
-cp "C:/Users/jpris/.claude.json" test/fixtures/reference-move/after/claude.json
+```
+Then author `test/fixtures/reference-move/after/claude.json` as a minimized synthetic file representing post-move state - the NEW key present, the OLD key absent, nothing else. Do NOT copy the live `~/.claude.json`:
+```json
+{
+  "projects": { "E:\\Projects\\prisant-labs\\vs-code-markdown-max": {} },
+  "githubRepoPaths": {}
+}
 ```
 
 - [ ] **Step 3: Write the move descriptor**
@@ -441,14 +456,34 @@ cp "C:/Users/jpris/.claude.json" test/fixtures/reference-move/after/claude.json
 }
 ```
 
-- [ ] **Step 4: Capture the two smaller fixtures**
+- [ ] **Step 4: Write the two smaller fixtures as minimized synthetic files**
 
-Run (bash) to capture the claude.json variant group and stale githubRepoPaths (reuse the live file, which contains the 3 real variant groups and 6 stale entries verified in discovery):
+Do NOT copy the live `~/.claude.json` or the live plugin `state.json` (LEAD-09: both hold personal paths, per-project config, and MCP server entries). Author minimal synthetic files carrying only what the tests need.
+
 ```bash
 mkdir -p test/fixtures/claude-json-variants test/fixtures/plugin-state/markdown-for-humans-e854827f52137cd9
-cp "C:/Users/jpris/.claude.json" test/fixtures/claude-json-variants/claude.json
-cp "C:/Users/jpris/.claude/plugins/data/codex-openai-codex/state/markdown-for-humans-e854827f52137cd9/state.json" \
-   test/fixtures/plugin-state/markdown-for-humans-e854827f52137cd9/state.json
+```
+`test/fixtures/claude-json-variants/claude.json` - ONLY the 3 real key-variant groups (values as empty objects) and the 6 stale `githubRepoPaths` entries; no `mcpServers`, no other keys:
+```json
+{
+  "projects": {
+    "E:\\Projects\\Github Repos\\markdown-for-humans": {},
+    "e:/projects/github repos/markdown-for-humans": {},
+    "D:\\Cloud-Work-PP": {}
+  },
+  "githubRepoPaths": {
+    "owner/markdown-for-humans": ["E:\\Projects\\Github Repos\\markdown-for-humans"],
+    "owner/chrome-bookmark-autosort": ["E:\\Projects\\Chrome - Bookmark Autosort"],
+    "owner/pp": ["D:\\Cloud-Work-PP", "d:/cloud-work-pp"],
+    "owner/pm-skills": ["E:\\Projects\\pm-skills"],
+    "owner/agent-skills": ["E:\\Projects\\agent-skills-toolkit"],
+    "owner/reposync": ["E:\\Projects\\product-on-purpose\\repo-sync-tool"]
+  }
+}
+```
+`test/fixtures/plugin-state/markdown-for-humans-e854827f52137cd9/state.json` - reduced to the minimal shape the adapter reads (the adapter keys only on the dir name, so the body just needs to be valid JSON):
+```json
+{ "schema": 1, "lastProject": "E:\\Projects\\Github Repos\\markdown-for-humans" }
 ```
 
 - [ ] **Step 5: Write the seed helper and a sanity test**
@@ -481,13 +516,22 @@ fn reference_before_seeds_two_transcripts() {
 
 Note: `walkdir` is a dev-usable dependency of `cpm-core`; the integration test can use it. If `env!` path math is awkward on Windows, hardcode the workspace-relative path `../../test/fixtures/...` resolved from `CARGO_MANIFEST_DIR`.
 
-- [ ] **Step 6: Run and commit**
+- [ ] **Step 6: Sanitize and minimize the captured fixtures (LEAD-09, before committing)**
+
+The transcripts copied in Steps 1-2 are real session logs and may hold plaintext secrets (`.env` contents, tool output with credentials, pasted tokens - see `docs/reference/claude-data-model.md`). Sanitize before the bytes are permanent in git history.
+
+  - [ ] **(a) Redact credentials in both transcript sets.** Grep both `before/` and `after/` transcripts (case-insensitive) for `api[_-]?key`, `token`, `secret`, `password`, `authorization`, `bearer`, `BEGIN [A-Z]+ PRIVATE KEY`, `ghp_`, `sk-`; then skim manually for anything the patterns miss. Redact each hit IN PLACE with a same-length placeholder (replace the secret run with the same number of `X` characters) chosen so it does NOT contain any of the project path strings the golden rules match. Then re-run the reference count assertions to prove redaction left the counted regions intact: exact `"cwd"` fields = 1467, backslash prefixes = 588, forward prefixes = 27, and the preserved non-path mentions `markdown-for-humans@` = 8 and `markdown-for-humans_dev-` = 49. If any count moved, a placeholder disturbed a counted region - fix the placeholder.
+  - [ ] **(b) Confirm the `claude.json` fixtures are synthetic** - the `after/` (Step 2) and `claude-json-variants/` (Step 4) files are minimized synthetic; verify no file under `test/fixtures/` is a verbatim copy of `~/.claude.json`.
+  - [ ] **(c) Confirm the plugin `state.json` is minimized** - reduced in Step 4 to the minimal valid-JSON shape the adapter reads.
+  - [ ] **(d) Document provenance.** Write `test/fixtures/README.md` recording: the source of each fixture (the 2026-07-09 reference-move backup at `E:\tmp\claude-move-backup-20260709-090053`), the sanitization performed (credential redaction; `claude.json`/`state.json` replaced by synthetic minima), and the standing rule that fixtures must NEVER be refreshed from live `~/.claude` files without re-running this step.
+
+- [ ] **Step 7: Run and commit**
 
 Run: `cargo test -p cpm-core --test fixtures`
 Expected: PASS.
 ```bash
 git add test/fixtures crates/cpm-core/tests/fixtures.rs
-git commit -m "test: capture golden fixtures from 2026-07-09 reference move"
+git commit -m "test: capture sanitized golden fixtures from 2026-07-09 reference move"
 ```
 
 ---
@@ -609,6 +653,7 @@ git commit -m "feat: forward-only path encoder and normalization helpers"
   pub struct ProjectIndex {
       pub by_cwd: HashMap<String, Vec<PathBuf>>,   // normalize(cwd) -> encoded dirs
       pub unresolved: Vec<PathBuf>,                 // dirs with no recoverable cwd
+      pub cwds: Vec<String>,                        // each ORIGINAL (non-normalized) stored cwd
   }
   impl ProjectIndex { pub fn build(fs: &dyn FileSystem, home: &Path) -> Self; }
   ```
@@ -673,6 +718,9 @@ Above the test module in `index.rs`:
 /// trusting it. Returns the stored path string exactly as recorded.
 pub fn read_stored_cwd(fs: &dyn FileSystem, transcript: &Path) -> Option<String> {
     let bytes = fs.read(transcript).ok()?;
+    // Read-only heuristic: lossy is safe here because this value is only compared and
+    // indexed, never spliced and written back. The write path (apply/verify) hard-fails
+    // on invalid UTF-8 instead - see Global Constraints.
     let text = String::from_utf8_lossy(&bytes);
     for l in text.lines() {
         if !l.contains("\"cwd\"") { continue; }
@@ -688,12 +736,14 @@ pub fn read_stored_cwd(fs: &dyn FileSystem, transcript: &Path) -> Option<String>
 pub struct ProjectIndex {
     pub by_cwd: HashMap<String, Vec<PathBuf>>,
     pub unresolved: Vec<PathBuf>,
+    pub cwds: Vec<String>,
 }
 
 impl ProjectIndex {
     pub fn build(fs: &dyn FileSystem, home: &Path) -> Self {
         let mut by_cwd: HashMap<String, Vec<PathBuf>> = HashMap::new();
         let mut unresolved = Vec::new();
+        let mut cwds = Vec::new();
         let projects = home.join(".claude").join("projects");
         let dirs = fs.read_dir(&projects).unwrap_or_default();
         for dir in dirs {
@@ -708,11 +758,14 @@ impl ProjectIndex {
                 }
             }
             match found {
-                Some(cwd) => by_cwd.entry(normalize_path(&cwd)).or_default().push(dir),
+                Some(cwd) => {
+                    cwds.push(cwd.clone());          // ORIGINAL stored form, used by plugin_state::audit
+                    by_cwd.entry(normalize_path(&cwd)).or_default().push(dir);
+                }
                 None => unresolved.push(dir),
             }
         }
-        Self { by_cwd, unresolved }
+        Self { by_cwd, unresolved, cwds }
     }
 }
 ```
@@ -781,7 +834,8 @@ git commit -m "feat: reverse project index built from stored cwd"
 **Interfaces:**
 - Produces:
   ```rust
-  pub struct Ctx<'a> { pub fs: &'a dyn FileSystem, pub home: PathBuf, pub index: &'a ProjectIndex }
+  pub enum Scope { Minimal, Standard, Full }   // rewrite tier; gates transcript/sidecar rewrites
+  pub struct Ctx<'a> { pub fs: &'a dyn FileSystem, pub home: PathBuf, pub index: &'a ProjectIndex, pub scope: Scope }
   pub struct Hit { pub store: &'static str, pub detail: String, pub target: PathBuf }
   pub struct Stale { pub store: &'static str, pub reference: String, pub location: String }
   pub enum Change {
@@ -827,10 +881,17 @@ use crate::rewrite::RewriteRule;
 use crate::error::Result;
 use std::path::PathBuf;
 
+/// Rewrite tier. Order matters: Minimal < Standard < Full (derived Ord follows the
+/// declaration order), so `scope >= Scope::Standard` gates the transcript rewrites and
+/// `scope == Scope::Full` additionally emits sidecar rewrites.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Scope { Minimal, Standard, Full }
+
 pub struct Ctx<'a> {
     pub fs: &'a dyn FileSystem,
     pub home: PathBuf,
     pub index: &'a ProjectIndex,
+    pub scope: Scope,
 }
 
 #[derive(Debug, Clone)]
@@ -932,7 +993,7 @@ mod tests {
         fs.write(Path::new("/h/.claude/projects/E--Projects-Github-Repos-markdown-for-humans/s.jsonl"),
                  cwd_line("E:\\Projects\\Github Repos\\markdown-for-humans").as_bytes()).unwrap();
         let idx = ProjectIndex::build(&fs, Path::new("/h"));
-        let ctx = Ctx { fs: &fs, home: PathBuf::from("/h"), index: &idx };
+        let ctx = Ctx { fs: &fs, home: PathBuf::from("/h"), index: &idx, scope: crate::model::Scope::Standard };
         let mv = Move {
             src_abs: "E:\\Projects\\Github Repos\\markdown-for-humans".into(),
             dst_abs: "E:\\Projects\\prisant-labs\\vs-code-markdown-max".into(),
@@ -1043,7 +1104,7 @@ mod tests {
     fn probe_rejects_non_object_projects() {
         let fs = MemoryFileSystem::new();
         let idx = ctx_with("{\"projects\": 5}", &fs);
-        let ctx = Ctx { fs: &fs, home: PathBuf::from("/h"), index: &idx };
+        let ctx = Ctx { fs: &fs, home: PathBuf::from("/h"), index: &idx, scope: crate::model::Scope::Standard };
         assert!(ClaudeJson.probe(&ctx).is_err());
     }
 
@@ -1052,11 +1113,21 @@ mod tests {
         let fs = MemoryFileSystem::new();
         let json = r#"{"projects":{"E:\\Projects\\A":{},"E:/Projects/A":{}},"githubRepoPaths":{"o/r":["E:\\Projects\\A"]}}"#;
         let idx = ctx_with(json, &fs);
-        let ctx = Ctx { fs: &fs, home: PathBuf::from("/h"), index: &idx };
+        let ctx = Ctx { fs: &fs, home: PathBuf::from("/h"), index: &idx, scope: crate::model::Scope::Standard };
         let mv = Move { src_abs: "E:\\Projects\\A".into(), dst_abs: "E:\\Projects\\B".into() };
         let hits = ClaudeJson.detect(&ctx, &mv).unwrap();
         // 2 key variants + 1 githubRepoPaths element
         assert_eq!(hits.len(), 3);
+    }
+
+    #[test]
+    fn audit_reports_stale_key_absent_from_injected_fs() {
+        let fs = MemoryFileSystem::new();
+        // a projects key whose path is absent from the injected FS -> reported stale
+        let idx = ctx_with(r#"{"projects":{"E:\\Gone\\P":{}}}"#, &fs);
+        let ctx = Ctx { fs: &fs, home: PathBuf::from("/h"), index: &idx, scope: crate::model::Scope::Standard };
+        let stale = ClaudeJson.audit(&ctx).unwrap();
+        assert!(stale.iter().any(|s| s.reference.contains("Gone")));
     }
 }
 ```
@@ -1135,8 +1206,8 @@ impl Store for ClaudeJson {
             .map_err(|e| CpmError::UnrecognizedFormat(e.to_string()))?;
         let mut stale = Vec::new();
         let mut check = |raw: &str, loc: String| {
-            let probe = raw.replace('\\', "\\"); // keep as-is; existence tested below
-            if !Path::new(&probe).exists() {
+            // Existence goes through the injected FS so this is unit-testable in memory.
+            if !ctx.fs.exists(Path::new(raw)) {
                 stale.push(Stale { store: Self::ID, reference: raw.to_string(), location: loc });
             }
         };
@@ -1159,7 +1230,7 @@ impl Store for ClaudeJson {
     fn verify(&self, _ctx: &Ctx, _mv: &Move) -> Result<Vec<VerifyResult>> { Ok(vec![]) }
 }
 ```
-Note: `audit`'s `Path::new(raw).exists()` reads the real disk under `RealFileSystem`, which is correct for `doctor`. Under `MemoryFileSystem` tests, seed the paths you want treated as existing, or test `audit` only through the CLI-level integration test in Phase 4.
+Note: `audit` routes existence checks through the injected `ctx.fs`, so it is unit-testable against `MemoryFileSystem` (seed the paths you want treated as existing). In production, `doctor` runs it on `RealFileSystem`, so it hits the real disk - exactly what `doctor` needs.
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -1190,11 +1261,29 @@ In `plugin_state.rs`:
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fs::MemoryFileSystem;
+    use crate::index::ProjectIndex;
+    use crate::model::Ctx;
+    use std::path::{Path, PathBuf};
+
     #[test]
     fn hash_matches_real_codex_dir_suffix() {
         // verified: sha256("E:\Projects\Github Repos\markdown-for-humans")[:16]
         assert_eq!(state_hash("E:\\Projects\\Github Repos\\markdown-for-humans"),
                    "e854827f52137cd9");
+    }
+
+    #[test]
+    fn audit_flags_orphan_state_dir() {
+        let fs = MemoryFileSystem::new();
+        // an orphan plugin state dir whose 16-hex suffix matches NO live project (the real
+        // codex suffix for the pre-move path); no transcripts here -> no known cwd -> stale
+        fs.write(Path::new("/h/.claude/plugins/data/codex/state/markdown-for-humans-e854827f52137cd9/state.json"),
+                 b"{}").unwrap();
+        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let ctx = Ctx { fs: &fs, home: PathBuf::from("/h"), index: &idx, scope: crate::model::Scope::Standard };
+        let stale = PluginState.audit(&ctx).unwrap();
+        assert!(stale.iter().any(|s| s.reference.ends_with("e854827f52137cd9")));
     }
 }
 ```
@@ -1216,7 +1305,7 @@ mod tests {
                     {\"project\":\"E:\\\\Projects\\\\Other\",\"sessionId\":\"2\"}\n";
         fs.write(Path::new("/h/.claude/history.jsonl"), body.as_bytes()).unwrap();
         let idx = ProjectIndex::build(&fs, Path::new("/h"));
-        let ctx = Ctx { fs: &fs, home: PathBuf::from("/h"), index: &idx };
+        let ctx = Ctx { fs: &fs, home: PathBuf::from("/h"), index: &idx, scope: crate::model::Scope::Standard };
         let mv = Move { src_abs: "E:\\Projects\\A".into(), dst_abs: "E:\\Projects\\B".into() };
         let hits = ClaudeHistory.detect(&ctx, &mv).unwrap();
         assert_eq!(hits.len(), 1);
@@ -1270,7 +1359,29 @@ impl Store for PluginState {
         }
         Ok(hits)
     }
-    fn audit(&self, _ctx: &Ctx) -> Result<Vec<Stale>> { Ok(vec![]) }
+    fn audit(&self, ctx: &Ctx) -> Result<Vec<Stale>> {
+        // Every live project's state-dir suffix, computed from its ORIGINAL stored cwd
+        // (plugins hash the backslash abs-path form; ProjectIndex.cwds preserves it).
+        let known: std::collections::BTreeSet<String> =
+            ctx.index.cwds.iter().map(|c| state_hash(c)).collect();
+        let mut stale = Vec::new();
+        let data = ctx.home.join(".claude").join("plugins").join("data");
+        for plugin in ctx.fs.read_dir(&data).unwrap_or_default() {
+            let state = plugin.join("state");
+            for entry in ctx.fs.read_dir(&state).unwrap_or_default() {
+                if let Some(name) = entry.file_name().and_then(|n| n.to_str()) {
+                    if let Some((_, suffix)) = name.rsplit_once('-') {
+                        if suffix.len() == 16 && suffix.chars().all(|c| c.is_ascii_hexdigit())
+                            && !known.contains(suffix) {
+                            stale.push(Stale { store: Self::ID, reference: name.to_string(),
+                                location: state.to_string_lossy().into_owned() });
+                        }
+                    }
+                }
+            }
+        }
+        Ok(stale)
+    }
     fn plan(&self, _ctx: &Ctx, _mv: &Move, _hit: &Hit) -> Result<Vec<Change>> { Ok(vec![]) }
     fn verify(&self, _ctx: &Ctx, _mv: &Move) -> Result<Vec<VerifyResult>> { Ok(vec![]) }
 }
@@ -1279,7 +1390,7 @@ impl Store for PluginState {
 - [ ] **Step 4: Implement claude_history**
 
 ```rust
-use crate::error::Result;
+use crate::error::{CpmError, Result};
 use crate::model::{Change, Ctx, Hit, Move, Stale, Store, VerifyResult};
 use crate::paths::normalize_path;
 use std::path::PathBuf;
@@ -1297,7 +1408,8 @@ impl Store for ClaudeHistory {
         let p = Self::path(ctx);
         if !ctx.fs.exists(&p) { return Ok(vec![]); }
         let bytes = ctx.fs.read(&p)?;
-        let text = String::from_utf8_lossy(&bytes);
+        let text = std::str::from_utf8(&bytes)
+            .map_err(|e| CpmError::UnrecognizedFormat(format!("history.jsonl: {e}")))?;
         let key = normalize_path(&mv.src_abs);
         let mut count = 0usize;
         for l in text.lines() {
@@ -1321,7 +1433,7 @@ impl Store for ClaudeHistory {
         for l in text.lines() {
             if let Ok(v) = serde_json::from_str::<serde_json::Value>(l) {
                 if let Some(pr) = v.get("project").and_then(|x| x.as_str()) {
-                    if seen.insert(pr.to_string()) && !std::path::Path::new(pr).exists() {
+                    if seen.insert(pr.to_string()) && !ctx.fs.exists(std::path::Path::new(pr)) {
                         stale.push(Stale { store: Self::ID, reference: pr.to_string(),
                                            location: "history.jsonl".into() });
                     }
@@ -1369,7 +1481,7 @@ mod tests {
         fs.write(Path::new("/h/.claude/some-plugin/notes.txt"),
                  b"ref E:\\\\Gone\\\\project here").unwrap();
         let idx = ProjectIndex::build(&fs, Path::new("/h"));
-        let ctx = Ctx { fs: &fs, home: PathBuf::from("/h"), index: &idx };
+        let ctx = Ctx { fs: &fs, home: PathBuf::from("/h"), index: &idx, scope: crate::model::Scope::Standard };
         let stale = Sweep.audit(&ctx).unwrap();
         assert!(stale.iter().any(|s| s.reference.contains("Gone")));
     }
@@ -1530,7 +1642,7 @@ pub struct ScanReport { pub hits: Vec<Hit> }
 
 pub fn doctor(fs: &dyn FileSystem, home: &Path) -> Result<DoctorReport> {
     let index = ProjectIndex::build(fs, home);
-    let ctx = Ctx { fs, home: home.to_path_buf(), index: &index };
+    let ctx = Ctx { fs, home: home.to_path_buf(), index: &index, scope: crate::model::Scope::Standard };
     let mut stale = Vec::new();
     for store in registry() {
         store.probe(&ctx)?;
@@ -1544,7 +1656,7 @@ pub fn doctor(fs: &dyn FileSystem, home: &Path) -> Result<DoctorReport> {
 
 pub fn scan(fs: &dyn FileSystem, home: &Path, src_abs: &str) -> Result<ScanReport> {
     let index = ProjectIndex::build(fs, home);
-    let ctx = Ctx { fs, home: home.to_path_buf(), index: &index };
+    let ctx = Ctx { fs, home: home.to_path_buf(), index: &index, scope: crate::model::Scope::Standard };
     let mv = Move { src_abs: src_abs.to_string(), dst_abs: String::new() };
     let mut hits = Vec::new();
     for store in registry() {
@@ -1875,7 +1987,7 @@ fn plan_emits_rename_and_rewrites() {
     fs.write(Path::new("/h/.claude/projects/E--Projects-A/s.jsonl"),
              b"{\"cwd\":\"E:\\\\Projects\\\\A\"}\n").unwrap();
     let idx = ProjectIndex::build(&fs, Path::new("/h"));
-    let ctx = Ctx { fs: &fs, home: PathBuf::from("/h"), index: &idx };
+    let ctx = Ctx { fs: &fs, home: PathBuf::from("/h"), index: &idx, scope: crate::model::Scope::Standard };
     let mv = Move { src_abs: "E:\\Projects\\A".into(), dst_abs: "E:\\Projects\\B".into() };
     let hit = ClaudeProjects.detect(&ctx, &mv).unwrap().remove(0);
     let changes = ClaudeProjects.plan(&ctx, &mv, &hit).unwrap();
@@ -1894,25 +2006,48 @@ Expected: FAIL (plan returns empty).
 Replace the stub `plan` in `claude_projects.rs`:
 ```rust
 fn plan(&self, ctx: &Ctx, mv: &Move, hit: &Hit) -> Result<Vec<Change>> {
+    use crate::error::CpmError;
+    use crate::model::Scope;
     use crate::paths::encode_project_dir;
     use crate::rewrite::{anchored_rewrite, build_path_rules};
     let projects = ctx.home.join(".claude").join("projects");
     let new_dir = projects.join(encode_project_dir(&mv.dst_abs));
-    let mut changes = vec![Change::RenameDir { from: hit.target.clone(), to: new_dir.clone() };
-    ];
+    let mut changes = vec![Change::RenameDir { from: hit.target.clone(), to: new_dir.clone() }];
     let rules = build_path_rules(&mv.src_abs, &mv.dst_abs);
-    for child in ctx.fs.read_dir(&hit.target).unwrap_or_default() {
-        if child.extension().and_then(|e| e.to_str()) == Some("jsonl") {
-            let text = String::from_utf8_lossy(&ctx.fs.read(&child)?).into_owned();
-            let (_, n) = anchored_rewrite(&text, &rules);
-            // the file will live under the NEW dir after the rename; path is post-rename
-            let post = new_dir.join(child.file_name().unwrap());
-            changes.push(Change::RewriteFile { path: post, rules: rules.clone(), expected: n });
+    // Scope tiers (B-05): Minimal renames the dir and rewrites nothing inside; Standard
+    // (default) rewrites the moved project's own transcripts; Full also rewrites sidecars.
+    if ctx.scope >= Scope::Standard {
+        for child in ctx.fs.read_dir(&hit.target).unwrap_or_default() {
+            if child.extension().and_then(|e| e.to_str()) == Some("jsonl") {
+                let bytes = ctx.fs.read(&child)?;
+                let text = std::str::from_utf8(&bytes).map_err(|e|
+                    CpmError::UnrecognizedFormat(format!("{}: {e}", child.display())))?;
+                let (_, n) = anchored_rewrite(text, &rules);
+                // the file lives under the NEW dir after the rename; path is post-rename
+                let post = new_dir.join(child.file_name().unwrap());
+                changes.push(Change::RewriteFile { path: post, rules: rules.clone(), expected: n });
+            }
+        }
+    }
+    if ctx.scope == Scope::Full {
+        // Full adds sidecars: memory/*.md and <sessionId>/ subdir files (tool-results,
+        // subagents). Same anchored rules; skip the top-level *.jsonl already handled above.
+        for side in ctx.fs_walk_text(&hit.target) {
+            let rel = match side.strip_prefix(&hit.target) { Ok(r) => r, Err(_) => continue };
+            let top_level = rel.parent().map(|p| p.as_os_str().is_empty()).unwrap_or(true);
+            if top_level && side.extension().and_then(|e| e.to_str()) == Some("jsonl") { continue; }
+            let bytes = ctx.fs.read(&side)?;
+            let text = std::str::from_utf8(&bytes).map_err(|e|
+                CpmError::UnrecognizedFormat(format!("{}: {e}", side.display())))?;
+            let (_, n) = anchored_rewrite(text, &rules);
+            if n == 0 { continue; }
+            changes.push(Change::RewriteFile { path: new_dir.join(rel), rules: rules.clone(), expected: n });
         }
     }
     Ok(changes)
 }
 ```
+Full-scope sidecar rewriting is opt-in via `--scope=full` (Task 9.2). At Standard (default) only the moved project's own transcripts are rewritten; Minimal renames the dir and touches no file contents. Other projects' transcripts are never rewritten at any tier.
 
 - [ ] **Step 4: Implement the other three adapters' plan**
 
@@ -1955,27 +2090,62 @@ claude_history.rs `plan`:
 ```rust
 fn plan(&self, ctx: &Ctx, mv: &Move, hit: &Hit) -> Result<Vec<Change>> {
     let esc = |p: &str| p.replace('\\', "\\\\");
-    let rule = crate::rewrite::RewriteRule {
-        find: format!("\"project\":\"{}\"", esc(&mv.src_abs)),
-        replace: format!("\"project\":\"{}\"", esc(&mv.dst_abs)),
-    };
-    let text = String::from_utf8_lossy(&ctx.fs.read(&hit.target)?).into_owned();
-    let (_, n) = crate::rewrite::anchored_rewrite(&text, std::slice::from_ref(&rule));
-    Ok(vec![Change::RewriteFile { path: hit.target.clone(), rules: vec![rule], expected: n }])
+    let key = normalize_path(&mv.src_abs);
+    let bytes = ctx.fs.read(&hit.target)?;
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|e| CpmError::UnrecognizedFormat(format!("history.jsonl: {e}")))?;
+    // One rule per DISTINCT stored `project` form that normalizes to src, each mapped to
+    // dst preserving that form's separator style (mirrors claude_json's dst_key, LEAD-03).
+    let mut forms = std::collections::BTreeSet::new();
+    for l in text.lines() {
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(l) {
+            if let Some(pr) = v.get("project").and_then(|x| x.as_str()) {
+                if normalize_path(pr) == key { forms.insert(pr.to_string()); }
+            }
+        }
+    }
+    let rules: Vec<crate::rewrite::RewriteRule> = forms.iter().map(|f| crate::rewrite::RewriteRule {
+        find: format!("\"project\":\"{}\"", esc(f)),
+        replace: format!("\"project\":\"{}\"", esc(&crate::paths::dst_key(f, &mv.src_abs, &mv.dst_abs))),
+    }).collect();
+    // expected = sum of dry-run counts across every variant rule
+    let (_, n) = crate::rewrite::anchored_rewrite(text, &rules);
+    Ok(vec![Change::RewriteFile { path: hit.target.clone(), rules, expected: n }])
+}
+```
+Add to `claude_history.rs` tests (proves each variant form is planned for rewrite):
+```rust
+#[test]
+fn plan_emits_one_rule_per_variant_form() {
+    let fs = MemoryFileSystem::new();
+    // two DISTINCT stored forms of the same path: backslash and forward-slash
+    let body = "{\"project\":\"E:\\\\Projects\\\\A\"}\n{\"project\":\"E:/Projects/A\"}\n";
+    fs.write(Path::new("/h/.claude/history.jsonl"), body.as_bytes()).unwrap();
+    let idx = ProjectIndex::build(&fs, Path::new("/h"));
+    let ctx = Ctx { fs: &fs, home: PathBuf::from("/h"), index: &idx, scope: crate::model::Scope::Standard };
+    let mv = Move { src_abs: "E:\\Projects\\A".into(), dst_abs: "E:\\Projects\\B".into() };
+    let hit = ClaudeHistory.detect(&ctx, &mv).unwrap().remove(0);
+    let changes = ClaudeHistory.plan(&ctx, &mv, &hit).unwrap();
+    if let crate::model::Change::RewriteFile { rules, expected, .. } = &changes[0] {
+        assert_eq!(rules.len(), 2);     // one rule per distinct variant form
+        assert_eq!(*expected, 2);       // both lines rewritten
+    } else { panic!("expected RewriteFile"); }
 }
 ```
 
 plugin_state.rs `plan`:
 ```rust
 fn plan(&self, _ctx: &Ctx, mv: &Move, hit: &Hit) -> Result<Vec<Change>> {
-    let old_name = hit.detail.clone();
-    let base = old_name.rsplit_once('-').map(|(b, _)| b).unwrap_or(&old_name);
-    let new_name = format!("{base}-{}", state_hash(&mv.dst_abs));
+    // Convention <basename>-<sha256(abs)[:16]> (DESIGN.md Section 2 item 4). BOTH parts
+    // derive from the DESTINATION: a plugin recomputing state for the new path looks for
+    // basename(dst)-hash(dst), so keeping the OLD basename would re-orphan the dir (LEAD-04).
+    let basename = |p: &str| p.rsplit(|c| c == '\\' || c == '/').next().unwrap_or(p).to_string();
+    let new_name = format!("{}-{}", basename(&mv.dst_abs), state_hash(&mv.dst_abs));
     let parent = hit.target.parent().unwrap().to_path_buf();
     Ok(vec![Change::RenameDir { from: hit.target.clone(), to: parent.join(new_name) }])
 }
 ```
-Note: the plugin state.json file INSIDE the dir may also contain the old path; a Full-scope pass would add a RewriteFile. v1 Standard renames the dir only (resolves resume/keying); document this in the plan output.
+Note: renaming to `basename(dst)-hash(dst)` makes both the name and the hash suffix match the destination, so a plugin recomputing state for the new path finds it. The `state.json` INSIDE the dir may still hold the old path; rewriting it is a Full-scope pass (an extra `RewriteFile`), out of scope for Standard. Note this in the plan output.
 
 - [ ] **Step 5: Run to verify pass, then commit**
 
@@ -1996,7 +2166,7 @@ git commit -m "feat: adapter plan() methods for all v1 stores"
 - Produces:
   ```rust
   pub struct Plan { pub mv: Move, pub changes: Vec<Change>, pub warnings: Vec<String>, pub nested: Vec<String> }
-  pub struct PlanOpts { pub recursive: bool, pub on_collision: Collision, pub force: bool }
+  pub struct PlanOpts { pub recursive: bool, pub on_collision: Collision, pub force: bool, pub scope: crate::model::Scope }
   pub enum Collision { Refuse, KeepDest, KeepSrc }
   pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) -> Result<Plan>;
   pub fn render_plan(plan: &Plan) -> String;
@@ -2014,7 +2184,7 @@ mod tests {
     use crate::model::Move;
     use std::path::Path;
 
-    fn opts() -> PlanOpts { PlanOpts { recursive: false, on_collision: Collision::Refuse, force: false } }
+    fn opts() -> PlanOpts { PlanOpts { recursive: false, on_collision: Collision::Refuse, force: false, scope: crate::model::Scope::Standard } }
 
     #[test]
     fn refuses_when_destination_folder_exists() {
@@ -2047,13 +2217,13 @@ Expected: FAIL.
 use crate::error::{CpmError, Result};
 use crate::fs::FileSystem;
 use crate::index::ProjectIndex;
-use crate::model::{Change, Ctx, Move};
+use crate::model::{Change, Ctx, Move, Scope};
 use crate::paths::normalize_path;
 use crate::stores::registry;
 use std::path::Path;
 
 pub enum Collision { Refuse, KeepDest, KeepSrc }
-pub struct PlanOpts { pub recursive: bool, pub on_collision: Collision, pub force: bool }
+pub struct PlanOpts { pub recursive: bool, pub on_collision: Collision, pub force: bool, pub scope: Scope }
 pub struct Plan { pub mv: Move, pub changes: Vec<Change>, pub warnings: Vec<String>, pub nested: Vec<String> }
 
 pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) -> Result<Plan> {
@@ -2067,7 +2237,7 @@ pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) 
         return Err(CpmError::WorktreeSource(mv.src_abs.clone()));
     }
     let index = ProjectIndex::build(fs, home);
-    let ctx = Ctx { fs, home: home.to_path_buf(), index: &index };
+    let ctx = Ctx { fs, home: home.to_path_buf(), index: &index, scope: opts.scope };
     let mut changes = Vec::new();
     let mut warnings = Vec::new();
     let mut nested = Vec::new();
@@ -2160,7 +2330,7 @@ git commit -m "feat: build_plan with guards, nested detection, and render_plan"
   ```
   Copies the original bytes of every file/dir a change will touch into `<backup_root>/cpm-<run_id>/` and returns a manifest. `run_id` is passed in, never generated in core.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing tests**
 
 ```rust
 #[cfg(test)]
@@ -2178,11 +2348,28 @@ mod tests {
                  b"{\"cwd\":\"E:\\\\Projects\\\\A\"}\n").unwrap();
         fs.write(Path::new("E:/Projects/A/file.txt"), b"payload").unwrap();
         let mv = Move { src_abs: "E:\\Projects\\A".into(), dst_abs: "E:\\Projects\\B".into() };
-        let opts = PlanOpts { recursive: false, on_collision: Collision::Refuse, force: false };
+        let opts = PlanOpts { recursive: false, on_collision: Collision::Refuse, force: false, scope: crate::model::Scope::Standard };
         let plan = build_plan(&fs, Path::new("/h"), &mv, &opts).unwrap();
         let m = snapshot(&plan, &fs, Path::new("/backup"), "TEST").unwrap();
         assert!(!m.entries.is_empty());
         assert!(fs.exists(Path::new("/backup/cpm-TEST")));
+    }
+
+    #[test]
+    fn snapshot_backs_up_every_old_transcript_with_sha256() {
+        let fs = MemoryFileSystem::new();
+        let body = b"{\"cwd\":\"E:\\\\Projects\\\\A\"}\n";
+        fs.write(Path::new("/h/.claude/projects/E--Projects-A/s.jsonl"), body).unwrap();
+        fs.write(Path::new("E:/Projects/A/file.txt"), b"payload").unwrap();
+        let mv = Move { src_abs: "E:\\Projects\\A".into(), dst_abs: "E:\\Projects\\B".into() };
+        let opts = PlanOpts { recursive: false, on_collision: Collision::Refuse, force: false, scope: crate::model::Scope::Standard };
+        let plan = build_plan(&fs, Path::new("/h"), &mv, &opts).unwrap();
+        let m = snapshot(&plan, &fs, Path::new("/backup"), "TEST").unwrap();
+        // the PRE-rename transcript must be captured, with its sha256 recorded in the manifest
+        let e = m.entries.iter().find(|e| e.original.ends_with("s.jsonl"))
+            .expect("transcript backed up");
+        assert_eq!(e.sha256, hexd(body));
+        assert!(fs.exists(Path::new(&e.backup)));
     }
 }
 ```
@@ -2206,44 +2393,54 @@ pub fn snapshot(plan: &Plan, fs: &dyn FileSystem, backup_root: &Path, run_id: &s
     let dir = backup_root.join(format!("cpm-{run_id}"));
     fs.create_dir_all(&dir)?;
     let mut entries = Vec::new();
-    let mut backup_one = |orig: &Path, tag: &str| -> Result<()> {
-        if fs.is_file(orig) {
-            let bytes = fs.read(orig)?;
-            let bpath = dir.join(format!("{tag}-{}", orig.file_name().unwrap().to_string_lossy()));
-            fs.write(&bpath, &bytes)?;
-            entries.push(ManifestEntry {
-                original: orig.to_string_lossy().into_owned(),
-                backup: bpath.to_string_lossy().into_owned(),
-                sha256: hexd(&bytes),
-            });
-        }
-        Ok(())
-    };
     for (i, c) in plan.changes.iter().enumerate() {
         match c {
-            Change::RewriteFile { path, .. } => backup_one(path.as_path(), &format!("f{i}"))?,
-            Change::RenameJsonKey { path, .. } | Change::RewriteJsonArrayValue { path, .. } =>
-                backup_one(path.as_path(), &format!("j{i}"))?,
             Change::RenameDir { from, .. } => {
-                // record intent; dir restore is handled by rollback via manifest note
+                // Snapshot runs BEFORE any rename, so `from` is the PRE-rename dir. Copy every
+                // *.jsonl under it wholesale: the plan's RewriteFile paths are POST-rename and
+                // do not exist yet, so this is how transcripts actually get backed up (B-01).
+                for child in fs.read_dir(from).unwrap_or_default() {
+                    if child.extension().and_then(|e| e.to_str()) == Some("jsonl") {
+                        backup_one(fs, &dir, &child, &format!("d{i}"), &mut entries)?;
+                    }
+                }
+                // record the rename intent so rollback can undo the dir rename
                 entries.push(ManifestEntry { original: from.to_string_lossy().into_owned(),
                     backup: format!("<dir-rename {i}>"), sha256: String::new() });
             }
+            // Stable paths that do not move: history.jsonl (a RewriteFile) and claude.json
+            // (json edits). backup_one is_file-guards, so a POST-rename transcript path
+            // (already captured by the RenameDir arm above) is silently skipped.
+            Change::RewriteFile { path, .. } => backup_one(fs, &dir, path, &format!("f{i}"), &mut entries)?,
+            Change::RenameJsonKey { path, .. } | Change::RewriteJsonArrayValue { path, .. } =>
+                backup_one(fs, &dir, path, &format!("j{i}"), &mut entries)?,
             Change::MoveTree { from, .. } => {
                 entries.push(ManifestEntry { original: from.to_string_lossy().into_owned(),
                     backup: format!("<move-tree {i}>"), sha256: String::new() });
             }
         }
     }
-    // Note: RewriteFile paths are POST-rename for claude_projects; snapshot those from
-    // their PRE-rename location. See apply ordering (Task 7.2) - snapshot runs BEFORE
-    // the dir rename, so read the pre-rename path. build_plan records post paths; snapshot
-    // maps them back by swapping new-encoded dir for old-encoded via plan.mv. For v1,
-    // snapshot the whole old projects dir tree wholesale (simpler and safe): copy every
-    // *.jsonl under the old encoded dir. Implement that instead of per-file for RewriteFile.
     let m = Manifest { run_id: run_id.to_string(), mv: plan.mv.clone(), entries };
     write_manifest(fs, &dir, &m)?;
     Ok(m)
+}
+
+/// Copy one existing file into the backup dir and record a manifest entry (original path,
+/// backup path, sha256). A plain helper - NOT a closure - so it can borrow `entries`
+/// mutably per call without conflicting with the direct pushes above (LEAD-06).
+fn backup_one(fs: &dyn FileSystem, dir: &Path, orig: &Path, tag: &str,
+              entries: &mut Vec<ManifestEntry>) -> Result<()> {
+    if fs.is_file(orig) {
+        let bytes = fs.read(orig)?;
+        let bpath = dir.join(format!("{tag}-{}", orig.file_name().unwrap().to_string_lossy()));
+        fs.write(&bpath, &bytes)?;
+        entries.push(ManifestEntry {
+            original: orig.to_string_lossy().into_owned(),
+            backup: bpath.to_string_lossy().into_owned(),
+            sha256: hexd(&bytes),
+        });
+    }
+    Ok(())
 }
 
 fn write_manifest(fs: &dyn FileSystem, dir: &Path, m: &Manifest) -> Result<()> {
@@ -2257,8 +2454,28 @@ fn write_manifest(fs: &dyn FileSystem, dir: &Path, m: &Manifest) -> Result<()> {
     fs.write(&dir.join("manifest.json"), serde_json::to_vec_pretty(&json).unwrap().as_slice())?;
     Ok(())
 }
+
+impl Manifest {
+    /// Reconstruct a Manifest from a written manifest.json (used by apply_verified to drive
+    /// the backup-comparison postcondition, and available to rollback).
+    pub fn load(fs: &dyn FileSystem, path: &Path) -> Result<Manifest> {
+        let v: serde_json::Value = serde_json::from_slice(&fs.read(path)?)
+            .map_err(|e| crate::error::CpmError::UnrecognizedFormat(e.to_string()))?;
+        let entries = v["entries"].as_array().cloned().unwrap_or_default().iter().map(|e| ManifestEntry {
+            original: e["original"].as_str().unwrap_or_default().to_string(),
+            backup: e["backup"].as_str().unwrap_or_default().to_string(),
+            sha256: e["sha256"].as_str().unwrap_or_default().to_string(),
+        }).collect();
+        Ok(Manifest {
+            run_id: v["run_id"].as_str().unwrap_or_default().to_string(),
+            mv: Move { src_abs: v["src_abs"].as_str().unwrap_or_default().to_string(),
+                       dst_abs: v["dst_abs"].as_str().unwrap_or_default().to_string() },
+            entries,
+        })
+    }
+}
 ```
-Implementation note for the engineer: the ordering subtlety in the comment is real. Resolve it by having claude_projects emit RewriteFile paths at their PRE-rename location and letting apply rewrite-then-rename OR rename-then-rewrite consistently. Pick rename-first (Task 7.2 gate) and store POST paths; snapshot the old dir wholesale before the rename so originals are always captured. Add a test that after snapshot, every old `*.jsonl` exists in the backup dir.
+Invariant: snapshot runs before any rename, so it always copies from PRE-rename locations - the whole `*.jsonl` set under each renamed dir wholesale, plus the stable files (history.jsonl, claude.json) directly. `apply` (Task 7.2) then renames dir-first and rewrites the post-rename paths.
 
 - [ ] **Step 3: Run, then commit**
 
@@ -2300,7 +2517,7 @@ mod tests {
                  b"{\"cwd\":\"E:\\\\Projects\\\\A\"}\n").unwrap();
         fs.write(Path::new("E:/Projects/A/f.txt"), b"x").unwrap();
         let mv = Move { src_abs: "E:\\Projects\\A".into(), dst_abs: "E:\\Projects\\B".into() };
-        let opts = PlanOpts { recursive: false, on_collision: Collision::Refuse, force: false };
+        let opts = PlanOpts { recursive: false, on_collision: Collision::Refuse, force: false, scope: crate::model::Scope::Standard };
         let plan = build_plan(&fs, Path::new("/h"), &mv, &opts).unwrap();
         apply(&plan, &fs, Path::new("/backup"), "T").unwrap();
         // new encoded dir exists, cwd rewritten, folder moved
@@ -2339,8 +2556,10 @@ pub fn apply(plan: &Plan, fs: &dyn FileSystem, backup_root: &Path, run_id: &str)
     for c in &plan.changes {
         match c {
             Change::RewriteFile { path, rules, expected } => {
-                let text = String::from_utf8_lossy(&fs.read(path)?).into_owned();
-                let (out, n) = anchored_rewrite(&text, rules);
+                let bytes = fs.read(path)?;
+                let text = std::str::from_utf8(&bytes).map_err(|e|
+                    CpmError::UnrecognizedFormat(format!("{}: {e}", path.display())))?;
+                let (out, n) = anchored_rewrite(text, rules);
                 if n != *expected {
                     return Err(CpmError::VerifyFailed(
                         format!("{}: expected {expected} edits, live count {n}", path.display())));
@@ -2350,7 +2569,9 @@ pub fn apply(plan: &Plan, fs: &dyn FileSystem, backup_root: &Path, run_id: &str)
             }
             Change::RenameJsonKey { path, from, to, expected }
             | Change::RewriteJsonArrayValue { path, from, to, expected } => {
-                let text = String::from_utf8_lossy(&fs.read(path)?).into_owned();
+                let bytes = fs.read(path)?;
+                let text = std::str::from_utf8(&bytes).map_err(|e|
+                    CpmError::UnrecognizedFormat(format!("{}: {e}", path.display())))?;
                 let n = text.matches(from.as_str()).count();
                 if n != *expected {
                     return Err(CpmError::VerifyFailed(
@@ -2424,7 +2645,7 @@ fn reference_move_end_to_end_leaves_no_old_cwd() {
     };
     // seed the source folder so MoveTree has something to move
     fs.write(Path::new("E:/Projects/Github Repos/markdown-for-humans/.keep"), b"x").unwrap();
-    let opts = PlanOpts { recursive: false, on_collision: Collision::Refuse, force: false };
+    let opts = PlanOpts { recursive: false, on_collision: Collision::Refuse, force: false, scope: crate::model::Scope::Standard };
     let plan = build_plan(&fs, home, &mv, &opts).unwrap();
     apply(&plan, &fs, Path::new("/backup"), "REF").unwrap();
 
@@ -2459,9 +2680,9 @@ git commit -m "test: end-to-end reference move leaves no old cwd"
 **Interfaces:**
 - Produces:
   ```rust
-  pub fn verify(fs: &dyn FileSystem, home: &Path, mv: &Move) -> Result<Vec<VerifyResult>>;
+  pub fn verify(fs: &dyn FileSystem, home: &Path, mv: &Move, manifest: Option<&Manifest>) -> Result<Vec<VerifyResult>>;
   ```
-  Aggregates each store's `verify`. Postconditions: new encoded dir exists; zero old `"cwd"` fields in moved transcripts; each moved `*.jsonl` still parses per line; line count unchanged vs backup; claude.json still parses, has new key, lacks old key; history has zero old project values; plugin dir renamed. Returns a list; any `ok == false` -> caller treats as failure.
+  Aggregates each store's `verify`. Postconditions: new encoded dir exists; zero old `"cwd"` fields in moved transcripts; each moved `*.jsonl` still parses per line; claude.json still parses, has new key, lacks old key; history has zero lines whose NORMALIZED `project` equals the normalized old path; plugin dir renamed. When a `manifest` is supplied, one further postcondition per moved transcript: its line count equals its backed-up original (read via the manifest's backup paths). Returns a list; any `ok == false` -> caller treats as failure.
 
 - [ ] **Step 1: Write the failing test (verify passes post-apply, fails on injected staleness)**
 
@@ -2487,10 +2708,10 @@ mod tests {
     #[test]
     fn verify_passes_after_apply() {
         let (fs, mv) = setup();
-        let opts = PlanOpts { recursive: false, on_collision: Collision::Refuse, force: false };
+        let opts = PlanOpts { recursive: false, on_collision: Collision::Refuse, force: false, scope: crate::model::Scope::Standard };
         let plan = build_plan(&fs, Path::new("/h"), &mv, &opts).unwrap();
         apply(&plan, &fs, Path::new("/backup"), "T").unwrap();
-        let results = verify(&fs, Path::new("/h"), &mv).unwrap();
+        let results = verify(&fs, Path::new("/h"), &mv, None).unwrap();
         assert!(results.iter().all(|r| r.ok), "{results:?}");
     }
 }
@@ -2513,7 +2734,9 @@ fn verify(&self, ctx: &Ctx, mv: &Move) -> Result<Vec<VerifyResult>> {
     let mut stale = 0usize;
     for child in ctx.fs.read_dir(&new_dir).unwrap_or_default() {
         if child.extension().and_then(|e| e.to_str()) == Some("jsonl") {
-            let text = String::from_utf8_lossy(&ctx.fs.read(&child)?).into_owned();
+            let bytes = ctx.fs.read(&child)?;
+            let text = std::str::from_utf8(&bytes).map_err(|e|
+                crate::error::CpmError::UnrecognizedFormat(format!("{}: {e}", child.display())))?;
             stale += text.matches(&old_cwd).count();
             for l in text.lines() {
                 if !l.trim().is_empty() && serde_json::from_str::<serde_json::Value>(l).is_err() {
@@ -2531,22 +2754,48 @@ fn verify(&self, ctx: &Ctx, mv: &Move) -> Result<Vec<VerifyResult>> {
 ```
 ```rust
 // verify.rs top-level
+use crate::backup::Manifest;
 use crate::error::Result;
 use crate::fs::FileSystem;
 use crate::index::ProjectIndex;
 use crate::model::{Ctx, Move, VerifyResult};
 use crate::stores::registry;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-pub fn verify(fs: &dyn FileSystem, home: &Path, mv: &Move) -> Result<Vec<VerifyResult>> {
+pub fn verify(fs: &dyn FileSystem, home: &Path, mv: &Move,
+              manifest: Option<&Manifest>) -> Result<Vec<VerifyResult>> {
     let index = ProjectIndex::build(fs, home);
-    let ctx = Ctx { fs, home: home.to_path_buf(), index: &index };
+    let ctx = Ctx { fs, home: home.to_path_buf(), index: &index, scope: crate::model::Scope::Standard };
     let mut out = Vec::new();
     for store in registry() { out.extend(store.verify(&ctx, mv)?); }
+    // Backup comparison runs only when a manifest is supplied: apply_verified passes it,
+    // the standalone `cpm verify` passes None (LEAD-08). Compare each moved transcript's
+    // line count against its backed-up original.
+    if let Some(m) = manifest {
+        for e in &m.entries {
+            if !e.original.ends_with(".jsonl") || e.sha256.is_empty() { continue; }
+            let want = std::str::from_utf8(&fs.read(Path::new(&e.backup))?)
+                .map(|t| t.lines().count()).unwrap_or(0);
+            let moved = moved_path(&e.original, mv);
+            let got = fs.read(&moved).ok().and_then(|b| String::from_utf8(b).ok())
+                .map(|t| t.lines().count());
+            out.push(VerifyResult {
+                check: "transcript line count unchanged vs backup".into(),
+                ok: got == Some(want), detail: e.original.clone() });
+        }
+    }
     Ok(out)
 }
+
+/// Map a PRE-rename transcript path to its POST-move location by swapping the old encoded
+/// dir segment for the new one.
+fn moved_path(original: &str, mv: &Move) -> PathBuf {
+    use crate::paths::encode_project_dir;
+    let (old_enc, new_enc) = (encode_project_dir(&mv.src_abs), encode_project_dir(&mv.dst_abs));
+    PathBuf::from(original.replace(&old_enc, &new_enc))
+}
 ```
-Implement claude_json/claude_history/plugin_state verify analogously (new key present, old key absent, file parses; zero old project values; new plugin dir exists, old absent).
+Implement claude_json/claude_history/plugin_state verify analogously (new key present, old key absent, file parses; zero history lines whose normalized `project` equals the normalized old path; new plugin dir exists, old absent).
 
 - [ ] **Step 3: Run, then commit**
 
@@ -2591,21 +2840,33 @@ Implement the test body using the Task 8.1 `setup()` pattern: after `apply_verif
 pub struct ApplyOpts { pub run_id: String, pub auto_rollback: bool, pub force: bool }
 
 pub fn apply_verified(plan: &Plan, fs: &dyn FileSystem, backup_root: &Path, opts: &ApplyOpts) -> Result<Report> {
-    let mut report = apply(plan, fs, backup_root, &opts.run_id)?;
-    let results = crate::verify::verify(fs, plan_home(plan), &plan.mv)?;
+    let backup_dir = backup_root.join(format!("cpm-{}", opts.run_id));
+    let manifest_path = backup_dir.join("manifest.json");
+    // A mid-apply failure (a count mismatch or an io error after some writes) must not leave
+    // an unrecoverable ~/.claude: snapshot ran first, so roll back from the manifest and
+    // surface BOTH the cause and the backup dir (LEAD-01). Every failure path below names
+    // the backup directory.
+    let mut report = match apply(plan, fs, backup_root, &opts.run_id) {
+        Ok(r) => r,
+        Err(e) => {
+            if opts.auto_rollback { let _ = crate::rollback::rollback(&manifest_path, fs); }
+            return Err(CpmError::VerifyFailed(
+                format!("apply failed ({e:?}); backup at {}", backup_dir.display())));
+        }
+    };
+    let manifest = crate::backup::Manifest::load(fs, &manifest_path)?;
+    let results = crate::verify::verify(fs, &plan.home, &plan.mv, Some(&manifest))?;
     let failed: Vec<_> = results.iter().filter(|r| !r.ok).collect();
     if !failed.is_empty() {
-        if opts.auto_rollback {
-            let manifest = backup_root.join(format!("cpm-{}/manifest.json", opts.run_id));
-            crate::rollback::rollback(&manifest, fs)?;
-        }
-        return Err(CpmError::VerifyFailed(format!("{} checks failed", failed.len())));
+        if opts.auto_rollback { crate::rollback::rollback(&manifest_path, fs)?; }
+        return Err(CpmError::VerifyFailed(
+            format!("{} checks failed; backup at {}", failed.len(), backup_dir.display())));
     }
     report.verify = Some(results);
     Ok(report)
 }
 ```
-Note: `plan_home` is not stored on Plan in earlier tasks. Add `home: PathBuf` to the `Plan` struct (set in `build_plan`) so `apply_verified` and rollback know the home root. Update `Plan` construction and the `render_plan`/tests accordingly (small mechanical change).
+Note: add `home: PathBuf` to the `Plan` struct (set in `build_plan`), so `apply_verified` and rollback know the home root (`&plan.home`). Update `Plan` construction and the tests accordingly (small mechanical change). Every failure path from `apply_verified` names the backup directory so the user can `cpm rollback` it manually.
 
 `crates/cpm-core/src/locks.rs`:
 ```rust
@@ -2632,7 +2893,7 @@ fn corrupt_claude_json_hard_fails_before_writing() {
              b"{\"cwd\":\"E:\\\\Projects\\\\A\"}\n").unwrap();
     fs.write(Path::new("E:/Projects/A/f.txt"), b"x").unwrap();
     let mv = Move { src_abs: "E:\\Projects\\A".into(), dst_abs: "E:\\Projects\\B".into() };
-    let opts = PlanOpts { recursive: false, on_collision: Collision::Refuse, force: false };
+    let opts = PlanOpts { recursive: false, on_collision: Collision::Refuse, force: false, scope: crate::model::Scope::Standard };
     let err = build_plan(&fs, Path::new("/h"), &mv, &opts).unwrap_err();
     assert!(matches!(err, CpmError::UnrecognizedFormat(_)));
     assert!(!fs.exists(Path::new("E:/Projects/B/f.txt"))); // nothing moved
@@ -2683,7 +2944,7 @@ mod tests {
         fs.write(Path::new("/h/.claude/projects/E--Projects-A/s.jsonl"), orig).unwrap();
         fs.write(Path::new("E:/Projects/A/f.txt"), b"x").unwrap();
         let mv = Move { src_abs: "E:\\Projects\\A".into(), dst_abs: "E:\\Projects\\B".into() };
-        let opts = PlanOpts { recursive: false, on_collision: Collision::Refuse, force: false };
+        let opts = PlanOpts { recursive: false, on_collision: Collision::Refuse, force: false, scope: crate::model::Scope::Standard };
         let plan = build_plan(&fs, Path::new("/h"), &mv, &opts).unwrap();
         apply(&plan, &fs, Path::new("/backup"), "T").unwrap();
         rollback(Path::new("/backup/cpm-T/manifest.json"), &fs).unwrap();
@@ -2699,6 +2960,7 @@ mod tests {
 ```rust
 use crate::error::{CpmError, Result};
 use crate::fs::FileSystem;
+use sha2::{Digest, Sha256};
 use std::path::Path;
 
 pub fn rollback(manifest_path: &Path, fs: &dyn FileSystem) -> Result<()> {
@@ -2718,6 +2980,13 @@ pub fn rollback(manifest_path: &Path, fs: &dyn FileSystem) -> Result<()> {
             continue; // handled by the whole-tree restore below
         }
         let bytes = fs.read(Path::new(backup))?;
+        // Guard the recovery path of last resort: refuse to restore a backup whose bytes no
+        // longer match the sha256 recorded at snapshot time, naming the corrupt file (A-01).
+        let want = e["sha256"].as_str().unwrap_or_default();
+        let got: String = Sha256::digest(&bytes).iter().map(|x| format!("{x:02x}")).collect();
+        if !want.is_empty() && got != want {
+            return Err(CpmError::VerifyFailed(format!("backup corrupted: {backup}")));
+        }
         fs.write(Path::new(original), &bytes)?;
     }
     // 3. rename encoded project dir back (new -> old) by restoring the old dir tree:
@@ -2761,35 +3030,74 @@ enum Cmd {
     Rollback { #[arg(long)] report: PathBuf },
 }
 ```
-Add global flags to `Cli`: `backup_root: Option<PathBuf>`, `force: bool`, `recursive: bool`, `no_auto_rollback: bool`, `on_collision: Option<String>`.
+Add global flags to `Cli`: `backup_root: Option<PathBuf>`, `force: bool`, `recursive: bool`, `no_auto_rollback: bool`, `on_collision: Option<String>`, `scope: Option<String>` (`--scope=minimal|standard|full`, default standard).
 
-- [ ] **Step 2: Wire dispatch**
+- [ ] **Step 2: Wire dispatch through a `run` fn**
 
+The dispatch uses `?`, so it lives in a `Result`-returning `run`, not in `main` (which
+returns `ExitCode`) - this is the LEAD-06 fix. `main` becomes:
 ```rust
-Cmd::Plan { src, dst } => {
-    let mv = Move { src_abs: src.clone(), dst_abs: dst.clone() };
-    let opts = plan_opts(&cli);
-    build_plan(&fs, &home, &mv, &opts).map(|p| { print!("{}", render_plan(&p)); })
+fn main() -> ExitCode {
+    let cli = Cli::parse();
+    let fs = RealFileSystem;
+    let home = home_of(&cli);
+    match run(&cli, &fs, &home) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => { eprintln!("error: {e:?}"); ExitCode::from(exit::code_for(&e) as u8) }
+    }
 }
-Cmd::Apply { src, dst } => {
-    let mv = Move { src_abs: src.clone(), dst_abs: dst.clone() };
-    let plan = build_plan(&fs, &home, &mv, &plan_opts(&cli))?;
-    let backup_root = cli.backup_root.clone().unwrap_or_else(std::env::temp_dir);
-    let run_id = pick_run_id();  // from a timestamp read in main (not in core)
-    let opts = ApplyOpts { run_id, auto_rollback: !cli.no_auto_rollback, force: cli.force };
-    apply_verified(&plan, &fs, &backup_root, &opts).map(|r| {
-        println!("applied {} changes; backup {}", r.applied.len(), r.backup_dir);
-    })
+```
+main.rs adds `use cpm_core::error::CpmError;`, `cpm_core::model::{Move, Scope}`,
+`cpm_core::plan::{build_plan, render_plan, PlanOpts, Collision}`,
+`cpm_core::apply::{apply_verified, ApplyOpts}`, `cpm_core::verify::verify`,
+`cpm_core::rollback::rollback`.
+```rust
+fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> cpm_core::error::Result<()> {
+    match &cli.cmd {
+        Cmd::Plan { src, dst } => {
+            let mv = Move { src_abs: src.clone(), dst_abs: dst.clone() };
+            let plan = build_plan(fs, home, &mv, &plan_opts(cli))?;
+            print!("{}", render_plan(&plan));
+            Ok(())
+        }
+        Cmd::Apply { src, dst } => {
+            let mv = Move { src_abs: src.clone(), dst_abs: dst.clone() };
+            let plan = build_plan(fs, home, &mv, &plan_opts(cli))?;
+            let backup_root = cli.backup_root.clone().unwrap_or_else(std::env::temp_dir);
+            let run_id = pick_run_id();  // timestamp read in the CLI (core stays deterministic)
+            let opts = ApplyOpts { run_id, auto_rollback: !cli.no_auto_rollback, force: cli.force };
+            let r = apply_verified(&plan, fs, &backup_root, &opts)?;
+            println!("applied {} changes; backup {}", r.applied.len(), r.backup_dir);
+            Ok(())
+        }
+        Cmd::Verify { src, dst } => {
+            let mv = Move { src_abs: src.clone(), dst_abs: dst.clone() };
+            // Standalone verify has no manifest, so the backup line-count comparison is
+            // skipped; it runs only inside apply_verified, which supplies Some(&manifest).
+            let results = verify(fs, home, &mv, None)?;
+            let failed = results.iter().filter(|r| !r.ok).count();
+            for r in &results { println!("  [{}] {}: {}", if r.ok {"ok"} else {"FAIL"}, r.check, r.detail); }
+            if failed > 0 { return Err(CpmError::VerifyFailed(format!("{failed} failed"))); }
+            Ok(())
+        }
+        Cmd::Rollback { report } => rollback(report, fs),
+    }
 }
-Cmd::Verify { src, dst } => {
-    let mv = Move { src_abs: src.clone(), dst_abs: dst.clone() };
-    let results = verify(&fs, &home, &mv)?;
-    let failed = results.iter().filter(|r| !r.ok).count();
-    for r in &results { println!("  [{}] {}: {}", if r.ok {"ok"} else {"FAIL"}, r.check, r.detail); }
-    if failed > 0 { return err_exit(CpmError::VerifyFailed(format!("{failed} failed"))); }
-    Ok(())
+
+/// Build PlanOpts from the CLI, mapping --scope (default Standard) and --on-collision.
+fn plan_opts(cli: &Cli) -> PlanOpts {
+    let scope = match cli.scope.as_deref() {
+        Some("minimal") => Scope::Minimal,
+        Some("full") => Scope::Full,
+        _ => Scope::Standard,
+    };
+    let on_collision = match cli.on_collision.as_deref() {
+        Some("keep-dest") => Collision::KeepDest,
+        Some("keep-src") => Collision::KeepSrc,
+        _ => Collision::Refuse,
+    };
+    PlanOpts { recursive: cli.recursive, on_collision, force: cli.force, scope }
 }
-Cmd::Rollback { report } => rollback(report, &fs),
 ```
 `pick_run_id` reads a timestamp in the CLI (allowed; only core must be deterministic): e.g. `format!("{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs())`.
 
@@ -2817,7 +3125,7 @@ Fill `<seeded temp>` by copying the fixture `before/` tree into a `tempfile::tem
 - [ ] **Step 4: Run the whole suite and the determinism/no-network check**
 
 Run: `cargo test --workspace`
-Expected: PASS. Confirm no test performs network I/O (there is no network code; the dependency-gate + absence of any http crate is the guarantee). Optionally add `#![forbid(unsafe_code)]` to both crates.
+Expected: PASS. The no-network guarantee is structural: the CI dependency gate (Task 1.1) forbids any network-capable crate (`reqwest|ureq|hyper|curl`), so plan+apply+verify cannot make an outbound request, and the `cargo audit` step catches RUSTSEC advisories. No runtime network test is required. Optionally add `#![forbid(unsafe_code)]` to both crates.
 
 - [ ] **Step 5: MVP acceptance - run the real reference move on a COPY**
 
@@ -2961,7 +3269,7 @@ fn mtime_secs(&self, path: &Path) -> std::io::Result<u64>;
 `RealFileSystem`: `Ok(std::fs::metadata(path)?.modified()?.duration_since(std::time::UNIX_EPOCH).unwrap().as_secs())`.
 `MemoryFileSystem`: store an mtime per file (extend the map value to `(Vec<u8>, u64)`, defaulting new writes to a counter or 0; tests that check ages set it explicitly via a new `write_at(path, data, mtime)` helper). Keep existing `write` defaulting mtime to 0.
 
-- [ ] **Step 2: Write the failing test**
+- [ ] **Step 2: Write the failing tests (including AC-31 PATH-keyed counts)**
 
 ```rust
 #[cfg(test)]
@@ -2981,6 +3289,18 @@ mod tests {
         assert_eq!(recs[0].sessions, 1);
         assert!(matches!(recs[0].health, Health::Stale));
     }
+
+    #[test]
+    fn list_counts_json_keys_ac31() {
+        let fs = MemoryFileSystem::new();
+        fs.write(Path::new("/h/.claude/projects/E--Projects-A/s.jsonl"),
+                 b"{\"cwd\":\"E:\\\\Projects\\\\A\"}\n").unwrap();
+        fs.write(Path::new("/h/.claude.json"),
+                 br#"{"projects":{"E:\\Projects\\A":{}}}"#).unwrap();
+        let recs = list(&fs, Path::new("/h"), 1_000_000);
+        // AC-31: PATH-keyed declarations are counted per project, never stubbed to 0
+        assert!(recs.iter().any(|r| r.json_keys >= 1));
+    }
 }
 ```
 
@@ -2989,8 +3309,12 @@ mod tests {
 ```rust
 use crate::fs::FileSystem;
 use crate::index::ProjectIndex;
+use crate::model::{Ctx, Move, Store};
 use crate::paths::encode_project_dir;
 use crate::sessions::{footprint, SessionFootprint};
+use crate::stores::claude_history::ClaudeHistory;
+use crate::stores::claude_json::ClaudeJson;
+use crate::stores::plugin_state::PluginState;
 use std::path::Path;
 
 pub enum Health { Ok, Stale, Unresolved }
@@ -2998,6 +3322,7 @@ pub struct ProjectRecord { /* fields as in Interfaces */ }
 
 pub fn list(fs: &dyn FileSystem, home: &Path, now_secs: u64) -> Vec<ProjectRecord> {
     let index = ProjectIndex::build(fs, home);
+    let ctx = Ctx { fs, home: home.to_path_buf(), index: &index, scope: crate::model::Scope::Standard };
     let mut out = Vec::new();
     // resolved projects
     for (cwd_key, dirs) in &index.by_cwd {
@@ -3017,11 +3342,19 @@ pub fn list(fs: &dyn FileSystem, home: &Path, now_secs: u64) -> Vec<ProjectRecor
             }
             let exists = Path::new(&cwd_key.replace('/', "\\")).exists()
                 || Path::new(cwd_key).exists();
+            // Real PATH-keyed counts via the adapters' detect (AC-31), not stubbed zeros.
+            let mv = Move { src_abs: cwd_key.clone(), dst_abs: String::new() };
+            let cj = ClaudeJson.detect(&ctx, &mv).unwrap_or_default();
+            let json_keys = cj.iter().filter(|h| h.detail.starts_with("projects key")).count();
+            let github_paths = cj.iter().filter(|h| h.detail.starts_with("githubRepoPaths")).count();
+            let history_lines: usize = ClaudeHistory.detect(&ctx, &mv).unwrap_or_default().iter()
+                .filter_map(|h| h.detail.split_whitespace().next().and_then(|n| n.parse().ok())).sum();
+            let plugin_dirs = PluginState.detect(&ctx, &mv).unwrap_or_default().len();
             out.push(ProjectRecord {
                 cwd: Some(cwd_key.clone()),
                 encoded_dir: dir.file_name().unwrap().to_string_lossy().into_owned(),
                 sessions: fp.session_ids.len(), bytes, oldest_days: oldest, newest_days: newest,
-                json_keys: 0, github_paths: 0, history_lines: 0, plugin_dirs: 0, // filled from adapters if desired
+                json_keys, github_paths, history_lines, plugin_dirs,
                 footprint: fp,
                 health: if exists { Health::Ok } else { Health::Stale },
             });
@@ -3102,10 +3435,13 @@ Spec: F14, AC-34..39. Depends on the read layer + phase-7 copy primitives.
   pub fn archive_session(fs: &dyn FileSystem, home: &Path, transcript: &Path, opts: &ArchiveOpts) -> Result<()>;
   ```
   Incremental: a file is copied only if absent in the archive or its content SHA-256
-  differs (never mtime). Writes atomically (temp + rename). Emits `INDEX.md` and a
-  per-run `manifest.json`.
+  differs (never mtime). Writes atomically (temp + rename). Archives resolved AND
+  unresolved project dirs: transcripts, each `<sessionId>/` subdir verbatim, and the
+  SESSION-keyed artifacts (`todos`/`file-history`/`session-env`/`tasks`) into
+  `session-artifacts/`. Emits `INDEX.md` (projects -> session counts + byte totals) and
+  a per-run `manifest.json` (per archived file: source path, sha256, size).
 
-- [ ] **Step 1: Write the failing test (idempotent second run copies nothing)**
+- [ ] **Step 1: Write the failing tests (idempotency; unresolved dirs; session-artifacts; manifest sha)**
 
 ```rust
 #[cfg(test)]
@@ -3125,6 +3461,33 @@ mod tests {
         assert_eq!(r2.copied, 0);   // unchanged -> skipped
         assert_eq!(r2.skipped, 1);
     }
+
+    #[test]
+    fn archives_unresolved_dir_transcript() {
+        let fs = MemoryFileSystem::new();
+        // a dir whose transcript has no cwd -> unresolved, must still be archived (LEAD-05)
+        fs.write(Path::new("/h/.claude/projects/E--Ghost/s.jsonl"), b"{\"type\":\"x\"}\n").unwrap();
+        let opts = ArchiveOpts { archive_dir: Path::new("/arch").to_path_buf(), render: false };
+        archive_all(&fs, Path::new("/h"), &opts).unwrap();
+        assert!(fs.exists(Path::new("/arch/projects/E--Ghost/s.jsonl")));
+    }
+
+    #[test]
+    fn archives_file_history_under_session_artifacts_and_records_sha() {
+        let fs = MemoryFileSystem::new();
+        fs.write(Path::new("/h/.claude/projects/E--A/28fd093e.jsonl"),
+                 b"{\"cwd\":\"E:\\\\A\"}\n").unwrap();
+        let payload = b"file history payload";
+        fs.write(Path::new("/h/.claude/file-history/28fd093e/x@v1"), payload).unwrap();
+        let opts = ArchiveOpts { archive_dir: Path::new("/arch").to_path_buf(), render: false };
+        archive_all(&fs, Path::new("/h"), &opts).unwrap();
+        assert!(fs.exists(Path::new("/arch/session-artifacts/file-history/28fd093e/x@v1")));
+        // manifest.json records the sha256 of an archived file (AC-39)
+        let m: serde_json::Value =
+            serde_json::from_slice(&fs.read(Path::new("/arch/manifest.json")).unwrap()).unwrap();
+        let want: String = Sha256::digest(payload).iter().map(|x| format!("{x:02x}")).collect();
+        assert!(m["files"].as_array().unwrap().iter().any(|e| e["sha256"] == want));
+    }
 }
 ```
 
@@ -3134,19 +3497,36 @@ mod tests {
 use crate::error::Result;
 use crate::fs::FileSystem;
 use crate::index::ProjectIndex;
+use crate::sessions::footprint;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
 pub struct ArchiveOpts { pub archive_dir: PathBuf, pub render: bool }
 pub struct ArchiveReport { pub copied: usize, pub skipped: usize, pub bytes: u64 }
 
+struct ArchEntry { source: String, sha256: String, size: u64 }
+
 fn sha(b: &[u8]) -> String { Sha256::digest(b).iter().map(|x| format!("{x:02x}")).collect() }
 
+fn fs_walk(fs: &dyn FileSystem, root: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for c in fs.read_dir(&d).unwrap_or_default() {
+            if fs.is_dir(&c) { stack.push(c); } else { out.push(c); }
+        }
+    }
+    out
+}
+
 fn copy_if_changed(fs: &dyn FileSystem, src: &Path, dst: &Path,
-                   rep: &mut ArchiveReport) -> Result<()> {
+                   rep: &mut ArchiveReport, man: &mut Vec<ArchEntry>) -> Result<()> {
     let bytes = fs.read(src)?;
+    let digest = sha(&bytes);
+    man.push(ArchEntry { source: src.to_string_lossy().into_owned(),
+                         sha256: digest.clone(), size: bytes.len() as u64 });
     if fs.exists(dst) {
-        if sha(&fs.read(dst)?) == sha(&bytes) { rep.skipped += 1; return Ok(()); }
+        if sha(&fs.read(dst)?) == digest { rep.skipped += 1; return Ok(()); }
     }
     // atomic: write temp then rename
     let tmp = dst.with_extension("tmp-cpm");
@@ -3157,40 +3537,86 @@ fn copy_if_changed(fs: &dyn FileSystem, src: &Path, dst: &Path,
     Ok(())
 }
 
+/// Archive one project dir: transcripts, `<sessionId>/` subdirs verbatim, and the
+/// SESSION-keyed artifacts. Returns the transcript (session) count.
+fn archive_project_dir(fs: &dyn FileSystem, home: &Path, dir: &Path, opts: &ArchiveOpts,
+                       rep: &mut ArchiveReport, man: &mut Vec<ArchEntry>) -> Result<usize> {
+    let enc = dir.file_name().unwrap();
+    let mut sessions = 0usize;
+    for child in fs.read_dir(dir).unwrap_or_default() {
+        if child.extension().and_then(|e| e.to_str()) == Some("jsonl") {
+            let dst = opts.archive_dir.join("projects").join(enc).join(child.file_name().unwrap());
+            copy_if_changed(fs, &child, &dst, rep, man)?;
+            sessions += 1;
+        } else if fs.is_dir(&child) {
+            // <sessionId>/ subdirs (tool-results, subagents) copied verbatim
+            for f in fs_walk(fs, &child) {
+                let rel = f.strip_prefix(dir).unwrap();
+                let dst = opts.archive_dir.join("projects").join(enc).join(rel);
+                copy_if_changed(fs, &f, &dst, rep, man)?;
+            }
+        }
+    }
+    // SESSION-keyed artifacts, matched by sessionId (AC-34/35)
+    let fp = footprint(fs, home, dir);
+    for store in ["todos", "file-history", "session-env", "tasks"] {
+        let root = home.join(".claude").join(store);
+        for f in fs_walk(fs, &root) {
+            let name = f.to_string_lossy().into_owned();
+            if fp.session_ids.iter().any(|id| name.contains(id.as_str())) {
+                let rel = f.strip_prefix(&root).unwrap();
+                let dst = opts.archive_dir.join("session-artifacts").join(store).join(rel);
+                copy_if_changed(fs, &f, &dst, rep, man)?;
+            }
+        }
+    }
+    Ok(sessions)
+}
+
 pub fn archive_all(fs: &dyn FileSystem, home: &Path, opts: &ArchiveOpts) -> Result<ArchiveReport> {
     let index = ProjectIndex::build(fs, home);
     let mut rep = ArchiveReport { copied: 0, skipped: 0, bytes: 0 };
-    for dirs in index.by_cwd.values() {
-        for dir in dirs {
-            let enc = dir.file_name().unwrap();
-            for child in fs.read_dir(dir).unwrap_or_default() {
-                if child.extension().and_then(|e| e.to_str()) == Some("jsonl") {
-                    let dst = opts.archive_dir.join("projects").join(enc).join(child.file_name().unwrap());
-                    copy_if_changed(fs, &child, &dst, &mut rep)?;
-                }
-            }
-            // SESSION-keyed artifacts copied by matching sessionId (see footprint) - omitted here for brevity;
-            // implement by iterating footprint(fs, home, dir).session_ids and copying matching files under
-            // todos/file-history/session-env/tasks into archive_dir/session-artifacts/.
-        }
+    let mut man: Vec<ArchEntry> = Vec::new();
+    let mut per_project: Vec<(String, usize, u64)> = Vec::new();
+    // resolved AND unresolved project dirs - unresolved transcripts are archived too (LEAD-05)
+    for dir in index.by_cwd.values().flatten().chain(index.unresolved.iter()) {
+        let before = rep.bytes;
+        let sessions = archive_project_dir(fs, home, dir, opts, &mut rep, &mut man)?;
+        per_project.push((dir.file_name().unwrap().to_string_lossy().into_owned(),
+                          sessions, rep.bytes - before));
     }
-    write_index(fs, home, opts)?;
+    write_manifest(fs, opts, &man)?;
+    write_index(fs, opts, &per_project)?;
     Ok(rep)
 }
 
-pub fn archive_session(fs: &dyn FileSystem, home: &Path, transcript: &Path, opts: &ArchiveOpts) -> Result<()> {
+pub fn archive_session(fs: &dyn FileSystem, _home: &Path, transcript: &Path, opts: &ArchiveOpts) -> Result<()> {
     let enc = transcript.parent().unwrap().file_name().unwrap();
     let dst = opts.archive_dir.join("projects").join(enc).join(transcript.file_name().unwrap());
     let mut rep = ArchiveReport { copied: 0, skipped: 0, bytes: 0 };
-    copy_if_changed(fs, transcript, &dst, &mut rep)
+    let mut man = Vec::new();
+    copy_if_changed(fs, transcript, &dst, &mut rep, &mut man)
 }
 
-fn write_index(fs: &dyn FileSystem, _home: &Path, opts: &ArchiveOpts) -> Result<()> {
-    // minimal INDEX.md; real impl lists projects -> sessions, dates, sizes.
-    fs.write(&opts.archive_dir.join("INDEX.md"), b"# CPM session archive\n")
+fn write_manifest(fs: &dyn FileSystem, opts: &ArchiveOpts, man: &[ArchEntry]) -> Result<()> {
+    let json = serde_json::json!({
+        "files": man.iter().map(|e| serde_json::json!({
+            "source": e.source, "sha256": e.sha256, "size": e.size
+        })).collect::<Vec<_>>(),
+    });
+    fs.write(&opts.archive_dir.join("manifest.json"),
+             serde_json::to_vec_pretty(&json).unwrap().as_slice())
+}
+
+fn write_index(fs: &dyn FileSystem, opts: &ArchiveOpts, per_project: &[(String, usize, u64)]) -> Result<()> {
+    let mut s = String::from("# CPM session archive\n\n| project | sessions | bytes |\n|---|---:|---:|\n");
+    for (proj, sessions, bytes) in per_project {
+        s.push_str(&format!("| {proj} | {sessions} | {bytes} |\n"));
+    }
+    fs.write(&opts.archive_dir.join("INDEX.md"), s.as_bytes())
 }
 ```
-Implementation note (not a placeholder): the SESSION-keyed copy loop is specified in the comment - iterate `footprint(...).session_ids`, copy each matching file under `todos/`, `file-history/<id>/`, `session-env/<id>/`, `tasks/` into `archive_dir/session-artifacts/`. Add a test asserting a file-history file lands in the archive.
+Note: `archive_project_dir` implements the SESSION-keyed copy (iterating `footprint().session_ids` across `todos`/`file-history`/`session-env`/`tasks`) and the verbatim `<sessionId>/` subdir copy; `archive_all` covers unresolved dirs too (LEAD-05). The per-run `manifest.json` records source/sha256/size for every archived file - the basis for AC-39 drift detection and the future D-02 size-first short-circuit.
 
 - [ ] **Step 3: Run, then commit**
 
@@ -3405,7 +3831,8 @@ pub fn associate(fs: &dyn FileSystem, home: &Path, from: &str, to: &str,
         let mv = Move { src_abs: from.to_string(), dst_abs: to.to_string() };
         let opts_plan = PlanOpts { recursive: false, on_collision: match opts.on_collision {
             Collision::Refuse => Collision::Refuse, Collision::KeepDest => Collision::KeepDest,
-            Collision::KeepSrc => Collision::KeepSrc }, force: false, move_folder: false };
+            Collision::KeepSrc => Collision::KeepSrc }, force: false, move_folder: false,
+            scope: crate::model::Scope::Standard };
         let plan = build_plan(fs, home, &mv, &opts_plan)?;
         let aopts = ApplyOpts { run_id: opts.run_id.clone(), auto_rollback: true, force: false };
         return apply_verified(&plan, fs, &std::env::temp_dir(), &aopts);
@@ -3513,8 +3940,32 @@ Run after the plan is written. Findings and fixes are recorded here.
 **New cross-task mechanical changes** (called out so an implementer does not miss them):
 1. `FileSystem` gains `mtime_secs` (Task 13.2 Step 1); both impls and the `MemoryFileSystem` value type update accordingly. This precedes any age computation.
 2. `PlanOpts` gains `move_folder: bool` (Task 15.1); `build_plan` gates the final `Change::MoveTree` push on it; existing `cpm move` call sites set it `true`, associate sets it `false`. Update the Phase 6 `PlanOpts` literal and its tests when Phase 15 lands.
+3. `Ctx` and `PlanOpts` gain `scope: Scope` (Task 3.1 / Task 6.2, default Standard); `build_plan` copies `opts.scope` into `Ctx`; `claude_projects::plan` gates transcript rewrites on `scope >= Standard` and sidecars on `Full`. Every `PlanOpts` and `Ctx` literal (including tests) carries `scope`.
+4. `ProjectIndex` gains `cwds: Vec<String>` (Task 2.2), each ORIGINAL stored cwd; populated in `build()` and consumed by `plugin_state::audit`.
+5. Top-level `verify` gains a `manifest: Option<&Manifest>` parameter (Task 8.1); `apply_verified` passes `Some(&manifest)`, standalone `cpm verify` passes `None`. `Plan` gains `home: PathBuf` (Task 8.2).
 
 **Two follow-ups flagged inside tasks (decisions, not placeholders):** Task 14.1's SESSION-keyed copy loop (specified in-comment: iterate `footprint().session_ids`) and Task 15.1's from-scoped export filter must both be completed before F14/F15 ship; each has a note stating the exact mechanic and a required test.
 
 **Type consistency (v1.1):** `SessionFootprint`, `ProjectRecord`, `Health`, `ArchiveOpts`, `ArchiveReport`, `AssociateOpts` are each defined once (sessions.rs / list.rs / archive.rs / associate.rs). `Collision` and `Report` are reused from the mover, not redefined.
+
+### Audit-repair pass (2026-07-11)
+
+Applied the design-stage audit's plan-code fixes. Source: `_local/audit/2026-07-10_fable-audit/AUDIT_REPORT.md` (local-only, not committed). Findings addressed in this plan:
+
+- **B-01** (hollow backup) - `snapshot` now wholesale-copies every pre-rename `*.jsonl` under each renamed dir, with a red test asserting the transcript and its sha256 land in the manifest.
+- **LEAD-03** (history variants) - `claude_history::plan` emits one rule per distinct stored `project` form via `dst_key`; variant test added.
+- **LEAD-04** (plugin rename + audit stub) - plugin dir named from the DESTINATION basename; `plugin_state::audit` implemented against `ProjectIndex.cwds`; audit test using `e854827f52137cd9`.
+- **LEAD-09** (fixture privacy) - Task 1.3 gains a sanitize-and-minimize step (credential redaction, synthetic `claude.json`/`state.json`, `test/fixtures/README.md`).
+- **LEAD-01** (mid-apply rollback) - `apply_verified` rolls back on apply error and names the backup dir in every failure message.
+- **A-01** (rollback sha) - `rollback` sha256-checks each backup before restoring.
+- **LEAD-08** (verify backup compare) - `verify` takes `Option<&Manifest>`; the line-count-vs-backup postcondition runs only when supplied.
+- **LEAD-02** (lossy UTF-8) - the write path hard-fails with `UnrecognizedFormat` on invalid UTF-8; read-only `read_stored_cwd` documents why it stays lossy.
+- **B-02** (fs-bypass audits) - `claude_json`/`claude_history` audits route existence through `ctx.fs`; MemoryFileSystem test added.
+- **LEAD-06** (compile hygiene) - `vec!` syntax, snapshot borrow (plain helper fn), and the CLI `run()` wrapper for `?`.
+- **B-05** (scope tiers) - `Scope { Minimal, Standard, Full }` on `Ctx`/`PlanOpts`, gated in `claude_projects::plan`, wired to `--scope`.
+- **E-03 + A-07** (CI) - no-network crate gate and `cargo audit` step.
+- **LEAD-05** (archive coverage) - archive covers unresolved dirs, session-artifacts, `<sessionId>/` subdirs, and a real `manifest.json`/`INDEX.md`.
+- **LEAD-10** (F13 counts) - `list` wires real PATH-keyed counts via adapter `detect`; AC-31 test.
+
+Companion DESIGN.md edits: B-06 (Store trait), C-03/E-01 (platform scope), F-02 (provenance), B-04 (exit 1).
 
