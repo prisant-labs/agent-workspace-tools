@@ -1,0 +1,19 @@
+# Local working notes - not tracked; use _agent-context/session-log/ for tracked session logs
+_local/
+
+# Tool state directories
+.memsearch/
+.impeccable/
+
+# Rust build output
+target/
+
+# Backup artifacts produced by CPM's own snapshot step during development
+*.bak
+
+# OS and editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# NOTE: _agent-context/ is deliberately tracked (session logs belong in version control).
