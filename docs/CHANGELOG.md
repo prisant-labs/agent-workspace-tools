@@ -3,6 +3,16 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-07-11 - Phase 1 built; preserved-mention counts corrected to measured totals
+
+Phase 1 of the TDD plan executed (workspace scaffold + CI gates, FileSystem trait,
+sanitized golden fixtures; commits d17ec2f, b6bbf41, 25dd5ab; final whole-branch
+review: READY WITH NOTES). Doc impact: the plan's Reference data and DESIGN.md
+correctness rule 2 recorded the larger transcript's per-file preserved-mention counts
+(8/49) as totals; corrected against the captured fixtures to 10 (2+8) and 55 (6+49),
+matching `test/fixtures/move.json` and `test/fixtures/README.md`. The three
+rewrite-count constants (1467/588/27) were confirmed exact and are unchanged.
+
 ## 2026-07-11 - Release scaffolding (v1.0.0), roadmap, and repo hygiene
 
 Scope decision of record (maintainer directive): v1 = everything the CLI does, v2 = the
