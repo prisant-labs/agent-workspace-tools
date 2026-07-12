@@ -1,0 +1,13 @@
+{
+  "src_abs": "E:\\Projects\\Github Repos\\markdown-for-humans",
+  "dst_abs": "E:\\Projects\\prisant-labs\\vs-code-markdown-max",
+  "old_encoded": "E--Projects-Github-Repos-markdown-for-humans",
+  "new_encoded": "E--Projects-prisant-labs-vs-code-markdown-max",
+  "expected_counts": {
+    "cwd_field": 1467,
+    "backslash_prefix": 588,
+    "forward_prefix": 27,
+    "preserved_package_at": 10,
+    "preserved_branch_dev": 55
+  }
+}

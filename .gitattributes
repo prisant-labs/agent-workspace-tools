@@ -1,0 +1,2 @@
+# Treat JSONL transcript fixtures as binary to preserve exact byte content for golden tests
+test/fixtures/**/*.jsonl binary

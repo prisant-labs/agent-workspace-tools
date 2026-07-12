@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "E:\\Projects\\Github Repos\\markdown-for-humans": {},
+    "e:/projects/github repos/markdown-for-humans": {},
+    "D:\\Cloud-Work-PP": {}
+  },
+  "githubRepoPaths": {
+    "owner/markdown-for-humans": ["E:\\Projects\\Github Repos\\markdown-for-humans"],
+    "owner/chrome-bookmark-autosort": ["E:\\Projects\\Chrome - Bookmark Autosort"],
+    "owner/pp": ["D:\\Cloud-Work-PP", "d:/cloud-work-pp"],
+    "owner/pm-skills": ["E:\\Projects\\pm-skills"],
+    "owner/agent-skills": ["E:\\Projects\\agent-skills-toolkit"],
+    "owner/reposync": ["E:\\Projects\\product-on-purpose\\repo-sync-tool"]
+  }
+}
