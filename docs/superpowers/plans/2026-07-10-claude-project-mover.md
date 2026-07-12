@@ -33,7 +33,7 @@ The 2026-07-09 manual move is the golden reference. Backup lives at `E:\tmp\clau
   - exact `"cwd":"..."` field: 227 + 1240
   - backslash prefix (`...markdown-for-humans\\`): 54 + 534
   - forward prefix (`...markdown-for-humans/`): 0 + 27
-- **Must stay byte-identical:** `markdown-for-humans@` (8 total), `markdown-for-humans_dev-` (49 total).
+- **Must stay byte-identical:** `markdown-for-humans@` (10 total: 2 + 8 per file), `markdown-for-humans_dev-` (55 total: 6 + 49 per file). Earlier notes recorded the larger file's per-file counts (8/49) as totals; corrected 2026-07-11 against the captured fixtures (see `test/fixtures/README.md`).
 - On disk, the `cwd` field's raw bytes are exactly `"cwd":"E:\\Projects\\Github Repos\\markdown-for-humans"` (each `\\` is two backslash characters).
 
 ---

@@ -181,8 +181,10 @@ Other projects' transcripts are never rewritten at any tier. Hard invariant.
    emits only: exact `"cwd":"<oldEsc>"`; `<oldEsc>\\` (escaped-backslash prefix +
    sep); `<oldFwd>/` (forward-slash prefix + sep). Never a bare prefix. Validated
    to reproduce the reference-move counts (cwd 227+1240, backslash 54+534, forward
-   0+27) while leaving `markdown-for-humans@0.2.1` (8) and `markdown-for-humans_dev-*`
-   (49) byte-identical.
+   0+27) while leaving `markdown-for-humans@0.2.1` (2+8) and `markdown-for-humans_dev-*`
+   (6+49) byte-identical. (Preserved-mention totals corrected 2026-07-11 against the
+   captured fixtures: 10 and 55; earlier notes had recorded the larger file's per-file
+   counts as totals. See `test/fixtures/README.md`.)
 3. **Per-store escaping facts.** Transcripts/history store JSON-escaped paths
    (`\\`); `claude.json` keys matched as `"<path>":` (never a value);
    `githubRepoPaths` values are arrays (rewrite element in place, length
