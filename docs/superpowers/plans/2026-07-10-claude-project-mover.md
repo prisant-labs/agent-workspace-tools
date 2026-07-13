@@ -627,11 +627,21 @@ mod tests {
         // C:\x, and \\?\UNC\server\share is the same volume as \\server\share.
         assert!(same_volume(r"\\?\C:\a", r"C:\b"));
         assert!(!same_volume(r"\\?\C:\a", r"\\?\D:\a"));
-        assert!(same_volume(r"\\?\UNC\server1\share\a", r"\\server1\share\b"));
-        assert!(!same_volume(r"\\?\UNC\server1\share\a", r"\\?\UNC\server2\share\b"));
+        assert!(same_volume(
+            r"\\?\UNC\server1\share\a",
+            r"\\server1\share\b"
+        ));
+        assert!(!same_volume(
+            r"\\?\UNC\server1\share\a",
+            r"\\?\UNC\server2\share\b"
+        ));
     }
 }
 ```
+
+> **Formatting note.** The blocks above are `cargo fmt` output. CI gates on
+> `cargo fmt --all -- --check`, so transcribe them verbatim: hand-reflowing the
+> `assert!` calls back onto single lines will fail the build.
 
 - [ ] **Step 2: Run to verify failure**
 

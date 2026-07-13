@@ -23,27 +23,47 @@ fn norm(p: &Path) -> String {
 pub struct RealFileSystem;
 
 impl FileSystem for RealFileSystem {
-    fn read(&self, path: &Path) -> io::Result<Vec<u8>> { std::fs::read(path) }
+    fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
+        std::fs::read(path)
+    }
     fn write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
-        if let Some(parent) = path.parent() { std::fs::create_dir_all(parent)?; }
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
         std::fs::write(path, data)
     }
-    fn rename(&self, from: &Path, to: &Path) -> io::Result<()> { std::fs::rename(from, to) }
-    fn exists(&self, path: &Path) -> bool { path.exists() }
-    fn is_file(&self, path: &Path) -> bool { path.is_file() }
-    fn is_dir(&self, path: &Path) -> bool { path.is_dir() }
+    fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+        std::fs::rename(from, to)
+    }
+    fn exists(&self, path: &Path) -> bool {
+        path.exists()
+    }
+    fn is_file(&self, path: &Path) -> bool {
+        path.is_file()
+    }
+    fn is_dir(&self, path: &Path) -> bool {
+        path.is_dir()
+    }
     fn read_dir(&self, path: &Path) -> io::Result<Vec<PathBuf>> {
         let mut out = Vec::new();
-        for entry in std::fs::read_dir(path)? { out.push(entry?.path()); }
+        for entry in std::fs::read_dir(path)? {
+            out.push(entry?.path());
+        }
         out.sort();
         Ok(out)
     }
-    fn create_dir_all(&self, path: &Path) -> io::Result<()> { std::fs::create_dir_all(path) }
+    fn create_dir_all(&self, path: &Path) -> io::Result<()> {
+        std::fs::create_dir_all(path)
+    }
     fn copy(&self, from: &Path, to: &Path) -> io::Result<()> {
-        if let Some(parent) = to.parent() { std::fs::create_dir_all(parent)?; }
+        if let Some(parent) = to.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
         std::fs::copy(from, to).map(|_| ())
     }
-    fn remove_dir_all(&self, path: &Path) -> io::Result<()> { std::fs::remove_dir_all(path) }
+    fn remove_dir_all(&self, path: &Path) -> io::Result<()> {
+        std::fs::remove_dir_all(path)
+    }
 }
 
 #[derive(Default)]
@@ -52,12 +72,20 @@ pub struct MemoryFileSystem {
 }
 
 impl MemoryFileSystem {
-    pub fn new() -> Self { Self { files: Mutex::new(BTreeMap::new()) } }
+    pub fn new() -> Self {
+        Self {
+            files: Mutex::new(BTreeMap::new()),
+        }
+    }
 }
 
 impl FileSystem for MemoryFileSystem {
     fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
-        self.files.lock().unwrap().get(&norm(path)).cloned()
+        self.files
+            .lock()
+            .unwrap()
+            .get(&norm(path))
+            .cloned()
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, norm(path)))
     }
     fn write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
@@ -67,9 +95,11 @@ impl FileSystem for MemoryFileSystem {
     fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
         let mut f = self.files.lock().unwrap();
         let (fp, tp) = (norm(from), norm(to));
-        let moved: Vec<String> = f.keys()
+        let moved: Vec<String> = f
+            .keys()
             .filter(|k| **k == fp || k.starts_with(&format!("{fp}/")))
-            .cloned().collect();
+            .cloned()
+            .collect();
         if moved.is_empty() {
             return Err(io::Error::new(io::ErrorKind::NotFound, fp));
         }
@@ -105,7 +135,9 @@ impl FileSystem for MemoryFileSystem {
         }
         Ok(kids.into_iter().map(PathBuf::from).collect())
     }
-    fn create_dir_all(&self, _path: &Path) -> io::Result<()> { Ok(()) }
+    fn create_dir_all(&self, _path: &Path) -> io::Result<()> {
+        Ok(())
+    }
     fn copy(&self, from: &Path, to: &Path) -> io::Result<()> {
         let data = self.read(from)?;
         self.write(to, &data)
@@ -130,7 +162,8 @@ mod tests {
         assert!(fs.exists(Path::new("/a/b.txt")));
         assert!(fs.is_file(Path::new("/a/b.txt")));
         assert_eq!(fs.read(Path::new("/a/b.txt")).unwrap(), b"hello");
-        fs.rename(Path::new("/a/b.txt"), Path::new("/a/c.txt")).unwrap();
+        fs.rename(Path::new("/a/b.txt"), Path::new("/a/c.txt"))
+            .unwrap();
         assert!(!fs.exists(Path::new("/a/b.txt")));
         assert_eq!(fs.read(Path::new("/a/c.txt")).unwrap(), b"hello");
         let kids = fs.read_dir(Path::new("/a")).unwrap();
