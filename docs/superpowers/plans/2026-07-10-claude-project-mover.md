@@ -782,9 +782,35 @@ mod tests {
         assert_eq!(idx.by_cwd.get("e:/projects/a").unwrap(),
                    &vec![PathBuf::from("/h/.claude/projects/E--a")]);
         assert_eq!(idx.unresolved, vec![PathBuf::from("/h/.claude/projects/E--b")]);
+        // cwds holds the ORIGINAL, non-normalized string. plugin_state::audit hashes
+        // it with sha256 to locate a plugin dir, so a lowercased or slash-flipped
+        // value here would produce a different digest and silently miss the dir.
+        assert_eq!(idx.cwds, vec!["E:\\Projects\\A".to_string()]);
+    }
+
+    #[test]
+    fn build_scans_past_a_transcript_that_has_no_cwd() {
+        let fs = MemoryFileSystem::new();
+        // a.jsonl sorts first and carries no cwd; b.jsonl carries it. "No cwd in the
+        // first file" is not "no cwd in the directory" - the dir must still resolve.
+        fs.write(Path::new("/h/.claude/projects/E--a/a.jsonl"),
+                 b"{\"type\":\"last-prompt\"}\n").unwrap();
+        fs.write(Path::new("/h/.claude/projects/E--a/b.jsonl"),
+                 line("E:\\Projects\\A").as_bytes()).unwrap();
+        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        assert_eq!(idx.by_cwd.get("e:/projects/a").unwrap(),
+                   &vec![PathBuf::from("/h/.claude/projects/E--a")]);
+        assert!(idx.unresolved.is_empty());
+        assert_eq!(idx.cwds, vec!["E:\\Projects\\A".to_string()]);
     }
 }
 ```
+
+> **Added 2026-07-13 (Task 2.2 review).** The two tests the plan originally shipped never
+> asserted `cwds` at all - zeroing the field out entirely left every test green, despite
+> `plugin_state::audit` depending on its exact byte content. The `cwds` assertion and the
+> `build_scans_past_a_transcript_that_has_no_cwd` case above close that gap. Run
+> `cargo fmt --all` after transcribing: CI gates on `cargo fmt --all -- --check`.
 
 - [ ] **Step 2: Run to verify failure**
 
@@ -883,12 +909,15 @@ pub struct Move {
 
 `crates/cpm-core/src/lib.rs`:
 ```rust
-pub mod fs;
-pub mod paths;
 pub mod error;
-pub mod model;
+pub mod fs;
 pub mod index;
+pub mod model;
+pub mod paths;
 ```
+
+(rustfmt's `reorder_modules` sorts these alphabetically, and CI gates on `fmt --check`.
+Written in sorted order here so a transcription passes the gate as-is.)
 
 - [ ] **Step 5: Run to verify pass**
 
