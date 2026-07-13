@@ -3,6 +3,23 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-07-12 - v2 GUI design brief
+
+### New documents
+
+- **`docs/internal/v2-gui-design-brief.md`** - self-contained handoff for a designer or design
+  agent generating v2 GUI concepts. Inlines the F1-F15 feature and function breakdown, the user
+  context and failure stakes, the CLI surface as a reference model, and the hard constraints the
+  design must respect (AC-25 parity with the CLI's plan objects, plan-before-write, backup-before-
+  write, refuse-rather-than-guess, zero network). Readable with no repo access and no machine-
+  specific paths, so it can be handed to an agent outside this environment.
+
+Doc impact: none on existing documents. The brief is derived from `docs/DESIGN.md`, the S-01
+spec, `docs/features/v1.1-inventory-retention-reassociate.md`, and `docs/ROADMAP.md`; it restates
+them for a design audience and is not a source of truth. Note that S-01 is still `status: draft`
+with `requires-human-review: true`, so the acceptance criteria the brief describes are not yet
+maintainer-signed.
+
 ## 2026-07-11 - Phase 1 built; preserved-mention counts corrected to measured totals
 
 Phase 1 of the TDD plan executed (workspace scaffold + CI gates, FileSystem trait,
