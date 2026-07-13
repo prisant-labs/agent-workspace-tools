@@ -13,6 +13,7 @@ This index lists every document in the repository, who it is for, and when to re
 | [docs/reference/claude-data-model.md](reference/claude-data-model.md) | Everyone technical, AI agents | How Claude Code stores project state - read before any store adapter work |
 | [docs/reference/existing-solutions.md](reference/existing-solutions.md) | Evaluators, engineers | Prior art survey |
 | [docs/internal/release-plans/](internal/release-plans/) | Maintainers | Release scaffolding and acceptance criteria aggregation |
+| [docs/internal/v2-gui-design-brief.md](internal/v2-gui-design-brief.md) | Designers, design agents | Generating v2 GUI concepts - self-contained, no repo access needed |
 | [AGENTS.md](../AGENTS.md) | AI agents | Operating manual: invariants, conventions, environment notes |
 | [docs/CHANGELOG.md](CHANGELOG.md) | Everyone | Doc-impact history - updated with every doc change |
 
