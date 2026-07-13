@@ -236,7 +236,7 @@ git commit -m "feat: scaffold cpm-core workspace with CI dependency gate"
 
 - [ ] **Step 1: Write the failing test**
 
-In `crates/cpm-core/src/fs.rs`:
+`crates/cpm-core/src/fs.rs` (test module - write these first; the implementation in Step 3 makes them pass; 5 new LEAD-07 case-insensitivity tests were added after the original TDD pass):
 ```rust
 #[cfg(test)]
 mod tests {
@@ -250,11 +250,97 @@ mod tests {
         assert!(fs.exists(Path::new("/a/b.txt")));
         assert!(fs.is_file(Path::new("/a/b.txt")));
         assert_eq!(fs.read(Path::new("/a/b.txt")).unwrap(), b"hello");
-        fs.rename(Path::new("/a/b.txt"), Path::new("/a/c.txt")).unwrap();
+        fs.rename(Path::new("/a/b.txt"), Path::new("/a/c.txt"))
+            .unwrap();
         assert!(!fs.exists(Path::new("/a/b.txt")));
         assert_eq!(fs.read(Path::new("/a/c.txt")).unwrap(), b"hello");
         let kids = fs.read_dir(Path::new("/a")).unwrap();
         assert_eq!(kids, vec![std::path::PathBuf::from("/a/c.txt")]);
+    }
+
+    // --- LEAD-07 part 1: case-sensitivity tests for MemoryFileSystem ---
+
+    #[test]
+    fn case_insensitive_read() {
+        let fs = MemoryFileSystem::new();
+        fs.write(Path::new("E:/Projects/Foo/a.txt"), b"data")
+            .unwrap();
+        // Reading via a completely different casing must succeed and return the same bytes.
+        let result = fs.read(Path::new("e:/projects/foo/A.TXT")).unwrap();
+        assert_eq!(result, b"data");
+    }
+
+    /// This is the exact call ProjectIndex::build makes in index.rs:
+    ///   fs.is_dir(Path::new(c.as_str()))
+    /// where c is a recorded cwd such as "E:\Projects\Foo". If MemoryFileSystem
+    /// were case-sensitive, a cwd like "e:\projects\foo" would not match a file
+    /// written at "E:\Projects\Foo\a.txt", making is_dir return false and marking
+    /// a live project as missing. This test closes that divergence (LEAD-07).
+    #[test]
+    fn case_insensitive_is_dir() {
+        let fs = MemoryFileSystem::new();
+        fs.write(Path::new("E:/Projects/Foo/a.txt"), b"data")
+            .unwrap();
+        // is_dir must return true regardless of the casing used for the directory path.
+        assert!(fs.is_dir(Path::new("e:/projects/foo")));
+        assert!(fs.is_dir(Path::new("E:/PROJECTS/FOO")));
+        // is_dir must return false for the file itself (it is a file, not a directory).
+        assert!(!fs.is_dir(Path::new("e:/projects/foo/a.txt")));
+    }
+
+    #[test]
+    fn case_preserving_read_dir() {
+        let fs = MemoryFileSystem::new();
+        fs.write(Path::new("E:/Projects/Foo/Bar.txt"), b"data")
+            .unwrap();
+        // read_dir called with a lowercase path must return the ORIGINAL casing, not
+        // the lowercased form of the argument. ProjectIndex::build uses read_dir output
+        // as PathBuf keys; existing tests assert on exact strings like "/h/.claude/projects/E--a".
+        let kids = fs.read_dir(Path::new("e:/projects/foo")).unwrap();
+        assert_eq!(kids, vec![PathBuf::from("E:/Projects/Foo/Bar.txt")]);
+    }
+
+    #[test]
+    fn case_insensitive_overwrite_results_in_single_entry() {
+        // Write with one casing, then write the same logical path with different casing.
+        // The result must be ONE entry (not two), and both reads must return the new bytes.
+        let fs = MemoryFileSystem::new();
+        fs.write(Path::new("/root/A/file.txt"), b"first").unwrap();
+        fs.write(Path::new("/root/a/FILE.TXT"), b"second").unwrap();
+        // Second write's bytes are accessible via either casing.
+        assert_eq!(fs.read(Path::new("/root/A/file.txt")).unwrap(), b"second");
+        assert_eq!(fs.read(Path::new("/root/a/FILE.TXT")).unwrap(), b"second");
+        // read_dir returns exactly one child, proving it is one entry, not two.
+        let kids = fs.read_dir(Path::new("/root/A")).unwrap();
+        assert_eq!(
+            kids.len(),
+            1,
+            "expected 1 entry after case-variant overwrite, got {}",
+            kids.len()
+        );
+    }
+
+    #[test]
+    fn case_insensitive_rename_and_exists() {
+        let fs = MemoryFileSystem::new();
+        fs.write(Path::new("E:/Projects/Foo/a.txt"), b"hello")
+            .unwrap();
+        // Rename using a different casing for the source path.
+        fs.rename(
+            Path::new("e:/PROJECTS/FOO/a.txt"),
+            Path::new("E:/Projects/Foo/b.txt"),
+        )
+        .unwrap();
+        // Old path must not exist under any casing.
+        assert!(!fs.exists(Path::new("E:/Projects/Foo/a.txt")));
+        assert!(!fs.exists(Path::new("e:/projects/foo/a.txt")));
+        // New path must exist and hold the original bytes, accessible via any casing.
+        assert!(fs.exists(Path::new("E:/Projects/Foo/b.txt")));
+        assert!(fs.exists(Path::new("e:/PROJECTS/FOO/B.TXT")));
+        assert_eq!(
+            fs.read(Path::new("E:/projects/FOO/b.txt")).unwrap(),
+            b"hello"
+        );
     }
 }
 ```
@@ -266,7 +352,17 @@ Expected: FAIL to compile (`MemoryFileSystem` not defined).
 
 - [ ] **Step 3: Write the trait and both implementations**
 
-Top of `crates/cpm-core/src/fs.rs`:
+> **Repaired 2026-07-13 (closes audit finding LEAD-07, case-sensitivity half).** The original
+> `MemoryFileSystem` keyed its map on a path with only backslashes flipped, so it compared
+> case-SENSITIVELY while NTFS compares case-INSENSITIVELY. That divergence became load-bearing
+> once `ProjectIndex::build` started calling `is_dir` on paths read out of transcripts to decide
+> whether a recorded project path still exists: a transcript recording `e:\projects\foo` against
+> an on-disk `E:\Projects\Foo` resolved one way in tests and the other way on a real machine.
+> The map now keys on a lowercased normalized path and stores the original casing alongside the
+> bytes, so lookups are case-insensitive while `read_dir` still returns real casing.
+> Do not restore the case-sensitive version.
+
+`crates/cpm-core/src/fs.rs` (non-test portion; combine with the test module from Step 1 in the actual file):
 ```rust
 use std::collections::BTreeMap;
 use std::io;
@@ -286,102 +382,189 @@ pub trait FileSystem {
     fn remove_dir_all(&self, path: &Path) -> io::Result<()>;
 }
 
+/// Returns the normalized path string: backslashes replaced with forward slashes.
 fn norm(p: &Path) -> String {
     p.to_string_lossy().replace('\\', "/")
+}
+
+/// Returns the lowercased normalized path used as the BTreeMap key in MemoryFileSystem.
+/// All lookups key on this value, which makes them case-insensitive (NTFS behavior).
+fn norm_key(p: &Path) -> String {
+    norm(p).to_lowercase()
 }
 
 pub struct RealFileSystem;
 
 impl FileSystem for RealFileSystem {
-    fn read(&self, path: &Path) -> io::Result<Vec<u8>> { std::fs::read(path) }
+    fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
+        std::fs::read(path)
+    }
     fn write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
-        if let Some(parent) = path.parent() { std::fs::create_dir_all(parent)?; }
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
         std::fs::write(path, data)
     }
-    fn rename(&self, from: &Path, to: &Path) -> io::Result<()> { std::fs::rename(from, to) }
-    fn exists(&self, path: &Path) -> bool { path.exists() }
-    fn is_file(&self, path: &Path) -> bool { path.is_file() }
-    fn is_dir(&self, path: &Path) -> bool { path.is_dir() }
+    fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+        std::fs::rename(from, to)
+    }
+    fn exists(&self, path: &Path) -> bool {
+        path.exists()
+    }
+    fn is_file(&self, path: &Path) -> bool {
+        path.is_file()
+    }
+    fn is_dir(&self, path: &Path) -> bool {
+        path.is_dir()
+    }
     fn read_dir(&self, path: &Path) -> io::Result<Vec<PathBuf>> {
         let mut out = Vec::new();
-        for entry in std::fs::read_dir(path)? { out.push(entry?.path()); }
+        for entry in std::fs::read_dir(path)? {
+            out.push(entry?.path());
+        }
         out.sort();
         Ok(out)
     }
-    fn create_dir_all(&self, path: &Path) -> io::Result<()> { std::fs::create_dir_all(path) }
+    fn create_dir_all(&self, path: &Path) -> io::Result<()> {
+        std::fs::create_dir_all(path)
+    }
     fn copy(&self, from: &Path, to: &Path) -> io::Result<()> {
-        if let Some(parent) = to.parent() { std::fs::create_dir_all(parent)?; }
+        if let Some(parent) = to.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
         std::fs::copy(from, to).map(|_| ())
     }
-    fn remove_dir_all(&self, path: &Path) -> io::Result<()> { std::fs::remove_dir_all(path) }
+    fn remove_dir_all(&self, path: &Path) -> io::Result<()> {
+        std::fs::remove_dir_all(path)
+    }
 }
 
+/// An in-memory filesystem that models NTFS case behavior:
+/// - Case-insensitive for lookups (read, exists, is_file, is_dir, rename, copy, remove_dir_all)
+/// - Case-preserving for output (read_dir returns entries with their original casing)
+///
+/// The map is keyed by the LOWERCASED normalized path so that all lookups are
+/// case-insensitive. Each value stores the ORIGINAL-cased normalized path alongside
+/// the file bytes, so read_dir can return entries without lowercasing them.
+///
+/// Overwrite policy: when a path is written again with different casing, the ORIGINAL
+/// casing is preserved (first write's casing wins). This matches NTFS behavior, where
+/// the filesystem remembers the name from the CreateFile call that first created the
+/// directory entry; subsequent opens with different casing reuse the same entry without
+/// updating the stored name.
 #[derive(Default)]
 pub struct MemoryFileSystem {
-    files: Mutex<BTreeMap<String, Vec<u8>>>,
+    // key   : lowercased normalized path (for case-insensitive lookup)
+    // value : (original-cased normalized path, file bytes)
+    files: Mutex<BTreeMap<String, (String, Vec<u8>)>>,
 }
 
 impl MemoryFileSystem {
-    pub fn new() -> Self { Self { files: Mutex::new(BTreeMap::new()) } }
+    pub fn new() -> Self {
+        Self {
+            files: Mutex::new(BTreeMap::new()),
+        }
+    }
 }
 
 impl FileSystem for MemoryFileSystem {
     fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
-        self.files.lock().unwrap().get(&norm(path)).cloned()
+        self.files
+            .lock()
+            .unwrap()
+            .get(&norm_key(path))
+            .map(|(_, data)| data.clone())
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, norm(path)))
     }
+
     fn write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
-        self.files.lock().unwrap().insert(norm(path), data.to_vec());
+        let key = norm_key(path);
+        let original = norm(path);
+        let mut f = self.files.lock().unwrap();
+        // On overwrite with different casing, keep the ORIGINAL casing (first write wins).
+        // This matches NTFS: the OS preserves the name from the first CreateFile call that
+        // created the directory entry; subsequent opens with different casing reuse the same
+        // entry without updating the stored name.
+        let stored_orig = f
+            .get(&key)
+            .map(|(orig, _)| orig.clone())
+            .unwrap_or(original);
+        f.insert(key, (stored_orig, data.to_vec()));
         Ok(())
     }
+
     fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
         let mut f = self.files.lock().unwrap();
-        let (fp, tp) = (norm(from), norm(to));
-        let moved: Vec<String> = f.keys()
-            .filter(|k| **k == fp || k.starts_with(&format!("{fp}/")))
-            .cloned().collect();
+        let fp_key = norm_key(from);
+        let tp = norm(to);
+        let tp_key = norm_key(to);
+        let moved: Vec<String> = f
+            .keys()
+            .filter(|k| **k == fp_key || k.starts_with(&format!("{fp_key}/")))
+            .cloned()
+            .collect();
         if moved.is_empty() {
-            return Err(io::Error::new(io::ErrorKind::NotFound, fp));
+            return Err(io::Error::new(io::ErrorKind::NotFound, norm(from)));
         }
         for k in moved {
-            let data = f.remove(&k).unwrap();
-            let nk = format!("{tp}{}", &k[fp.len()..]);
-            f.insert(nk, data);
+            let (orig, data) = f.remove(&k).unwrap();
+            // norm_key lowercases without changing ASCII char count, so fp_key.len()
+            // equals norm(from).len() and slicing orig at that offset gives the
+            // original-cased suffix: "" for an exact file match, "/Child/Path" for tree entries.
+            let suffix = &orig[fp_key.len()..];
+            let new_key = format!("{tp_key}{}", suffix.to_lowercase());
+            let new_orig = format!("{tp}{suffix}");
+            f.insert(new_key, (new_orig, data));
         }
         Ok(())
     }
+
     fn exists(&self, path: &Path) -> bool {
-        let p = norm(path);
+        let p = norm_key(path);
         let f = self.files.lock().unwrap();
         f.contains_key(&p) || f.keys().any(|k| k.starts_with(&format!("{p}/")))
     }
+
     fn is_file(&self, path: &Path) -> bool {
-        self.files.lock().unwrap().contains_key(&norm(path))
+        self.files.lock().unwrap().contains_key(&norm_key(path))
     }
+
     fn is_dir(&self, path: &Path) -> bool {
-        let p = norm(path);
+        let p = norm_key(path);
         let f = self.files.lock().unwrap();
         !f.contains_key(&p) && f.keys().any(|k| k.starts_with(&format!("{p}/")))
     }
+
     fn read_dir(&self, path: &Path) -> io::Result<Vec<PathBuf>> {
-        let prefix = format!("{}/", norm(path));
+        let prefix_key = format!("{}/", norm_key(path));
         let f = self.files.lock().unwrap();
-        let mut kids = std::collections::BTreeSet::new();
-        for k in f.keys() {
-            if let Some(rest) = k.strip_prefix(&prefix) {
-                let first = rest.split('/').next().unwrap();
-                kids.insert(format!("{prefix}{first}"));
+        let mut kids: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for (k, (orig, _)) in f.iter() {
+            if k.strip_prefix(&prefix_key).is_some() {
+                // norm_key lowercases without changing ASCII char count, so prefix_key.len()
+                // is the same byte offset in both the lowercase key and the original-cased path.
+                // Slicing orig at that offset gives the remainder of the path in its original
+                // casing. Taking the first '/' segment gives the immediate child's original name.
+                let orig_rest = &orig[prefix_key.len()..];
+                let first_orig = orig_rest.split('/').next().unwrap();
+                let child_orig = format!("{}{}", &orig[..prefix_key.len()], first_orig);
+                kids.insert(child_orig);
             }
         }
         Ok(kids.into_iter().map(PathBuf::from).collect())
     }
-    fn create_dir_all(&self, _path: &Path) -> io::Result<()> { Ok(()) }
+
+    fn create_dir_all(&self, _path: &Path) -> io::Result<()> {
+        Ok(())
+    }
+
     fn copy(&self, from: &Path, to: &Path) -> io::Result<()> {
         let data = self.read(from)?;
         self.write(to, &data)
     }
+
     fn remove_dir_all(&self, path: &Path) -> io::Result<()> {
-        let p = norm(path);
+        let p = norm_key(path);
         let mut f = self.files.lock().unwrap();
         f.retain(|k, _| *k != p && !k.starts_with(&format!("{p}/")));
         Ok(())
@@ -736,13 +919,15 @@ git commit -m "feat: forward-only path encoder and normalization helpers"
       pub by_cwd: HashMap<String, Vec<PathBuf>>,   // normalize(cwd) -> encoded dirs
       pub unresolved: Vec<PathBuf>,                 // dirs with no recoverable cwd
       pub cwds: Vec<String>,                        // each ORIGINAL (non-normalized) stored cwd
+      pub ambiguous: Vec<PathBuf>,                  // dirs with more than one live recorded path
+      pub stale: HashMap<PathBuf, Vec<String>>,     // dir -> recorded cwds that no longer exist
   }
   impl ProjectIndex { pub fn build(fs: &dyn FileSystem, home: &Path) -> Self; }
   ```
 
 - [ ] **Step 1: Seed a tiny in-memory projects tree and write the failing test**
 
-`crates/cpm-core/src/index.rs`:
+`crates/cpm-core/src/index.rs` (test module - write these first; the implementation in Step 3 makes them pass; 5 new tests were added after the original TDD pass to cover move-residue resolution, three-path directories, case-insensitive matching, dead-path recording, and ambiguous-live-path refusal):
 ```rust
 use crate::fs::FileSystem;
 use crate::paths::normalize_path;
@@ -755,33 +940,55 @@ mod tests {
     use crate::fs::MemoryFileSystem;
 
     fn line(cwd: &str) -> String {
-        format!("{{\"type\":\"user\",\"cwd\":\"{}\",\"uuid\":\"x\"}}\n",
-                cwd.replace('\\', "\\\\"))
+        format!(
+            "{{\"type\":\"user\",\"cwd\":\"{}\",\"uuid\":\"x\"}}\n",
+            cwd.replace('\\', "\\\\")
+        )
     }
 
     #[test]
     fn reads_first_cwd_skipping_summary_lines() {
         let fs = MemoryFileSystem::new();
         // first line is a summary with no cwd (real transcripts start this way)
-        let body = format!("{{\"type\":\"last-prompt\",\"leafUuid\":\"z\"}}\n{}",
-                           line("E:\\Projects\\Github Repos\\markdown-for-humans"));
-        fs.write(Path::new("/h/.claude/projects/E--x/22b2.jsonl"), body.as_bytes()).unwrap();
+        let body = format!(
+            "{{\"type\":\"last-prompt\",\"leafUuid\":\"z\"}}\n{}",
+            line("E:\\Projects\\Github Repos\\markdown-for-humans")
+        );
+        fs.write(
+            Path::new("/h/.claude/projects/E--x/22b2.jsonl"),
+            body.as_bytes(),
+        )
+        .unwrap();
         let got = read_stored_cwd(&fs, Path::new("/h/.claude/projects/E--x/22b2.jsonl"));
-        assert_eq!(got.as_deref(), Some("E:\\Projects\\Github Repos\\markdown-for-humans"));
+        assert_eq!(
+            got.as_deref(),
+            Some("E:\\Projects\\Github Repos\\markdown-for-humans")
+        );
     }
 
     #[test]
     fn build_maps_normalized_cwd_and_flags_unresolved() {
         let fs = MemoryFileSystem::new();
-        fs.write(Path::new("/h/.claude/projects/E--a/s.jsonl"),
-                 line("E:\\Projects\\A").as_bytes()).unwrap();
+        fs.write(
+            Path::new("/h/.claude/projects/E--a/s.jsonl"),
+            line("E:\\Projects\\A").as_bytes(),
+        )
+        .unwrap();
         // a dir whose transcript has no cwd -> unresolved
-        fs.write(Path::new("/h/.claude/projects/E--b/s.jsonl"),
-                 b"{\"type\":\"last-prompt\"}\n").unwrap();
+        fs.write(
+            Path::new("/h/.claude/projects/E--b/s.jsonl"),
+            b"{\"type\":\"last-prompt\"}\n",
+        )
+        .unwrap();
         let idx = ProjectIndex::build(&fs, Path::new("/h"));
-        assert_eq!(idx.by_cwd.get("e:/projects/a").unwrap(),
-                   &vec![PathBuf::from("/h/.claude/projects/E--a")]);
-        assert_eq!(idx.unresolved, vec![PathBuf::from("/h/.claude/projects/E--b")]);
+        assert_eq!(
+            idx.by_cwd.get("e:/projects/a").unwrap(),
+            &vec![PathBuf::from("/h/.claude/projects/E--a")]
+        );
+        assert_eq!(
+            idx.unresolved,
+            vec![PathBuf::from("/h/.claude/projects/E--b")]
+        );
         // cwds holds the ORIGINAL, non-normalized string. plugin_state::audit hashes
         // it with sha256 to locate a plugin dir, so a lowercased or slash-flipped
         // value here would produce a different digest and silently miss the dir.
@@ -793,15 +1000,225 @@ mod tests {
         let fs = MemoryFileSystem::new();
         // a.jsonl sorts first and carries no cwd; b.jsonl carries it. "No cwd in the
         // first file" is not "no cwd in the directory" - the dir must still resolve.
-        fs.write(Path::new("/h/.claude/projects/E--a/a.jsonl"),
-                 b"{\"type\":\"last-prompt\"}\n").unwrap();
-        fs.write(Path::new("/h/.claude/projects/E--a/b.jsonl"),
-                 line("E:\\Projects\\A").as_bytes()).unwrap();
+        fs.write(
+            Path::new("/h/.claude/projects/E--a/a.jsonl"),
+            b"{\"type\":\"last-prompt\"}\n",
+        )
+        .unwrap();
+        fs.write(
+            Path::new("/h/.claude/projects/E--a/b.jsonl"),
+            line("E:\\Projects\\A").as_bytes(),
+        )
+        .unwrap();
         let idx = ProjectIndex::build(&fs, Path::new("/h"));
-        assert_eq!(idx.by_cwd.get("e:/projects/a").unwrap(),
-                   &vec![PathBuf::from("/h/.claude/projects/E--a")]);
+        assert_eq!(
+            idx.by_cwd.get("e:/projects/a").unwrap(),
+            &vec![PathBuf::from("/h/.claude/projects/E--a")]
+        );
         assert!(idx.unresolved.is_empty());
         assert_eq!(idx.cwds, vec!["E:\\Projects\\A".to_string()]);
+    }
+
+    /// Modeled on a real directory from the 2026-07-13 machine scan:
+    /// E--Projects-prisant-labs-obsidian-tag-visibility held 17 transcripts naming
+    /// THREE paths - the current one plus two dead ones left behind by earlier moves.
+    /// Resolving to whichever transcript sorts first is a coin flip; resolving to the
+    /// path that still exists is the answer.
+    #[test]
+    fn build_resolves_move_residue_to_the_path_that_still_exists() {
+        let fs = MemoryFileSystem::new();
+        fs.write(
+            Path::new("/h/.claude/projects/E--proj/a.jsonl"),
+            line("E:\\Projects\\old\\proj").as_bytes(),
+        )
+        .unwrap();
+        fs.write(
+            Path::new("/h/.claude/projects/E--proj/b.jsonl"),
+            line("E:\\Projects\\new\\proj").as_bytes(),
+        )
+        .unwrap();
+        // Only the new location exists on disk. Note a.jsonl sorts FIRST and holds the
+        // dead path, so first-wins would have resolved this dir to a folder that is gone.
+        fs.write(Path::new("E:\\Projects\\new\\proj\\.keep"), b"x")
+            .unwrap();
+
+        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let dir = PathBuf::from("/h/.claude/projects/E--proj");
+
+        assert_eq!(
+            idx.by_cwd.get("e:/projects/new/proj").unwrap(),
+            &vec![dir.clone()]
+        );
+        assert!(!idx.by_cwd.contains_key("e:/projects/old/proj"));
+        // The dead reference is REPORTED, not silently dropped - it is the residue.
+        assert_eq!(
+            idx.stale.get(&dir).unwrap(),
+            &vec!["E:\\Projects\\old\\proj".to_string()]
+        );
+        assert!(idx.ambiguous.is_empty());
+        assert!(idx.unresolved.is_empty());
+        // Both originals survive for plugin_state::audit - an orphaned plugin dir is
+        // keyed by the OLD path, so the stale cwd is the one that finds it.
+        assert!(idx.cwds.contains(&"E:\\Projects\\old\\proj".to_string()));
+        assert!(idx.cwds.contains(&"E:\\Projects\\new\\proj".to_string()));
+    }
+
+    /// The real directory names THREE paths, not two. An implementation that only
+    /// handles the two-path case passes every other test here and still misclassifies
+    /// the actual machine, so the three-path shape gets its own test.
+    #[test]
+    fn build_resolves_three_recorded_paths_with_one_survivor() {
+        let fs = MemoryFileSystem::new();
+        let dir = "/h/.claude/projects/E--Projects-prisant-labs-obsidian-tag-visibility";
+        // Two dead paths sort BEFORE the live one, so first-wins would pick a dead path.
+        fs.write(
+            Path::new(&format!("{dir}/a.jsonl")),
+            line("E:\\Projects\\github-jprisant\\obsidian-tag-curator").as_bytes(),
+        )
+        .unwrap();
+        fs.write(
+            Path::new(&format!("{dir}/b.jsonl")),
+            line("E:\\Projects\\prisant-labs\\obsidian-tag-curator").as_bytes(),
+        )
+        .unwrap();
+        fs.write(
+            Path::new(&format!("{dir}/c.jsonl")),
+            line("E:\\Projects\\prisant-labs\\obsidian-tag-visibility").as_bytes(),
+        )
+        .unwrap();
+        // a transcript with no cwd at all, as the real dir has
+        fs.write(
+            Path::new(&format!("{dir}/d.jsonl")),
+            b"{\"type\":\"last-prompt\"}\n",
+        )
+        .unwrap();
+        fs.write(
+            Path::new("E:\\Projects\\prisant-labs\\obsidian-tag-visibility\\.keep"),
+            b"x",
+        )
+        .unwrap();
+
+        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let d = PathBuf::from(dir);
+
+        assert_eq!(
+            idx.by_cwd
+                .get("e:/projects/prisant-labs/obsidian-tag-visibility")
+                .unwrap(),
+            &vec![d.clone()]
+        );
+        let stale = idx.stale.get(&d).unwrap();
+        assert_eq!(stale.len(), 2);
+        assert!(stale.contains(&"E:\\Projects\\prisant-labs\\obsidian-tag-curator".to_string()));
+        assert!(stale.contains(&"E:\\Projects\\github-jprisant\\obsidian-tag-curator".to_string()));
+        assert!(idx.ambiguous.is_empty());
+        assert!(idx.unresolved.is_empty());
+    }
+
+    /// Regression test for LEAD-07. Resolution asks the filesystem "does this recorded
+    /// path still exist", and NTFS answers case-insensitively. A transcript that records
+    /// `e:\projects\live` while the folder on disk is `E:\Projects\Live` describes a path
+    /// that DOES exist. Before MemoryFileSystem modeled NTFS casing, this test would have
+    /// said the path was dead and resolved the dir to the wrong place - a wrong answer
+    /// that only appeared on the real machine, never in a test.
+    #[test]
+    fn build_matches_a_recorded_path_case_insensitively() {
+        let fs = MemoryFileSystem::new();
+        fs.write(
+            Path::new("/h/.claude/projects/E--proj/a.jsonl"),
+            line("E:\\Projects\\Dead").as_bytes(),
+        )
+        .unwrap();
+        fs.write(
+            Path::new("/h/.claude/projects/E--proj/b.jsonl"),
+            line("e:\\projects\\live").as_bytes(),
+        )
+        .unwrap();
+        // On disk with DIFFERENT casing than the transcript recorded.
+        fs.write(Path::new("E:\\Projects\\Live\\.keep"), b"x")
+            .unwrap();
+
+        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let d = PathBuf::from("/h/.claude/projects/E--proj");
+        assert_eq!(
+            idx.by_cwd.get("e:/projects/live").unwrap(),
+            &vec![d.clone()]
+        );
+        assert_eq!(
+            idx.stale.get(&d).unwrap(),
+            &vec!["E:\\Projects\\Dead".to_string()]
+        );
+        assert!(idx.unresolved.is_empty());
+    }
+
+    #[test]
+    fn build_records_the_dead_paths_even_when_none_survive() {
+        let fs = MemoryFileSystem::new();
+        fs.write(
+            Path::new("/h/.claude/projects/E--proj/a.jsonl"),
+            line("E:\\Projects\\gone-one").as_bytes(),
+        )
+        .unwrap();
+        fs.write(
+            Path::new("/h/.claude/projects/E--proj/b.jsonl"),
+            line("E:\\Projects\\gone-two").as_bytes(),
+        )
+        .unwrap();
+        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let d = PathBuf::from("/h/.claude/projects/E--proj");
+        // Unresolvable, but the doctor still needs to say WHICH dead paths it saw.
+        assert_eq!(idx.unresolved, vec![d.clone()]);
+        assert_eq!(idx.stale.get(&d).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn build_refuses_when_two_recorded_paths_both_still_exist() {
+        let fs = MemoryFileSystem::new();
+        fs.write(
+            Path::new("/h/.claude/projects/E--proj/a.jsonl"),
+            line("E:\\Projects\\one").as_bytes(),
+        )
+        .unwrap();
+        fs.write(
+            Path::new("/h/.claude/projects/E--proj/b.jsonl"),
+            line("E:\\Projects\\two").as_bytes(),
+        )
+        .unwrap();
+        fs.write(Path::new("E:\\Projects\\one\\.keep"), b"x")
+            .unwrap();
+        fs.write(Path::new("E:\\Projects\\two\\.keep"), b"x")
+            .unwrap();
+
+        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        // Two live candidates. There is no honest winner, so refuse rather than guess.
+        assert_eq!(
+            idx.ambiguous,
+            vec![PathBuf::from("/h/.claude/projects/E--proj")]
+        );
+        assert!(idx.by_cwd.is_empty());
+    }
+
+    #[test]
+    fn build_treats_a_dir_whose_every_path_is_gone_as_unresolved() {
+        let fs = MemoryFileSystem::new();
+        fs.write(
+            Path::new("/h/.claude/projects/E--proj/a.jsonl"),
+            line("E:\\Projects\\gone-one").as_bytes(),
+        )
+        .unwrap();
+        fs.write(
+            Path::new("/h/.claude/projects/E--proj/b.jsonl"),
+            line("E:\\Projects\\gone-two").as_bytes(),
+        )
+        .unwrap();
+        // Neither path exists. We cannot tell which one the project was.
+        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        assert_eq!(
+            idx.unresolved,
+            vec![PathBuf::from("/h/.claude/projects/E--proj")]
+        );
+        assert!(idx.by_cwd.is_empty());
+        assert!(idx.ambiguous.is_empty());
     }
 }
 ```
@@ -819,6 +1236,18 @@ Expected: FAIL to compile.
 
 - [ ] **Step 3: Implement `read_stored_cwd` and `ProjectIndex::build`**
 
+> **Redesigned 2026-07-13, after a scan of the real machine.** The original `build` read the
+> first transcript that yielded a `cwd` and then broke out of the loop. A scan of the maintainer's
+> 45 project dirs / 11,518 transcripts found `E--Projects-prisant-labs-obsidian-tag-visibility`
+> holding 17 transcripts that record THREE different paths: the live one plus two dead ones left
+> by earlier moves whose transcripts were relocated without being rewritten. First-wins resolved
+> that directory correctly only by luck of UUID sort order, and it DISCARDED the 6 stale
+> references - which are precisely the residue `doctor` exists to report. `build` now collects
+> every distinct `cwd` per directory and resolves against what still exists on disk. `ProjectIndex`
+> gains `ambiguous` (more than one recorded path still exists - refuse rather than guess, which is
+> the first thing in the codebase to actually construct `CpmError::Ambiguous`) and `stale`
+> (recorded paths that are gone). Do not restore the break-on-first version.
+
 Above the test module in `index.rs`:
 ```rust
 /// Read the first non-empty `cwd` value from a transcript. Scans lines (the
@@ -831,10 +1260,14 @@ pub fn read_stored_cwd(fs: &dyn FileSystem, transcript: &Path) -> Option<String>
     // on invalid UTF-8 instead - see Global Constraints.
     let text = String::from_utf8_lossy(&bytes);
     for l in text.lines() {
-        if !l.contains("\"cwd\"") { continue; }
+        if !l.contains("\"cwd\"") {
+            continue;
+        }
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(l) {
             if let Some(c) = v.get("cwd").and_then(|x| x.as_str()) {
-                if !c.is_empty() { return Some(c.to_string()); }
+                if !c.is_empty() {
+                    return Some(c.to_string());
+                }
             }
         }
     }
@@ -842,9 +1275,20 @@ pub fn read_stored_cwd(fs: &dyn FileSystem, transcript: &Path) -> Option<String>
 }
 
 pub struct ProjectIndex {
+    /// normalize(cwd) -> the `projects/` dirs that resolve to it.
     pub by_cwd: HashMap<String, Vec<PathBuf>>,
+    /// Dirs with no recoverable cwd, and dirs whose every recorded cwd is gone.
     pub unresolved: Vec<PathBuf>,
+    /// Every distinct ORIGINAL (non-normalized) cwd seen, across all dirs.
+    /// `plugin_state::audit` hashes these to find orphaned plugin dirs, so stale
+    /// ones are as valuable as live ones - an orphan is keyed by the OLD path.
     pub cwds: Vec<String>,
+    /// Dirs whose transcripts name more than one path that still exists. There is
+    /// no honest way to pick one, so the tool refuses rather than guesses.
+    pub ambiguous: Vec<PathBuf>,
+    /// dir -> recorded cwds that no longer exist on disk. This is the move residue
+    /// the doctor reports: transcripts that were relocated without being rewritten.
+    pub stale: HashMap<PathBuf, Vec<String>>,
 }
 
 impl ProjectIndex {
@@ -852,28 +1296,77 @@ impl ProjectIndex {
         let mut by_cwd: HashMap<String, Vec<PathBuf>> = HashMap::new();
         let mut unresolved = Vec::new();
         let mut cwds = Vec::new();
+        let mut ambiguous = Vec::new();
+        let mut stale: HashMap<PathBuf, Vec<String>> = HashMap::new();
         let projects = home.join(".claude").join("projects");
         let dirs = fs.read_dir(&projects).unwrap_or_default();
         for dir in dirs {
-            if !fs.is_dir(&dir) { continue; }
-            let mut found = None;
+            if !fs.is_dir(&dir) {
+                continue;
+            }
+
+            // Collect EVERY distinct cwd this dir's transcripts record - do not stop
+            // at the first. A project that was moved keeps transcripts pointing at
+            // its old locations, and that residue is exactly what the doctor exists
+            // to report. Stopping early both discards it and makes the answer depend
+            // on which filename happens to sort first.
+            let mut found: Vec<String> = Vec::new();
             for child in fs.read_dir(&dir).unwrap_or_default() {
-                if child.extension().and_then(|e| e.to_str()) == Some("jsonl") {
-                    if let Some(cwd) = read_stored_cwd(fs, &child) {
-                        found = Some(cwd);
-                        break;
+                if child.extension().and_then(|e| e.to_str()) != Some("jsonl") {
+                    continue;
+                }
+                if let Some(cwd) = read_stored_cwd(fs, &child) {
+                    let key = normalize_path(&cwd);
+                    if !found.iter().any(|f| normalize_path(f) == key) {
+                        found.push(cwd);
                     }
                 }
             }
-            match found {
-                Some(cwd) => {
-                    cwds.push(cwd.clone());          // ORIGINAL stored form, used by plugin_state::audit
-                    by_cwd.entry(normalize_path(&cwd)).or_default().push(dir);
+            cwds.extend(found.iter().cloned());
+
+            match found.len() {
+                0 => unresolved.push(dir),
+                1 => {
+                    by_cwd
+                        .entry(normalize_path(&found[0]))
+                        .or_default()
+                        .push(dir);
                 }
-                None => unresolved.push(dir),
+                _ => {
+                    // More than one recorded path. The live one is the project; the
+                    // rest are residue. Two live paths is genuine ambiguity.
+                    let live: Vec<String> = found
+                        .iter()
+                        .filter(|c| fs.is_dir(Path::new(c.as_str())))
+                        .cloned()
+                        .collect();
+                    match live.len() {
+                        1 => {
+                            let win = &live[0];
+                            let dead: Vec<String> =
+                                found.iter().filter(|c| *c != win).cloned().collect();
+                            stale.insert(dir.clone(), dead);
+                            by_cwd.entry(normalize_path(win)).or_default().push(dir);
+                        }
+                        0 => {
+                            // Every recorded path is gone. We cannot say which one the
+                            // project was, but the dead paths are still residue and the
+                            // doctor needs them to explain WHY the dir is unresolved.
+                            stale.insert(dir.clone(), found.clone());
+                            unresolved.push(dir);
+                        }
+                        _ => ambiguous.push(dir),
+                    }
+                }
             }
         }
-        Self { by_cwd, unresolved, cwds }
+        Self {
+            by_cwd,
+            unresolved,
+            cwds,
+            ambiguous,
+            stale,
+        }
     }
 }
 ```

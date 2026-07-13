@@ -28,9 +28,20 @@ pub fn read_stored_cwd(fs: &dyn FileSystem, transcript: &Path) -> Option<String>
 }
 
 pub struct ProjectIndex {
+    /// normalize(cwd) -> the `projects/` dirs that resolve to it.
     pub by_cwd: HashMap<String, Vec<PathBuf>>,
+    /// Dirs with no recoverable cwd, and dirs whose every recorded cwd is gone.
     pub unresolved: Vec<PathBuf>,
+    /// Every distinct ORIGINAL (non-normalized) cwd seen, across all dirs.
+    /// `plugin_state::audit` hashes these to find orphaned plugin dirs, so stale
+    /// ones are as valuable as live ones - an orphan is keyed by the OLD path.
     pub cwds: Vec<String>,
+    /// Dirs whose transcripts name more than one path that still exists. There is
+    /// no honest way to pick one, so the tool refuses rather than guesses.
+    pub ambiguous: Vec<PathBuf>,
+    /// dir -> recorded cwds that no longer exist on disk. This is the move residue
+    /// the doctor reports: transcripts that were relocated without being rewritten.
+    pub stale: HashMap<PathBuf, Vec<String>>,
 }
 
 impl ProjectIndex {
@@ -38,33 +49,76 @@ impl ProjectIndex {
         let mut by_cwd: HashMap<String, Vec<PathBuf>> = HashMap::new();
         let mut unresolved = Vec::new();
         let mut cwds = Vec::new();
+        let mut ambiguous = Vec::new();
+        let mut stale: HashMap<PathBuf, Vec<String>> = HashMap::new();
         let projects = home.join(".claude").join("projects");
         let dirs = fs.read_dir(&projects).unwrap_or_default();
         for dir in dirs {
             if !fs.is_dir(&dir) {
                 continue;
             }
-            let mut found = None;
+
+            // Collect EVERY distinct cwd this dir's transcripts record - do not stop
+            // at the first. A project that was moved keeps transcripts pointing at
+            // its old locations, and that residue is exactly what the doctor exists
+            // to report. Stopping early both discards it and makes the answer depend
+            // on which filename happens to sort first.
+            let mut found: Vec<String> = Vec::new();
             for child in fs.read_dir(&dir).unwrap_or_default() {
-                if child.extension().and_then(|e| e.to_str()) == Some("jsonl") {
-                    if let Some(cwd) = read_stored_cwd(fs, &child) {
-                        found = Some(cwd);
-                        break;
+                if child.extension().and_then(|e| e.to_str()) != Some("jsonl") {
+                    continue;
+                }
+                if let Some(cwd) = read_stored_cwd(fs, &child) {
+                    let key = normalize_path(&cwd);
+                    if !found.iter().any(|f| normalize_path(f) == key) {
+                        found.push(cwd);
                     }
                 }
             }
-            match found {
-                Some(cwd) => {
-                    cwds.push(cwd.clone()); // ORIGINAL stored form, used by plugin_state::audit
-                    by_cwd.entry(normalize_path(&cwd)).or_default().push(dir);
+            cwds.extend(found.iter().cloned());
+
+            match found.len() {
+                0 => unresolved.push(dir),
+                1 => {
+                    by_cwd
+                        .entry(normalize_path(&found[0]))
+                        .or_default()
+                        .push(dir);
                 }
-                None => unresolved.push(dir),
+                _ => {
+                    // More than one recorded path. The live one is the project; the
+                    // rest are residue. Two live paths is genuine ambiguity.
+                    let live: Vec<String> = found
+                        .iter()
+                        .filter(|c| fs.is_dir(Path::new(c.as_str())))
+                        .cloned()
+                        .collect();
+                    match live.len() {
+                        1 => {
+                            let win = &live[0];
+                            let dead: Vec<String> =
+                                found.iter().filter(|c| *c != win).cloned().collect();
+                            stale.insert(dir.clone(), dead);
+                            by_cwd.entry(normalize_path(win)).or_default().push(dir);
+                        }
+                        0 => {
+                            // Every recorded path is gone. We cannot say which one the
+                            // project was, but the dead paths are still residue and the
+                            // doctor needs them to explain WHY the dir is unresolved.
+                            stale.insert(dir.clone(), found.clone());
+                            unresolved.push(dir);
+                        }
+                        _ => ambiguous.push(dir),
+                    }
+                }
             }
         }
         Self {
             by_cwd,
             unresolved,
             cwds,
+            ambiguous,
+            stale,
         }
     }
 }
@@ -152,5 +206,207 @@ mod tests {
         );
         assert!(idx.unresolved.is_empty());
         assert_eq!(idx.cwds, vec!["E:\\Projects\\A".to_string()]);
+    }
+
+    /// Modeled on a real directory from the 2026-07-13 machine scan:
+    /// E--Projects-prisant-labs-obsidian-tag-visibility held 17 transcripts naming
+    /// THREE paths - the current one plus two dead ones left behind by earlier moves.
+    /// Resolving to whichever transcript sorts first is a coin flip; resolving to the
+    /// path that still exists is the answer.
+    #[test]
+    fn build_resolves_move_residue_to_the_path_that_still_exists() {
+        let fs = MemoryFileSystem::new();
+        fs.write(
+            Path::new("/h/.claude/projects/E--proj/a.jsonl"),
+            line("E:\\Projects\\old\\proj").as_bytes(),
+        )
+        .unwrap();
+        fs.write(
+            Path::new("/h/.claude/projects/E--proj/b.jsonl"),
+            line("E:\\Projects\\new\\proj").as_bytes(),
+        )
+        .unwrap();
+        // Only the new location exists on disk. Note a.jsonl sorts FIRST and holds the
+        // dead path, so first-wins would have resolved this dir to a folder that is gone.
+        fs.write(Path::new("E:\\Projects\\new\\proj\\.keep"), b"x")
+            .unwrap();
+
+        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let dir = PathBuf::from("/h/.claude/projects/E--proj");
+
+        assert_eq!(
+            idx.by_cwd.get("e:/projects/new/proj").unwrap(),
+            &vec![dir.clone()]
+        );
+        assert!(!idx.by_cwd.contains_key("e:/projects/old/proj"));
+        // The dead reference is REPORTED, not silently dropped - it is the residue.
+        assert_eq!(
+            idx.stale.get(&dir).unwrap(),
+            &vec!["E:\\Projects\\old\\proj".to_string()]
+        );
+        assert!(idx.ambiguous.is_empty());
+        assert!(idx.unresolved.is_empty());
+        // Both originals survive for plugin_state::audit - an orphaned plugin dir is
+        // keyed by the OLD path, so the stale cwd is the one that finds it.
+        assert!(idx.cwds.contains(&"E:\\Projects\\old\\proj".to_string()));
+        assert!(idx.cwds.contains(&"E:\\Projects\\new\\proj".to_string()));
+    }
+
+    /// The real directory names THREE paths, not two. An implementation that only
+    /// handles the two-path case passes every other test here and still misclassifies
+    /// the actual machine, so the three-path shape gets its own test.
+    #[test]
+    fn build_resolves_three_recorded_paths_with_one_survivor() {
+        let fs = MemoryFileSystem::new();
+        let dir = "/h/.claude/projects/E--Projects-prisant-labs-obsidian-tag-visibility";
+        // Two dead paths sort BEFORE the live one, so first-wins would pick a dead path.
+        fs.write(
+            Path::new(&format!("{dir}/a.jsonl")),
+            line("E:\\Projects\\github-jprisant\\obsidian-tag-curator").as_bytes(),
+        )
+        .unwrap();
+        fs.write(
+            Path::new(&format!("{dir}/b.jsonl")),
+            line("E:\\Projects\\prisant-labs\\obsidian-tag-curator").as_bytes(),
+        )
+        .unwrap();
+        fs.write(
+            Path::new(&format!("{dir}/c.jsonl")),
+            line("E:\\Projects\\prisant-labs\\obsidian-tag-visibility").as_bytes(),
+        )
+        .unwrap();
+        // a transcript with no cwd at all, as the real dir has
+        fs.write(
+            Path::new(&format!("{dir}/d.jsonl")),
+            b"{\"type\":\"last-prompt\"}\n",
+        )
+        .unwrap();
+        fs.write(
+            Path::new("E:\\Projects\\prisant-labs\\obsidian-tag-visibility\\.keep"),
+            b"x",
+        )
+        .unwrap();
+
+        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let d = PathBuf::from(dir);
+
+        assert_eq!(
+            idx.by_cwd
+                .get("e:/projects/prisant-labs/obsidian-tag-visibility")
+                .unwrap(),
+            &vec![d.clone()]
+        );
+        let stale = idx.stale.get(&d).unwrap();
+        assert_eq!(stale.len(), 2);
+        assert!(stale.contains(&"E:\\Projects\\prisant-labs\\obsidian-tag-curator".to_string()));
+        assert!(stale.contains(&"E:\\Projects\\github-jprisant\\obsidian-tag-curator".to_string()));
+        assert!(idx.ambiguous.is_empty());
+        assert!(idx.unresolved.is_empty());
+    }
+
+    /// Regression test for LEAD-07. Resolution asks the filesystem "does this recorded
+    /// path still exist", and NTFS answers case-insensitively. A transcript that records
+    /// `e:\projects\live` while the folder on disk is `E:\Projects\Live` describes a path
+    /// that DOES exist. Before MemoryFileSystem modeled NTFS casing, this test would have
+    /// said the path was dead and resolved the dir to the wrong place - a wrong answer
+    /// that only appeared on the real machine, never in a test.
+    #[test]
+    fn build_matches_a_recorded_path_case_insensitively() {
+        let fs = MemoryFileSystem::new();
+        fs.write(
+            Path::new("/h/.claude/projects/E--proj/a.jsonl"),
+            line("E:\\Projects\\Dead").as_bytes(),
+        )
+        .unwrap();
+        fs.write(
+            Path::new("/h/.claude/projects/E--proj/b.jsonl"),
+            line("e:\\projects\\live").as_bytes(),
+        )
+        .unwrap();
+        // On disk with DIFFERENT casing than the transcript recorded.
+        fs.write(Path::new("E:\\Projects\\Live\\.keep"), b"x")
+            .unwrap();
+
+        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let d = PathBuf::from("/h/.claude/projects/E--proj");
+        assert_eq!(
+            idx.by_cwd.get("e:/projects/live").unwrap(),
+            &vec![d.clone()]
+        );
+        assert_eq!(
+            idx.stale.get(&d).unwrap(),
+            &vec!["E:\\Projects\\Dead".to_string()]
+        );
+        assert!(idx.unresolved.is_empty());
+    }
+
+    #[test]
+    fn build_records_the_dead_paths_even_when_none_survive() {
+        let fs = MemoryFileSystem::new();
+        fs.write(
+            Path::new("/h/.claude/projects/E--proj/a.jsonl"),
+            line("E:\\Projects\\gone-one").as_bytes(),
+        )
+        .unwrap();
+        fs.write(
+            Path::new("/h/.claude/projects/E--proj/b.jsonl"),
+            line("E:\\Projects\\gone-two").as_bytes(),
+        )
+        .unwrap();
+        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let d = PathBuf::from("/h/.claude/projects/E--proj");
+        // Unresolvable, but the doctor still needs to say WHICH dead paths it saw.
+        assert_eq!(idx.unresolved, vec![d.clone()]);
+        assert_eq!(idx.stale.get(&d).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn build_refuses_when_two_recorded_paths_both_still_exist() {
+        let fs = MemoryFileSystem::new();
+        fs.write(
+            Path::new("/h/.claude/projects/E--proj/a.jsonl"),
+            line("E:\\Projects\\one").as_bytes(),
+        )
+        .unwrap();
+        fs.write(
+            Path::new("/h/.claude/projects/E--proj/b.jsonl"),
+            line("E:\\Projects\\two").as_bytes(),
+        )
+        .unwrap();
+        fs.write(Path::new("E:\\Projects\\one\\.keep"), b"x")
+            .unwrap();
+        fs.write(Path::new("E:\\Projects\\two\\.keep"), b"x")
+            .unwrap();
+
+        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        // Two live candidates. There is no honest winner, so refuse rather than guess.
+        assert_eq!(
+            idx.ambiguous,
+            vec![PathBuf::from("/h/.claude/projects/E--proj")]
+        );
+        assert!(idx.by_cwd.is_empty());
+    }
+
+    #[test]
+    fn build_treats_a_dir_whose_every_path_is_gone_as_unresolved() {
+        let fs = MemoryFileSystem::new();
+        fs.write(
+            Path::new("/h/.claude/projects/E--proj/a.jsonl"),
+            line("E:\\Projects\\gone-one").as_bytes(),
+        )
+        .unwrap();
+        fs.write(
+            Path::new("/h/.claude/projects/E--proj/b.jsonl"),
+            line("E:\\Projects\\gone-two").as_bytes(),
+        )
+        .unwrap();
+        // Neither path exists. We cannot tell which one the project was.
+        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        assert_eq!(
+            idx.unresolved,
+            vec![PathBuf::from("/h/.claude/projects/E--proj")]
+        );
+        assert!(idx.by_cwd.is_empty());
+        assert!(idx.ambiguous.is_empty());
     }
 }

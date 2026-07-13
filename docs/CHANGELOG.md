@@ -3,6 +3,48 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-07-13 - Reverse index redesigned against real data; LEAD-07 case-sensitivity closed
+
+A scan of the maintainer's real machine (45 project dirs, 11,518 transcripts, run against a backup
+copy) drove a redesign of `ProjectIndex`, and settled several numbers the docs had been asserting
+without ever checking them.
+
+**What the scan found.** One directory, `E--Projects-prisant-labs-obsidian-tag-visibility`, holds 17
+transcripts recording THREE different paths: `prisant-labs\obsidian-tag-visibility` (9 transcripts,
+still on disk), `prisant-labs\obsidian-tag-curator` (4, gone), and `github-jprisant\obsidian-tag-curator`
+(2, gone). This is move residue: the project was relocated twice and its transcripts were physically
+moved into the new folder without their internal path references being rewritten. It is exactly the
+condition CPM exists to repair, sitting in the maintainer's own data.
+
+**Why the old index was wrong.** `ProjectIndex::build` read the first transcript that yielded a `cwd`
+and stopped. On this directory it produced the right answer only because the alphabetically-first
+UUID happened to hold the live path - a coin flip. And it discarded the 6 stale references entirely,
+so `doctor` could never have reported them.
+
+**The redesign.** `build` now collects every distinct `cwd` per directory and resolves against what
+still exists on disk: one recorded path resolves to it; several with exactly one survivor resolve to
+the survivor and file the rest as `stale`; several survivors is genuine ambiguity and the tool refuses
+rather than guesses. `ProjectIndex` gains `ambiguous` and `stale` fields. This is the first code in the
+project to actually construct `CpmError::Ambiguous`, which had been defined and wired to exit code 2
+since the original plan and never once raised.
+
+**LEAD-07 (case-sensitivity half) closed as a direct consequence.** Resolution now asks the filesystem
+whether a recorded path still exists, and NTFS answers case-insensitively while `MemoryFileSystem`
+answered case-sensitively. That made a tracked-but-dormant divergence load-bearing: a transcript
+recording `e:\projects\foo` against an on-disk `E:\Projects\Foo` would resolve one way in a test and
+the other way on a real machine. `MemoryFileSystem` now models NTFS - case-insensitive lookup,
+case-preserving output. The empty-directory and separator halves of LEAD-07 remain open.
+
+**Corrections to asserted figures.** DESIGN.md said "dirs with no transcripts (16 of 45) have no
+recoverable cwd". The real number is **15 of 45**, and those directories are **not empty** - they hold
+transcripts that never recorded a `cwd`. A Task 2.2 review had also claimed empty directories were the
+main population of `unresolved` and were untestable; the scan disproves it.
+
+Doc impact: `docs/DESIGN.md` "Reverse index" rewritten with the resolution table and the corrected
+figures. The Task 1.2 and Task 2.2 code blocks in
+`docs/superpowers/plans/2026-07-10-claude-project-mover.md` are re-synced to the shipped code, each
+carrying a repair note, so an agent transcribing from the plan cannot reintroduce either defect.
+
 ## 2026-07-12 - Task 2.1 reviewed; `same_volume` UNC defect repaired in code and plan
 
 Task 2.1 (path encoding, commit `54e4c2b`) passed its spec + quality review gate, the last

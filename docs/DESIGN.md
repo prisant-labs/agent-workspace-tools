@@ -123,10 +123,34 @@ change list. `doctor`'s output is `plan`'s input.
 
 ### Reverse index
 
-`ProjectIndex` scans `~/.claude/projects/*`, reads the first non-empty `cwd` from
-each dir's transcripts, and maps `normalize(cwd) -> [dirs]`. `encode()` is used
-only to NAME a destination dir, never to look one up. Dirs with no transcripts
-(16 of 45) have no recoverable `cwd` and are reported as unresolvable, not guessed.
+`ProjectIndex` scans `~/.claude/projects/*` and maps `normalize(cwd) -> [dirs]`.
+`encode()` is used only to NAME a destination dir, never to look one up.
+
+It reads **every** distinct `cwd` a directory's transcripts record, not just the first.
+A machine scan on 2026-07-13 (45 dirs, 11,518 transcripts) settled why: one directory,
+`E--Projects-prisant-labs-obsidian-tag-visibility`, holds 17 transcripts naming THREE
+paths - the live one plus two dead ones left behind by earlier moves whose transcripts
+were relocated without being rewritten. Reading only the first transcript would resolve
+that directory by whichever filename happened to sort first, and would discard the stale
+references, which are exactly the residue `doctor` exists to report.
+
+Resolution, given the set of distinct `cwd`s a directory records:
+
+| Recorded | Resolution |
+|---|---|
+| none | `unresolved` |
+| one | resolved to it |
+| several, exactly one still on disk | resolved to the live one; the rest go to `stale` |
+| several, none still on disk | `unresolved`, with the dead paths kept in `stale` |
+| several, more than one still on disk | `ambiguous` - refuse rather than guess (`CpmError::Ambiguous`, exit 2) |
+
+Existence is tested against the filesystem, and NTFS matches case-insensitively, so
+`MemoryFileSystem` models that too (audit finding LEAD-07). A recorded `e:\projects\foo`
+and an on-disk `E:\Projects\Foo` are the same path.
+
+The same scan measured the unresolvable population: **15 of 45** directories yield no
+`cwd`. They are not empty - they hold transcripts that never recorded one. They are
+reported as unresolvable, never guessed.
 
 ### Store adapter contract
 
