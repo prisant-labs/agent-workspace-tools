@@ -3,6 +3,41 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-07-12 - Task 2.1 reviewed; `same_volume` UNC defect repaired in code and plan
+
+Task 2.1 (path encoding, commit `54e4c2b`) passed its spec + quality review gate, the last
+unreviewed code on the branch. Spec compliance passed: the commit is a faithful transcription of
+the plan. The review nonetheless found a real defect, because the defect was in the plan itself.
+
+`same_volume` derived its volume root from `normalize_path(p).split('/').next()`. `split` emits an
+empty field for the run before the first separator, so every UNC path (`\\server\share\...`)
+reported a root of `""` and compared equal to every other UNC path: two different file servers read
+as the same volume. Phase 6 (`plan.rs`) wires `same_volume` to the rename-versus-copy decision, and
+a rename across file servers fails at the OS level. UNC is a Windows path form, so the Windows-only
+v1 scope did not excuse it, and UNC appears nowhere in `docs/DESIGN.md`, `AGENTS.md`, or
+`docs/ROADMAP.md` - it was never considered rather than deliberately deferred.
+
+Repaired: `root()` now special-cases a leading `//` and returns `//server/share` as the volume
+identity, with `same_volume_distinguishes_unc_servers_and_shares` pinning the contract.
+
+Adversarial verification of that repair found the same bug a second time, in the verbatim path form:
+`\\?\UNC\server\share\...` parsed `?` as the server and `unc` as the share, so every verbatim UNC
+path collapsed to one root regardless of server. `std::fs::canonicalize` emits verbatim paths on
+Windows, so the form arrives in practice. DESIGN.md names `dunce` as the verbatim-path mitigation,
+but `dunce` is declared in `crates/cpm-core/Cargo.toml` and is **never called anywhere in the
+source**: the mitigation is documented, not enforced. `root()` now strips the verbatim prefix
+itself rather than trusting an upstream that does not exist, and
+`same_volume_sees_through_verbatim_prefixes` pins it. Wiring `dunce` at the path-input boundary
+remains open for the phase that first accepts user-supplied paths.
+
+Doc impact: the corrected code and test are written back into the Task 2.1 section of
+`docs/superpowers/plans/2026-07-10-claude-project-mover.md`, carrying a "Repaired 2026-07-12" note,
+so an agent re-reading the plan cannot transcribe the defect back in. The function's doc comment
+previously claimed it handled a "leading mount segment"; it never did, and now states the POSIX
+limitation plainly. POSIX mount detection remains genuinely deferred under DESIGN.md "Platform
+scope" and ROADMAP CI-2. The S-01 completion table, which still showed all nine phases as "Not
+started", now reflects Phase 1 complete and Phase 2 in progress.
+
 ## 2026-07-12 - v2 GUI design brief
 
 ### New documents

@@ -548,8 +548,26 @@ git commit -m "test: capture sanitized golden fixtures from 2026-07-09 reference
   ```rust
   pub fn encode_project_dir(abs: &str) -> String;   // [^A-Za-z0-9] -> '-'
   pub fn normalize_path(abs: &str) -> String;        // lower-case, '\' -> '/'
-  pub fn same_volume(a: &str, b: &str) -> bool;      // compare drive/mount root
+  pub fn same_volume(a: &str, b: &str) -> bool;      // drive letter, or UNC server+share
   ```
+
+> **Repaired 2026-07-12 (post-review of commit `54e4c2b`).** The original `same_volume`
+> here took `normalize_path(p).split('/').next()` as the volume root. `split` emits an
+> empty field for the run before the first separator, so every UNC path (`\\server\share`)
+> reported a root of `""` and compared equal to every other UNC path - two different file
+> servers read as the same volume, which would drive a rename that fails at the OS level.
+> UNC is a Windows path form, so the Windows-only v1 scope did not excuse it.
+>
+> Adversarial verification of that first repair found a second instance of the same bug:
+> verbatim paths (`\\?\UNC\server\share\...`) parsed `?` as the server and `unc` as the
+> share, so they too collapsed to one root for every server. `std::fs::canonicalize` emits
+> verbatim paths on Windows, so this form arrives in practice. DESIGN.md names `dunce` as
+> the verbatim-path mitigation, but `dunce` is declared in `Cargo.toml` and **never called
+> anywhere in the source** - the mitigation is documented, not enforced. `root()` therefore
+> strips the verbatim prefix itself rather than trusting an upstream that does not exist.
+>
+> The code below is the corrected version. Do not restore the `split('/').next()` one-liner.
+> Still open by design: POSIX mount points (see the doc comment and DESIGN.md "Platform scope").
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -588,6 +606,30 @@ mod tests {
         assert!(same_volume("E:\\a", "e:/b"));
         assert!(!same_volume("E:\\a", "F:\\a"));
     }
+
+    #[test]
+    fn same_volume_distinguishes_unc_servers_and_shares() {
+        // A UNC volume is identified by \\server\share, not by the empty segment
+        // that precedes the leading separator. Two different servers are two
+        // different volumes, and a rename between them fails at the OS level.
+        assert!(!same_volume(r"\\server1\share\a", r"\\server2\share\b"));
+        assert!(!same_volume(r"\\server1\alpha\a", r"\\server1\beta\b"));
+        assert!(same_volume(r"\\server1\share\a", r"\\SERVER1\SHARE\b"));
+        // A UNC path and a local drive are never the same volume.
+        assert!(!same_volume(r"\\server1\share\a", "E:\\a"));
+    }
+
+    #[test]
+    fn same_volume_sees_through_verbatim_prefixes() {
+        // std::fs::canonicalize returns \\?\-prefixed paths on Windows, so this
+        // form reaches us in practice. The verbatim prefix is a Win32 path-parsing
+        // escape, not part of the volume identity: \\?\C:\x is the same volume as
+        // C:\x, and \\?\UNC\server\share is the same volume as \\server\share.
+        assert!(same_volume(r"\\?\C:\a", r"C:\b"));
+        assert!(!same_volume(r"\\?\C:\a", r"\\?\D:\a"));
+        assert!(same_volume(r"\\?\UNC\server1\share\a", r"\\server1\share\b"));
+        assert!(!same_volume(r"\\?\UNC\server1\share\a", r"\\?\UNC\server2\share\b"));
+    }
 }
 ```
 
@@ -615,11 +657,41 @@ pub fn normalize_path(abs: &str) -> String {
     abs.replace('\\', "/").to_lowercase()
 }
 
-/// True when two absolute paths live on the same volume (Windows drive letter
-/// or leading mount segment).
+/// True when two absolute paths live on the same volume.
+///
+/// Windows drive-letter paths compare by drive (`E:`), and UNC paths compare by
+/// server plus share (`\\server\share`), which is the unit a rename cannot cross.
+///
+/// POSIX mount points are NOT handled: every absolute POSIX path reports the same
+/// volume, so a move across mounts would be treated as a rename. That gap is part
+/// of the macOS/Linux bring-up tracked in DESIGN.md ("Platform scope") and must
+/// close before POSIX support ships.
 pub fn same_volume(a: &str, b: &str) -> bool {
     fn root(p: &str) -> String {
         let n = normalize_path(p);
+
+        // Strip the Win32 verbatim prefix first. It is a path-parsing escape, not
+        // part of the volume identity, and `std::fs::canonicalize` emits it on
+        // Windows - so this form reaches us whether or not a caller expects it.
+        // `\\?\C:\x` is the drive `c:`; `\\?\UNC\server\share` is that UNC volume.
+        let n = match n.strip_prefix("//?/") {
+            Some(rest) => match rest.strip_prefix("unc/") {
+                Some(unc) => format!("//{unc}"),
+                None => rest.to_string(),
+            },
+            None => n,
+        };
+
+        // A leading "//" marks a UNC path. `split` emits an empty field for the
+        // run before the first separator, so without this branch every UNC path
+        // would report a root of "" and compare equal to every other UNC path.
+        if let Some(rest) = n.strip_prefix("//") {
+            let mut seg = rest.split('/').filter(|s| !s.is_empty());
+            let server = seg.next().unwrap_or("");
+            let share = seg.next().unwrap_or("");
+            return format!("//{server}/{share}");
+        }
+
         n.split('/').next().unwrap_or("").to_string()
     }
     root(a) == root(b)

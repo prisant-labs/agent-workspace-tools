@@ -39,10 +39,13 @@ implementation detail; this file is a navigation aid only.
 
 ## Completion Status
 
+Last updated 2026-07-12. The live task-level ledger is `.superpowers/sdd/progress.md`
+(gitignored); this table is the human-facing summary.
+
 | Phase | Status |
 |-------|--------|
-| 1 | Not started |
-| 2 | Not started |
+| 1 | Complete (workspace + CI `d17ec2f`, `FileSystem` trait `b6bbf41`, golden fixtures `25dd5ab`; opus whole-branch review: READY WITH NOTES) |
+| 2 | In progress (Task 2.1 path encoding complete and reviewed; Task 2.2 reverse `ProjectIndex` not started) |
 | 3 | Not started |
 | 4 | Not started |
 | 5 | Not started |
