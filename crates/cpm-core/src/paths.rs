@@ -107,7 +107,13 @@ mod tests {
         // C:\x, and \\?\UNC\server\share is the same volume as \\server\share.
         assert!(same_volume(r"\\?\C:\a", r"C:\b"));
         assert!(!same_volume(r"\\?\C:\a", r"\\?\D:\a"));
-        assert!(same_volume(r"\\?\UNC\server1\share\a", r"\\server1\share\b"));
-        assert!(!same_volume(r"\\?\UNC\server1\share\a", r"\\?\UNC\server2\share\b"));
+        assert!(same_volume(
+            r"\\?\UNC\server1\share\a",
+            r"\\server1\share\b"
+        ));
+        assert!(!same_volume(
+            r"\\?\UNC\server1\share\a",
+            r"\\?\UNC\server2\share\b"
+        ));
     }
 }
