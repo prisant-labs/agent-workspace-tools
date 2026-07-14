@@ -83,6 +83,23 @@ pub struct VerifyResult {
     pub detail: String,
 }
 
+impl<'a> Ctx<'a> {
+    pub fn fs_walk_text(&self, root: &std::path::Path) -> Vec<std::path::PathBuf> {
+        let mut out = Vec::new();
+        let mut stack = vec![root.to_path_buf()];
+        while let Some(dir) = stack.pop() {
+            for child in self.fs.read_dir(&dir).unwrap_or_default() {
+                if self.fs.is_dir(&child) {
+                    stack.push(child);
+                } else {
+                    out.push(child);
+                }
+            }
+        }
+        out
+    }
+}
+
 pub trait Store {
     fn id(&self) -> &'static str;
     fn probe(&self, ctx: &Ctx) -> Result<()>;

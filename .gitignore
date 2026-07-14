@@ -18,3 +18,6 @@ Thumbs.db
 desktop.ini
 
 # NOTE: _agent-context/ is deliberately tracked (session logs belong in version control).
+
+# agent worktrees (transient)
+.claude/worktrees/
