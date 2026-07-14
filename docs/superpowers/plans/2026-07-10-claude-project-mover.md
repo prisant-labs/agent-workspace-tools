@@ -1477,12 +1477,15 @@ Add `pub mod rewrite;` to `lib.rs`.
 
 - [ ] **Step 2: Write the model types and Store trait**
 
-Append to `crates/cpm-core/src/model.rs`:
+Append to `crates/cpm-core/src/model.rs`, and move these `use` lines to the TOP of the
+file, above the existing `Move` struct (rustfmt sorts them as shown; CI gates on
+`cargo fmt --all -- --check`, and module declarations in `stores/mod.rs` get sorted
+alphabetically too):
 ```rust
+use crate::error::Result;
 use crate::fs::FileSystem;
 use crate::index::ProjectIndex;
 use crate::rewrite::RewriteRule;
-use crate::error::Result;
 use std::path::PathBuf;
 
 /// Rewrite tier. Order matters: Minimal < Standard < Full (derived Ord follows the
@@ -1533,9 +1536,9 @@ pub trait Store {
 
 `crates/cpm-core/src/stores/mod.rs`:
 ```rust
-pub mod claude_projects;
-pub mod claude_json;
 pub mod claude_history;
+pub mod claude_json;
+pub mod claude_projects;
 pub mod plugin_state;
 pub mod sweep;
 
