@@ -90,7 +90,7 @@ macOS-specific work (POSIX path forms, mount/device volume detection, iCloud Dri
 ## 4. Architecture
 
 ```
-claude-project-mover/
+agent-workspace-tools/
   Cargo.toml            virtual workspace manifest
   crates/cpm-core/      no clap, no tauri, no network. the whole engine.
   crates/cpm-cli/       clap. bin: `cpm`
