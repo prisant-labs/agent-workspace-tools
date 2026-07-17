@@ -59,9 +59,10 @@ state. "Tools" is also the shorter, more conventional choice for a CLI suite.
 - Good: "workspace" accurately frames the subject as the agent's view of all your
   projects and their state.
 - Bad: dropping `claude` also invalidates the `cpm` acronym (claude project mover),
-  so the binary and the `cpm-core` / `cpm-cli` crate names no longer fit. Renaming
-  those is deliberately deferred (see More Information); the repo will carry a
-  temporary, tracked inconsistency until the binary name is settled.
+  so the binary and the `cpm-core` / `cpm-cli` crate names no longer fit. They are
+  renamed to `awt` / `awt-core` / `awt-cli` in a deferred code pass (see More
+  Information); until it lands the repo carries a temporary, tracked inconsistency
+  (repo `agent-workspace-tools`, binary `cpm`).
 - Neutral: past session logs, `docs/CHANGELOG.md` entries, git history, and the
   archival regions under `~/.claude` (file-history, backups) are historical records
   and are preserved, not rewritten - the same "a match is not staleness" rule the
@@ -106,13 +107,18 @@ repointed so no live reference to the old path survives outside historical recor
 
 ## More Information
 
-Out of scope for this decision and tracked as follow-up:
+Tracked as follow-up (name locked, execution deferred):
 
-- Binary rename `cpm` -> new name is **not yet locked**. Working proposal is `awt`
-  (short, matches the initials); a memorable wordmark is an acceptable alternative.
-  Repo name and binary name need not match.
-- Crate renames `cpm-core` / `cpm-cli` -> new names follow whatever the binary
-  becomes, as a separate code-level change.
+- Binary rename `cpm` -> **`awt`**, accepted 2026-07-17. Chosen over a memorable
+  wordmark for predictability: `awt` is the repo's initials, so there is one name to
+  remember, and it reads fine as a command prefix (`awt doctor`, `awt scan`). Repo
+  name and binary name need not match; here, matching them was the deciding virtue.
+- Crate renames follow: `cpm-core` -> `awt-core`, `cpm-cli` -> `awt-cli`.
+- Execution is a dedicated code pass scheduled AFTER the folder/state migration, to
+  keep one change in flight at a time. It renames the crates, the `[[bin]]`, every
+  `cpm ...` invocation in tests and docs, and the "CPM" / "Claude Project Mover"
+  branding. It must land before the v0.1 tag, the point after which a binary rename
+  stops being cheap.
 
 Related: the sweep-scope decision (`docs/superpowers/plans/2026-07-10-claude-project-mover.md`),
 which applies the same preserve-vs-rewrite distinction to `doctor` output.
