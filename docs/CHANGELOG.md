@@ -3,6 +3,22 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-07-17 - Project renamed to agent-workspace-tools; first decision record
+
+The project is renamed from `claude-project-mover` to `agent-workspace-tools`. The
+old name described a single feature (move) and the `claude` prefix blocked the Codex
+and Gemini adapters the roadmap already parks as v1.x work. The reasoning, the
+rejected alternatives (`claude-project-manager`, `claude-session-tools`,
+`claude-workspace-tools`, and `-utilities` as a suffix), and the deferred binary and
+crate renames are recorded in the project's first formal decision record,
+`docs/decisions/0001-project-name-agent-workspace-tools.md`. This adds the
+`docs/decisions/` directory (MADR v4), now indexed in `docs/index.md`.
+
+Past session logs, prior entries in this changelog, and the archival regions under
+`~/.claude` keep the old name on purpose: they are historical records, not live
+pointers, and rewriting them would be the same "a match is not staleness" error the
+tool is built to avoid.
+
 ## 2026-07-13 - Reverse index redesigned against real data; LEAD-07 case-sensitivity closed
 
 A scan of the maintainer's real machine (45 project dirs, 11,518 transcripts, run against a backup
