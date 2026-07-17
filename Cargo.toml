@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/cpm-core"]
+members = ["crates/cpm-core", "crates/cpm-cli"]
 
 [workspace.package]
 edition = "2021"
