@@ -7,6 +7,12 @@ use crate::report::Report;
 use crate::rewrite::anchored_rewrite;
 use std::path::Path;
 
+pub struct ApplyOpts {
+    pub run_id: String,
+    pub auto_rollback: bool,
+    pub force: bool,
+}
+
 pub fn apply(plan: &Plan, fs: &dyn FileSystem, backup_root: &Path, run_id: &str) -> Result<Report> {
     let _m = snapshot(plan, fs, backup_root, run_id)?;
     let mut applied = Vec::new();
@@ -100,11 +106,49 @@ pub fn apply(plan: &Plan, fs: &dyn FileSystem, backup_root: &Path, run_id: &str)
     })
 }
 
+pub fn apply_verified(
+    plan: &Plan,
+    fs: &dyn FileSystem,
+    backup_root: &Path,
+    opts: &ApplyOpts,
+) -> Result<Report> {
+    let backup_dir = backup_root.join(format!("cpm-{}", opts.run_id));
+    let manifest_path = backup_dir.join("manifest.json");
+    let mut report = match apply(plan, fs, backup_root, &opts.run_id) {
+        Ok(r) => r,
+        Err(e) => {
+            if opts.auto_rollback {
+                let _ = crate::rollback::rollback(&manifest_path, fs);
+            }
+            return Err(CpmError::VerifyFailed(format!(
+                "apply failed ({e:?}); backup at {}",
+                backup_dir.display()
+            )));
+        }
+    };
+    let manifest = crate::backup::Manifest::load(fs, &manifest_path)?;
+    let results = crate::verify::verify(fs, &plan.home, &plan.mv, Some(&manifest))?;
+    let failed: Vec<_> = results.iter().filter(|r| !r.ok).collect();
+    if !failed.is_empty() {
+        if opts.auto_rollback {
+            crate::rollback::rollback(&manifest_path, fs)?;
+        }
+        return Err(CpmError::VerifyFailed(format!(
+            "{} checks failed; backup at {}",
+            failed.len(),
+            backup_dir.display()
+        )));
+    }
+    report.verify = Some(results);
+    Ok(report)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::CpmError;
     use crate::fs::{FileSystem, MemoryFileSystem};
-    use crate::model::Move;
+    use crate::model::{Change, Move};
     use crate::plan::{build_plan, Collision, PlanOpts};
     use std::path::Path;
 
@@ -135,5 +179,111 @@ mod tests {
         assert!(String::from_utf8_lossy(&moved).contains("E:\\\\Projects\\\\B"));
         assert!(fs.exists(Path::new("E:/Projects/B/f.txt")));
         assert!(!fs.exists(Path::new("E:/Projects/A/f.txt")));
+    }
+
+    #[test]
+    fn apply_verified_rolls_back_on_failure() {
+        let fs = MemoryFileSystem::new();
+        let orig = b"{\"cwd\":\"E:\\\\Projects\\\\A\"}\n";
+        fs.write(Path::new("/h/.claude/projects/E--Projects-A/s.jsonl"), orig)
+            .unwrap();
+        fs.write(Path::new("E:/Projects/A/f.txt"), b"x").unwrap();
+        let mv = Move {
+            src_abs: "E:\\Projects\\A".into(),
+            dst_abs: "E:\\Projects\\B".into(),
+        };
+        let opts = PlanOpts {
+            recursive: false,
+            on_collision: Collision::Refuse,
+            force: false,
+            scope: crate::model::Scope::Standard,
+        };
+        let mut plan = build_plan(&fs, Path::new("/h"), &mv, &opts).unwrap();
+        // Inject an impossible expected count so apply's count-guard trips mid-apply (after the
+        // dir rename, before the folder move), forcing apply_verified onto its rollback path.
+        let mut injected = false;
+        for c in &mut plan.changes {
+            if let Change::RewriteFile { expected, .. } = c {
+                *expected += 999;
+                injected = true;
+            }
+        }
+        assert!(injected, "fixture must produce a RewriteFile to corrupt");
+        let aopts = ApplyOpts {
+            run_id: "T".into(),
+            auto_rollback: true,
+            force: false,
+        };
+        let err = apply_verified(&plan, &fs, Path::new("/backup"), &aopts).unwrap_err();
+        assert!(matches!(err, CpmError::VerifyFailed(_)), "{err:?}");
+        // pre-move state restored: source folder intact, dest absent, old transcript byte-restored
+        assert!(fs.exists(Path::new("E:/Projects/A/f.txt")));
+        assert!(!fs.exists(Path::new("E:/Projects/B/f.txt")));
+        assert_eq!(
+            fs.read(Path::new("/h/.claude/projects/E--Projects-A/s.jsonl"))
+                .unwrap(),
+            orig
+        );
+    }
+
+    #[test]
+    fn second_apply_is_noop() {
+        let fs = MemoryFileSystem::new();
+        fs.write(
+            Path::new("/h/.claude/projects/E--Projects-A/s.jsonl"),
+            b"{\"cwd\":\"E:\\\\Projects\\\\A\"}\n",
+        )
+        .unwrap();
+        fs.write(Path::new("E:/Projects/A/f.txt"), b"x").unwrap();
+        let mv = Move {
+            src_abs: "E:\\Projects\\A".into(),
+            dst_abs: "E:\\Projects\\B".into(),
+        };
+        let opts = PlanOpts {
+            recursive: false,
+            on_collision: Collision::Refuse,
+            force: false,
+            scope: crate::model::Scope::Standard,
+        };
+        let plan = build_plan(&fs, Path::new("/h"), &mv, &opts).unwrap();
+        let aopts = ApplyOpts {
+            run_id: "T".into(),
+            auto_rollback: true,
+            force: false,
+        };
+        apply_verified(&plan, &fs, Path::new("/backup"), &aopts).unwrap();
+        // After a completed move the dest folder exists, so re-planning trips the guard:
+        // that DestinationExists is the v1 idempotency signal.
+        let err = build_plan(&fs, Path::new("/h"), &mv, &opts).unwrap_err();
+        assert!(
+            matches!(err, crate::error::CpmError::DestinationExists(_)),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn corrupt_claude_json_hard_fails_before_writing() {
+        let fs = MemoryFileSystem::new();
+        fs.write(Path::new("/h/.claude.json"), b"{ not json")
+            .unwrap();
+        fs.write(
+            Path::new("/h/.claude/projects/E--Projects-A/s.jsonl"),
+            b"{\"cwd\":\"E:\\\\Projects\\\\A\"}\n",
+        )
+        .unwrap();
+        fs.write(Path::new("E:/Projects/A/f.txt"), b"x").unwrap();
+        let mv = Move {
+            src_abs: "E:\\Projects\\A".into(),
+            dst_abs: "E:\\Projects\\B".into(),
+        };
+        let opts = PlanOpts {
+            recursive: false,
+            on_collision: Collision::Refuse,
+            force: false,
+            scope: crate::model::Scope::Standard,
+        };
+        let err = build_plan(&fs, Path::new("/h"), &mv, &opts).unwrap_err();
+        assert!(matches!(err, CpmError::UnrecognizedFormat(_)));
+        assert!(!fs.exists(Path::new("E:/Projects/B/f.txt"))); // nothing moved
     }
 }
