@@ -124,8 +124,30 @@ impl Store for PluginState {
         }])
     }
 
-    fn verify(&self, _ctx: &Ctx, _mv: &Move) -> Result<Vec<VerifyResult>> {
-        Ok(vec![])
+    fn verify(&self, ctx: &Ctx, mv: &Move) -> Result<Vec<VerifyResult>> {
+        let old_hash = state_hash(&mv.src_abs);
+        let data = ctx.home.join(".claude").join("plugins").join("data");
+        let mut old_found = false;
+        'outer: for plugin in ctx.fs.read_dir(&data).unwrap_or_default() {
+            let state = plugin.join("state");
+            for entry in ctx.fs.read_dir(&state).unwrap_or_default() {
+                if let Some(name) = entry.file_name().and_then(|n| n.to_str()) {
+                    if name.ends_with(&format!("-{old_hash}")) {
+                        old_found = true;
+                        break 'outer;
+                    }
+                }
+            }
+        }
+        Ok(vec![VerifyResult {
+            check: "no plugin state dir for old path".into(),
+            ok: !old_found,
+            detail: if old_found {
+                mv.src_abs.clone()
+            } else {
+                String::new()
+            },
+        }])
     }
 }
 

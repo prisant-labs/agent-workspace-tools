@@ -156,8 +156,44 @@ impl Store for ClaudeJson {
         Ok(vec![])
     }
 
-    fn verify(&self, _ctx: &Ctx, _mv: &Move) -> Result<Vec<VerifyResult>> {
-        Ok(vec![])
+    fn verify(&self, ctx: &Ctx, mv: &Move) -> Result<Vec<VerifyResult>> {
+        let p = Self::path(ctx);
+        if !ctx.fs.exists(&p) {
+            return Ok(vec![]);
+        }
+        let bytes = ctx.fs.read(&p)?;
+        let v = match serde_json::from_slice::<serde_json::Value>(&bytes) {
+            Ok(v) => v,
+            Err(_) => {
+                return Ok(vec![VerifyResult {
+                    check: "claude.json parses".into(),
+                    ok: false,
+                    detail: p.to_string_lossy().into_owned(),
+                }]);
+            }
+        };
+        let old = normalize_path(&mv.src_abs);
+        let old_key_found = v
+            .get("projects")
+            .and_then(|x| x.as_object())
+            .map(|obj| obj.keys().any(|k| normalize_path(k) == old))
+            .unwrap_or(false);
+        Ok(vec![
+            VerifyResult {
+                check: "claude.json parses".into(),
+                ok: true,
+                detail: String::new(),
+            },
+            VerifyResult {
+                check: "no projects key for old path".into(),
+                ok: !old_key_found,
+                detail: if old_key_found {
+                    mv.src_abs.clone()
+                } else {
+                    String::new()
+                },
+            },
+        ])
     }
 }
 
