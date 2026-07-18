@@ -43,13 +43,13 @@ fn home_of(cli: &Cli) -> Option<PathBuf> {
 }
 
 fn print_doctor(rep: &cpm_core::doctor::DoctorReport, json: bool) {
+    let render = |s: &cpm_core::model::Stale| serde_json::json!({ "store": s.store, "reference": s.reference, "location": s.location });
     if json {
         println!(
             "{}",
             serde_json::json!({
-                "stale": rep.stale.iter().map(|s| serde_json::json!({
-                    "store": s.store, "reference": s.reference, "location": s.location
-                })).collect::<Vec<_>>(),
+                "stale": rep.stale.iter().map(render).collect::<Vec<_>>(),
+                "report_only": rep.report_only.iter().map(render).collect::<Vec<_>>(),
                 "unresolved": rep.unresolved.iter()
                     .map(|p| p.to_string_lossy()).collect::<Vec<_>>(),
             })
@@ -58,6 +58,13 @@ fn print_doctor(rep: &cpm_core::doctor::DoctorReport, json: bool) {
     }
     println!("Stale references: {}", rep.stale.len());
     for s in &rep.stale {
+        println!("  [{}] {} @ {}", s.store, s.reference, s.location);
+    }
+    // Report-only findings live in regions no adapter owns, so they are surfaced but never
+    // rewritten. Kept under their own heading so the "Stale references" count above stays a
+    // count of what the tool can actually fix, not a mix of fixable state and mere mentions.
+    println!("Report only (never rewritten): {}", rep.report_only.len());
+    for s in &rep.report_only {
         println!("  [{}] {} @ {}", s.store, s.reference, s.location);
     }
     // Unresolvable dirs are not a fault to fix - they are dirs whose transcripts never

@@ -11,7 +11,12 @@ use crate::stores::{registry, sweep::sweep_for};
 use std::path::{Path, PathBuf};
 
 pub struct DoctorReport {
+    /// Path-keyed references an adapter owns and Phase 5 can rewrite in place.
     pub stale: Vec<Stale>,
+    /// Findings from the sweep of unowned regions. Surfaced for the user's awareness but
+    /// never rewritten - kept in a separate vector so the rewrite path (which consumes
+    /// `stale`) is structurally incapable of touching a region no adapter understands.
+    pub report_only: Vec<Stale>,
     pub unresolved: Vec<PathBuf>,
 }
 
@@ -49,10 +54,13 @@ pub fn doctor(fs: &dyn FileSystem, home: &Path) -> Result<DoctorReport> {
     let mut needles: Vec<String> = stale.iter().map(|s| s.reference.clone()).collect();
     needles.sort();
     needles.dedup();
-    stale.extend(sweep_for(&ctx, &needles));
+    // Sweep results are kept apart from `stale` on purpose: they name regions no adapter
+    // owns, so they are reported but must never be rewritten. See DoctorReport::report_only.
+    let report_only = sweep_for(&ctx, &needles);
 
     Ok(DoctorReport {
         stale,
+        report_only,
         unresolved: index.unresolved.clone(),
     })
 }
@@ -151,6 +159,9 @@ mod tests {
     /// doctor aggregates across adapters AND across the unowned regions the sweep covers.
     /// The live project is the discriminator: a doctor that reports everything is as
     /// useless as one that reports nothing, and only the live row proves the difference.
+    /// The sweep's finding must land in `report_only`, never in `stale`: `stale` is the
+    /// vector Phase 5 will rewrite, and an unowned region must be structurally unreachable
+    /// from that path, not merely trusted to be left alone.
     #[test]
     fn doctor_reports_dead_references_across_stores_and_leaves_the_live_one_alone() {
         let fs = MemoryFileSystem::new();
@@ -193,14 +204,25 @@ mod tests {
             stores.contains(&"claude.json"),
             "the claude.json key still names a gone path: {stores:?}"
         );
+        // The sweep finding is report-only: it must be carried out of the unowned region,
+        // but in `report_only`, not `stale` - the rewrite path must never see it.
         assert!(
-            stores.contains(&"sweep.unknown"),
-            "the sweep must carry the gone path out of the unowned region: {stores:?}"
+            !stores.contains(&"sweep.unknown"),
+            "a sweep finding must not sit in the rewritable `stale` vector: {stores:?}"
         );
         assert!(
-            rep.stale.iter().all(|s| !s.reference.contains("Live")),
-            "the live project must never be reported: {:?}",
+            rep.report_only.iter().any(|s| s.store == "sweep.unknown"),
+            "the sweep must carry the gone path out of the unowned region, into report_only: {:?}",
+            rep.report_only
+        );
+        assert!(
             rep.stale
+                .iter()
+                .chain(rep.report_only.iter())
+                .all(|s| !s.reference.contains("Live")),
+            "the live project must never be reported: stale={:?} report_only={:?}",
+            rep.stale,
+            rep.report_only
         );
     }
 }
