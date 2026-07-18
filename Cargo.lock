@@ -137,6 +137,7 @@ dependencies = [
  "clap",
  "cpm-core",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]
