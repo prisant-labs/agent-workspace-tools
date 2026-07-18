@@ -23,6 +23,7 @@ pub struct Plan {
     pub changes: Vec<Change>,
     pub warnings: Vec<String>,
     pub nested: Vec<String>,
+    pub home: std::path::PathBuf,
 }
 
 pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) -> Result<Plan> {
@@ -88,6 +89,7 @@ pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) 
         changes,
         warnings,
         nested,
+        home: home.to_path_buf(),
     })
 }
 

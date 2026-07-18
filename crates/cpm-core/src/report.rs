@@ -1,4 +1,5 @@
 use crate::model::{Applied, VerifyResult};
+#[derive(Debug)]
 pub struct Report {
     pub run_id: String,
     pub applied: Vec<Applied>,
