@@ -16,9 +16,29 @@ use crate::model::{Change, Ctx, Hit, Move, Stale, Store, VerifyResult};
 pub struct Sweep;
 impl Sweep {
     const ID: &'static str = "sweep.unknown";
-    /// Top-level regions under `~/.claude` that have their own adapters. Matched against
-    /// the first path component relative to `~/.claude`, never as a substring.
-    const OWNED: &'static [&'static str] = &["projects", "history.jsonl"];
+    /// Top-level regions under `~/.claude` the sweep must not read. A needle match inside
+    /// any of these is never an actionable stale reference, so reading them only adds cost
+    /// and noise - and they are also most of the files under `~/.claude`, so skipping them
+    /// is what keeps `doctor` fast (the content-read of ~34k vendored + archival files was
+    /// the whole of doctor's multi-minute cold run). Matched against the FIRST path
+    /// component relative to `~/.claude`, never as a substring: a home under a directory
+    /// called `projects` must still be swept (LEAD-07). Each region is skipped for one of
+    /// three reasons:
+    ///   - owned by a dedicated adapter that already reports it, so scanning here would
+    ///     double-report: `projects` (claude.projects), `history.jsonl` (claude.history),
+    ///     and `plugins/data` under `plugins` (plugin.state).
+    ///   - archival - an old path is CORRECT by design and must never be surfaced as rot:
+    ///     `backups` (rotated .claude.json restore points) and `file-history` (Claude's own
+    ///     pre-edit file snapshots).
+    ///   - vendored - third-party checkouts that are not our state and are reinstallable:
+    ///     the rest of `plugins` (marketplaces/repos/cache).
+    const SKIP_REGIONS: &'static [&'static str] = &[
+        "projects",
+        "history.jsonl",
+        "plugins",
+        "file-history",
+        "backups",
+    ];
     const SKIP_EXT: &'static [&'static str] = &[
         "db", "sqlite", "png", "jpg", "zip", "gz", "wasm", "exe", "dll",
     ];
@@ -58,11 +78,11 @@ pub fn sweep_for(ctx: &Ctx, needles: &[String]) -> Vec<Stale> {
     let root = ctx.home.join(".claude");
     let mut out = Vec::new();
     for f in ctx.fs_walk_text(&root) {
-        // OWNED names top-level regions under ~/.claude, so match the FIRST component of
-        // the path relative to that root. A substring test over the absolute path reads
+        // SKIP_REGIONS names top-level regions under ~/.claude, so match the FIRST component
+        // of the path relative to that root. A substring test over the absolute path reads
         // the user's home as if it were ours: a home under `/data/projects/` would make
         // every file look adapter-owned and silently disable the sweep. Lowercased because
-        // the owned regions are matched case-insensitively on NTFS (LEAD-07).
+        // the skipped regions are matched case-insensitively on NTFS (LEAD-07).
         let Ok(rel) = f.strip_prefix(&root) else {
             continue;
         };
@@ -70,7 +90,7 @@ pub fn sweep_for(ctx: &Ctx, needles: &[String]) -> Vec<Stale> {
             .components()
             .next()
             .map(|c| c.as_os_str().to_string_lossy().to_lowercase());
-        if first.is_some_and(|c| Sweep::OWNED.contains(&c.as_str())) {
+        if first.is_some_and(|c| Sweep::SKIP_REGIONS.contains(&c.as_str())) {
             continue;
         }
         if let Some(ext) = f.extension().and_then(|e| e.to_str()) {
@@ -118,6 +138,56 @@ mod tests {
         };
         let stale = sweep_for(&ctx, &["E:\\Gone\\project".into()]);
         assert!(stale.iter().any(|s| s.reference.contains("Gone")));
+    }
+
+    /// The sweep must NOT read `plugins/`, `file-history/`, or `backups/`. A needle match
+    /// inside any of them is never actionable rot: backups and file-history keep old paths
+    /// BY DESIGN (a rotated config or a pre-edit snapshot is supposed to name where things
+    /// were), plugins/data has its own adapter, and the rest of plugins/ is vendored. Only a
+    /// file in a region no adapter owns and no archive protects is genuine residue. Positive
+    /// and negative live in one fixture on purpose: a sweep that skipped EVERYTHING would
+    /// pass a test that only checked the three archives were quiet, so the lone genuine hit
+    /// is the discriminator (the C-2 lesson).
+    #[test]
+    fn archival_and_vendored_regions_are_skipped_reporting_only_genuine_residue() {
+        let fs = MemoryFileSystem::new();
+        let body = b"last opened E:\\Gone\\project ok";
+        // Three regions that must be skipped, each the shape it takes on a real machine:
+        fs.write(
+            Path::new("/h/.claude/plugins/repos/some-plugin/notes.txt"),
+            body,
+        )
+        .unwrap();
+        fs.write(Path::new("/h/.claude/file-history/sess-1/abc123@v2"), body)
+            .unwrap();
+        fs.write(
+            Path::new("/h/.claude/backups/.claude.json.backup.1784334143067"),
+            body,
+        )
+        .unwrap();
+        // One region that is genuinely unowned residue and MUST still be reported.
+        fs.write(Path::new("/h/.claude/stray-rename.log"), body)
+            .unwrap();
+
+        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let ctx = Ctx {
+            fs: &fs,
+            home: PathBuf::from("/h"),
+            index: &idx,
+            scope: crate::model::Scope::Standard,
+        };
+        let stale = sweep_for(&ctx, &["E:\\Gone\\project".into()]);
+
+        let locations: Vec<&str> = stale.iter().map(|s| s.location.as_str()).collect();
+        assert_eq!(
+            stale.len(),
+            1,
+            "only the genuine unowned residue may be reported: {locations:?}"
+        );
+        assert!(
+            stale[0].location.contains("stray-rename.log"),
+            "the single report must be the unowned log, not an archive: {locations:?}"
+        );
     }
 
     /// The adapter-owned regions are `~/.claude/projects/**` and `~/.claude/history.jsonl`,
