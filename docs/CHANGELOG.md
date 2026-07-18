@@ -3,6 +3,28 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-07-17 - Phases 4-5 shipped; sweep scope resolved; doctor made fast
+
+Phase 4 (doctor + scan engine and the `cpm` CLI, commits `afc8ecf`, `9c824e0`) and Phase 5
+(the anchored rewrite engine, commit `76226bc`) landed on `main`. Phase 5's golden test
+reproduces the reference-move counts exactly (1467 + 588 + 27 = 2082) against the real 9 MB
+fixture while asserting that package and branch mentions come through byte-identical - the
+tool's "changes exactly the paths and nothing else" claim, now under test.
+
+The Phase 3 review's open sweep-scope question was resolved (commit `e068a7e`). The sweep now
+skips the owned, archival, and vendored regions (`plugins/`, `file-history/`, `backups/`): a
+path match inside a backup or a file-history snapshot is correct by design, not rot, so
+reporting it was the same "a match is not staleness" error as the C-1 audit bug, one layer up.
+This cut `doctor` from ~345s to ~8s (it had been content-reading ~34k files, ~29k of them
+vendored plugin files) and its sweep findings from 52 to 1. Sweep results moved from the
+`stale` vector to a new `DoctorReport.report_only` vector, so the Phase 6 rewrite path cannot
+reach an unowned region.
+
+Doc impact: `docs/ROADMAP.md` Section 7 (Current status) updated from "execute Phase 1" to
+Phases 1-5 complete, the doctor honesty checkpoint passed, and Phase 6 next. `docs/DESIGN.md`
+store table sweep row updated to name the skipped regions and the report-only split. The
+v0.1.0 milestone gate (the doctor honesty checkpoint) is now met and the tag is ready to cut.
+
 ## 2026-07-17 - Project renamed to agent-workspace-tools; first decision record
 
 The project is renamed from `claude-project-mover` to `agent-workspace-tools`. The

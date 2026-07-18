@@ -184,7 +184,7 @@ each variant carrying expected counts so apply refuses when reality disagrees:
 | `claude.json.githubRepoPaths` | `~/.claude.json githubRepoPaths{}` | REWRITE-VALUE | array values, 6 stale today |
 | `claude.history` | `~/.claude/history.jsonl` | REWRITE | `project` field, 11 stale today |
 | `plugin.state.dirs` | `plugins/data/*/state/<base>-<sha256[:16]>/` | RENAME | hash recomputed from new path |
-| `sweep.unknown` | everything else under `~/.claude` | REPORT ONLY | structurally cannot write |
+| `sweep.unknown` | unowned regions under `~/.claude`, skipping `projects`, `history.jsonl`, `plugins`, `file-history`, `backups` | REPORT ONLY | structurally cannot write; findings land in `DoctorReport.report_only`, never `stale` |
 
 ### Rewrite tiers (rewrite indices, not records)
 
