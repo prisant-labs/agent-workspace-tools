@@ -113,10 +113,26 @@ as its first effort.
 - Every doc change lands with a `docs/CHANGELOG.md` entry; session logs go to
   `_agent-context/session-log/`.
 
-## 7. Current status (2026-07-11)
+## 7. Current status (2026-07-17)
 
-Design + TDD plan complete, audited, and repaired. Release scaffolding created.
-Repo hygiene (README, LICENSE, .gitignore, AGENTS.md, CLAUDE.md, docs/index.md)
-landed. Next action: execute Phase 1 (Tasks 1.1-1.3) toward the doctor milestone.
-Open maintainer decisions are tracked in the release plan's Decisions section
-(v0.1.0 tag ceremony; one-time manual archive copy destination; P10/P11 timing).
+**Code: Phases 1-5 complete on `main`, pushed.** Phase 1 (workspace scaffold, FileSystem
+trait, sanitized fixtures, CI gates), Phase 2 (path encoding + reverse index), Phase 3
+(six adapter read paths), Phase 4 (doctor + scan engine and the `cpm` CLI), and Phase 5
+(anchored rewrite engine: `anchored_rewrite` + `build_path_rules`). 42 tests pass, clippy
+and fmt clean.
+
+**The doctor honesty checkpoint has passed on the real machine.** `cpm doctor` reports the
+hand-verified residue (stale `githubRepoPaths`, stale `history.jsonl` values, the orphaned
+plugin dir) and leaves live state alone, so the v0.1.0 gate is met and Phase-5 write code
+was cleared to land. v0.1.0 is ready to tag when the maintainer runs the ceremony.
+
+**Sweep scope resolved (2026-07-17).** The sweep now skips vendored and archival regions
+(`plugins/`, `file-history/`, `backups/`), where an old path is correct by design rather
+than rot. This cut `doctor` from ~345s to ~8s and its non-actionable findings from 52 to 1,
+and sweep results moved to `DoctorReport.report_only` so the Phase-6 rewrite path is
+structurally unable to touch a region no adapter owns.
+
+**Next action: Phase 6 (plan + guards)** - the adapter `plan()` methods and `build_plan`,
+the first phase that assembles `Change` objects toward the write path. Open maintainer
+decisions remain tracked in the release plan's Decisions section (v0.1.0 tag ceremony;
+one-time manual archive copy destination; P10/P11 timing).
