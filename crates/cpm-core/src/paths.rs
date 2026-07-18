@@ -13,6 +13,32 @@ pub fn normalize_path(abs: &str) -> String {
     abs.replace('\\', "/").to_lowercase()
 }
 
+/// Given an existing key that matches src (in some slash/case variant), produce the
+/// destination key preserving that variant's separator style.
+pub fn dst_key(existing: &str, src_abs: &str, dst_abs: &str) -> String {
+    let uses_fwd = existing.contains('/') && !existing.contains('\\');
+    let src_style = if uses_fwd {
+        src_abs.replace('\\', "/")
+    } else {
+        src_abs.to_string()
+    };
+    let dst_style = if uses_fwd {
+        dst_abs.replace('\\', "/")
+    } else {
+        dst_abs.to_string()
+    };
+    // existing may differ from src only in case/separator; swap the src portion for dst
+    if existing.len() >= src_style.len() {
+        format!(
+            "{}{}",
+            dst_style,
+            &existing[src_style.len().min(existing.len())..]
+        )
+    } else {
+        dst_style
+    }
+}
+
 /// True when two absolute paths live on the same volume.
 ///
 /// Windows drive-letter paths compare by drive (`E:`), and UNC paths compare by

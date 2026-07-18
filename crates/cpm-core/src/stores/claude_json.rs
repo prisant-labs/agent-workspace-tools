@@ -131,7 +131,28 @@ impl Store for ClaudeJson {
         Ok(stale)
     }
 
-    fn plan(&self, _ctx: &Ctx, _mv: &Move, _hit: &Hit) -> Result<Vec<Change>> {
+    fn plan(&self, _ctx: &Ctx, mv: &Move, hit: &Hit) -> Result<Vec<Change>> {
+        let p = hit.target.clone();
+        if let Some(rest) = hit.detail.strip_prefix("projects key ") {
+            let to = crate::paths_dst_key(rest, &mv.src_abs, &mv.dst_abs);
+            return Ok(vec![Change::RenameJsonKey {
+                path: p,
+                from: format!("\"{rest}\":"),
+                to: format!("\"{to}\":"),
+                expected: 1,
+            }]);
+        }
+        if hit.detail.starts_with("githubRepoPaths") {
+            // detail formatted as: githubRepoPaths[slug] = <value>
+            let value = hit.detail.split(" = ").nth(1).unwrap().to_string();
+            let to = crate::paths_dst_key(&value, &mv.src_abs, &mv.dst_abs);
+            return Ok(vec![Change::RewriteJsonArrayValue {
+                path: p,
+                from: format!("\"{value}\""),
+                to: format!("\"{to}\""),
+                expected: 1,
+            }]);
+        }
         Ok(vec![])
     }
 
@@ -185,6 +206,46 @@ mod tests {
         let hits = ClaudeJson.detect(&ctx, &mv).unwrap();
         // 2 key variants + 1 githubRepoPaths element
         assert_eq!(hits.len(), 3);
+    }
+
+    #[test]
+    fn plan_emits_key_rename_and_array_value_rewrite() {
+        let fs = MemoryFileSystem::new();
+        let json =
+            r#"{"projects":{"E:\\Projects\\A":{}},"githubRepoPaths":{"o/r":["E:\\Projects\\A"]}}"#;
+        fs.write(Path::new("/h/.claude.json"), json.as_bytes())
+            .unwrap();
+        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let ctx = Ctx {
+            fs: &fs,
+            home: PathBuf::from("/h"),
+            index: &idx,
+            scope: crate::model::Scope::Standard,
+        };
+        let mv = Move {
+            src_abs: "E:\\Projects\\A".into(),
+            dst_abs: "E:\\Projects\\B".into(),
+        };
+        let hits = ClaudeJson.detect(&ctx, &mv).unwrap();
+        assert_eq!(hits.len(), 2);
+        let key_hit = hits
+            .iter()
+            .find(|h| h.detail.starts_with("projects key"))
+            .unwrap();
+        let arr_hit = hits
+            .iter()
+            .find(|h| h.detail.starts_with("githubRepoPaths"))
+            .unwrap();
+        let key_changes = ClaudeJson.plan(&ctx, &mv, key_hit).unwrap();
+        let arr_changes = ClaudeJson.plan(&ctx, &mv, arr_hit).unwrap();
+        assert!(matches!(
+            key_changes[0],
+            crate::model::Change::RenameJsonKey { .. }
+        ));
+        assert!(matches!(
+            arr_changes[0],
+            crate::model::Change::RewriteJsonArrayValue { .. }
+        ));
     }
 
     #[test]

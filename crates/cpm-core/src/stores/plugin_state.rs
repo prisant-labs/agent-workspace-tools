@@ -111,8 +111,22 @@ impl Store for PluginState {
         Ok(stale)
     }
 
-    fn plan(&self, _ctx: &Ctx, _mv: &Move, _hit: &Hit) -> Result<Vec<Change>> {
-        Ok(vec![])
+    fn plan(&self, _ctx: &Ctx, mv: &Move, hit: &Hit) -> Result<Vec<Change>> {
+        // Convention <basename>-<sha256(abs)[:16]> (DESIGN.md Section 2 item 4). BOTH parts
+        // derive from the DESTINATION: a plugin recomputing state for the new path looks for
+        // basename(dst)-hash(dst), so keeping the OLD basename would re-orphan the dir (LEAD-04).
+        let basename = |p: &str| {
+            p.rsplit(['\\', '/'])
+                .next()
+                .unwrap_or(p)
+                .to_string()
+        };
+        let new_name = format!("{}-{}", basename(&mv.dst_abs), state_hash(&mv.dst_abs));
+        let parent = hit.target.parent().unwrap().to_path_buf();
+        Ok(vec![Change::RenameDir {
+            from: hit.target.clone(),
+            to: parent.join(new_name),
+        }])
     }
 
     fn verify(&self, _ctx: &Ctx, _mv: &Move) -> Result<Vec<VerifyResult>> {
@@ -125,7 +139,7 @@ mod tests {
     use super::*;
     use crate::fs::{FileSystem, MemoryFileSystem};
     use crate::index::ProjectIndex;
-    use crate::model::Ctx;
+    use crate::model::{Ctx, Move};
     use std::path::{Path, PathBuf};
 
     #[test]
@@ -144,6 +158,36 @@ mod tests {
             "{{\"type\":\"user\",\"cwd\":\"{}\"}}\n",
             cwd.replace('\\', "\\\\")
         )
+    }
+
+    #[test]
+    fn plan_renames_state_dir_to_destination_basename_and_hash() {
+        let fs = MemoryFileSystem::new();
+        let src_suffix = state_hash("E:\\Projects\\A");
+        let state_dir_path =
+            format!("/h/.claude/plugins/data/codex/state/A-{src_suffix}/state.json");
+        fs.write(Path::new(&state_dir_path), b"{}").unwrap();
+        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let ctx = Ctx {
+            fs: &fs,
+            home: PathBuf::from("/h"),
+            index: &idx,
+            scope: crate::model::Scope::Standard,
+        };
+        let mv = Move {
+            src_abs: "E:\\Projects\\A".into(),
+            dst_abs: "E:\\Projects\\B".into(),
+        };
+        let hits = PluginState.detect(&ctx, &mv).unwrap();
+        assert_eq!(hits.len(), 1, "detect found no hits");
+        let changes = PluginState.plan(&ctx, &mv, &hits[0]).unwrap();
+        let expected_suffix = format!("B-{}", state_hash("E:\\Projects\\B"));
+        if let crate::model::Change::RenameDir { to, .. } = &changes[0] {
+            let name = to.file_name().unwrap().to_str().unwrap();
+            assert!(name.ends_with(&expected_suffix), "got: {name}");
+        } else {
+            panic!("expected RenameDir");
+        }
     }
 
     /// A state dir is an orphan only when we can EXPLAIN it: its suffix is the hash of
