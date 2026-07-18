@@ -119,8 +119,30 @@ impl Store for ClaudeHistory {
         }])
     }
 
-    fn verify(&self, _ctx: &Ctx, _mv: &Move) -> Result<Vec<VerifyResult>> {
-        Ok(vec![])
+    fn verify(&self, ctx: &Ctx, mv: &Move) -> Result<Vec<VerifyResult>> {
+        let p = Self::path(ctx);
+        if !ctx.fs.exists(&p) {
+            return Ok(vec![]);
+        }
+        let bytes = ctx.fs.read(&p)?;
+        let text = std::str::from_utf8(&bytes)
+            .map_err(|e| CpmError::UnrecognizedFormat(format!("history.jsonl: {e}")))?;
+        let old = normalize_path(&mv.src_abs);
+        let count = text
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .filter(|v| {
+                v.get("project")
+                    .and_then(|x| x.as_str())
+                    .map(|pr| normalize_path(pr) == old)
+                    .unwrap_or(false)
+            })
+            .count();
+        Ok(vec![VerifyResult {
+            check: "zero history lines for old path".into(),
+            ok: count == 0,
+            detail: format!("{count} lines"),
+        }])
     }
 }
 

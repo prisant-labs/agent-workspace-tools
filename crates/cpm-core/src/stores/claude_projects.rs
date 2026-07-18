@@ -117,8 +117,46 @@ impl Store for ClaudeProjects {
         Ok(changes)
     }
 
-    fn verify(&self, _ctx: &Ctx, _mv: &Move) -> Result<Vec<VerifyResult>> {
-        Ok(vec![])
+    fn verify(&self, ctx: &Ctx, mv: &Move) -> Result<Vec<VerifyResult>> {
+        use crate::paths::encode_project_dir;
+        let new_dir = ctx
+            .home
+            .join(".claude")
+            .join("projects")
+            .join(encode_project_dir(&mv.dst_abs));
+        let mut out = vec![VerifyResult {
+            check: "new projects dir exists".into(),
+            ok: ctx.fs.is_dir(&new_dir),
+            detail: new_dir.to_string_lossy().into_owned(),
+        }];
+        let old_cwd = format!(r#""cwd":"{}""#, mv.src_abs.replace('\\', "\\\\"));
+        let mut stale = 0usize;
+        for child in ctx.fs.read_dir(&new_dir).unwrap_or_default() {
+            if child.extension().and_then(|e| e.to_str()) == Some("jsonl") {
+                let bytes = ctx.fs.read(&child)?;
+                let text = std::str::from_utf8(&bytes).map_err(|e| {
+                    crate::error::CpmError::UnrecognizedFormat(format!("{}: {e}", child.display()))
+                })?;
+                stale += text.matches(&old_cwd).count();
+                for l in text.lines() {
+                    if !l.trim().is_empty() && serde_json::from_str::<serde_json::Value>(l).is_err()
+                    {
+                        out.push(VerifyResult {
+                            check: "transcript line parses".into(),
+                            ok: false,
+                            detail: child.to_string_lossy().into_owned(),
+                        });
+                        break;
+                    }
+                }
+            }
+        }
+        out.push(VerifyResult {
+            check: "zero old cwd in moved transcripts".into(),
+            ok: stale == 0,
+            detail: format!("{stale} stale"),
+        });
+        Ok(out)
     }
 }
 

@@ -9,6 +9,8 @@ pub mod paths;
 pub mod plan;
 pub mod report;
 pub mod rewrite;
+pub mod rollback;
 pub mod stores;
+pub mod verify;
 
 pub use paths::dst_key as paths_dst_key;
