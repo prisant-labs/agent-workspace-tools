@@ -4,6 +4,7 @@ use clap::{Parser, Subcommand};
 use cpm_core::apply::{apply_verified, ApplyOpts};
 use cpm_core::doctor::{doctor, scan};
 use cpm_core::error::CpmError;
+use cpm_core::fs::FileSystem;
 use cpm_core::fs::RealFileSystem;
 use cpm_core::model::{Move, Scope};
 use cpm_core::plan::{build_plan, render_plan, Collision, PlanOpts};
@@ -51,6 +52,12 @@ struct Cli {
 enum Cmd {
     /// Report path-keyed state that references folders that no longer exist
     Doctor,
+    /// Enumerate every project Claude has state for, with session counts and health
+    List {
+        /// Write an HTML inventory to this path instead of printing a table
+        #[arg(long)]
+        html: Option<PathBuf>,
+    },
     /// List all state that references a project's absolute path
     Scan {
         #[arg(long)]
@@ -174,11 +181,56 @@ fn pick_run_id() -> String {
     )
 }
 
+fn health_to_str(h: &cpm_core::list::Health) -> &'static str {
+    match h {
+        cpm_core::list::Health::Ok => "ok",
+        cpm_core::list::Health::Stale => "stale",
+        cpm_core::list::Health::Unresolved => "unresolved",
+    }
+}
+
 fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> cpm_core::error::Result<()> {
     match &cli.cmd {
         Cmd::Doctor => {
             let r = doctor(fs, home)?;
             print_doctor(&r, cli.json);
+            Ok(())
+        }
+        Cmd::List { html } => {
+            let now_secs = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            let recs = cpm_core::list::list(fs, home, now_secs);
+            if cli.json {
+                let arr: Vec<_> = recs
+                    .iter()
+                    .map(|r| {
+                        serde_json::json!({
+                            "cwd": r.cwd,
+                            "encoded_dir": r.encoded_dir,
+                            "sessions": r.sessions,
+                            "bytes": r.bytes,
+                            "oldest_days": r.oldest_days,
+                            "newest_days": r.newest_days,
+                            "json_keys": r.json_keys,
+                            "github_paths": r.github_paths,
+                            "history_lines": r.history_lines,
+                            "plugin_dirs": r.plugin_dirs,
+                            "todos": r.footprint.todos,
+                            "file_history": r.footprint.file_history,
+                            "health": health_to_str(&r.health),
+                        })
+                    })
+                    .collect();
+                println!("{}", serde_json::json!(arr));
+            } else {
+                print!("{}", cpm_core::list::render_table(&recs));
+            }
+            if let Some(path) = html {
+                let content = cpm_core::list::render_html(&recs);
+                fs.write(path, content.as_bytes())?;
+            }
             Ok(())
         }
         Cmd::Scan { src } => {

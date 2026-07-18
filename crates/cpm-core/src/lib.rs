@@ -4,6 +4,7 @@ pub mod doctor;
 pub mod error;
 pub mod fs;
 pub mod index;
+pub mod list;
 pub mod locks;
 pub mod model;
 pub mod paths;
@@ -11,6 +12,7 @@ pub mod plan;
 pub mod report;
 pub mod rewrite;
 pub mod rollback;
+pub mod sessions;
 pub mod stores;
 pub mod verify;
 

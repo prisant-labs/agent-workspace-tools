@@ -14,6 +14,7 @@ pub trait FileSystem {
     fn create_dir_all(&self, path: &Path) -> io::Result<()>;
     fn copy(&self, from: &Path, to: &Path) -> io::Result<()>;
     fn remove_dir_all(&self, path: &Path) -> io::Result<()>;
+    fn mtime_secs(&self, path: &Path) -> io::Result<u64>;
 }
 
 /// Returns the normalized path string: backslashes replaced with forward slashes.
@@ -71,6 +72,13 @@ impl FileSystem for RealFileSystem {
     fn remove_dir_all(&self, path: &Path) -> io::Result<()> {
         std::fs::remove_dir_all(path)
     }
+    fn mtime_secs(&self, path: &Path) -> io::Result<u64> {
+        Ok(std::fs::metadata(path)?
+            .modified()?
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs())
+    }
 }
 
 /// An in-memory filesystem that models NTFS case behavior:
@@ -79,18 +87,22 @@ impl FileSystem for RealFileSystem {
 ///
 /// The map is keyed by the LOWERCASED normalized path so that all lookups are
 /// case-insensitive. Each value stores the ORIGINAL-cased normalized path alongside
-/// the file bytes, so read_dir can return entries without lowercasing them.
+/// the file bytes and a mtime (Unix seconds), so read_dir can return entries without
+/// lowercasing them and mtime_secs can return the stored modification time.
 ///
 /// Overwrite policy: when a path is written again with different casing, the ORIGINAL
 /// casing is preserved (first write's casing wins). This matches NTFS behavior, where
 /// the filesystem remembers the name from the CreateFile call that first created the
 /// directory entry; subsequent opens with different casing reuse the same entry without
 /// updating the stored name.
+/// Map value: (original-cased normalized path, file bytes, mtime unix secs).
+type FsEntry = (String, Vec<u8>, u64);
+
 #[derive(Default)]
 pub struct MemoryFileSystem {
     // key   : lowercased normalized path (for case-insensitive lookup)
-    // value : (original-cased normalized path, file bytes)
-    files: Mutex<BTreeMap<String, (String, Vec<u8>)>>,
+    // value : (original-cased normalized path, file bytes, mtime unix secs)
+    files: Mutex<BTreeMap<String, FsEntry>>,
 }
 
 impl MemoryFileSystem {
@@ -98,6 +110,19 @@ impl MemoryFileSystem {
         Self {
             files: Mutex::new(BTreeMap::new()),
         }
+    }
+
+    /// Write a file with an explicit mtime (Unix seconds). Intended for tests
+    /// that need deterministic age calculations without hitting the real clock.
+    pub fn write_at(&self, path: &Path, data: &[u8], mtime: u64) {
+        let key = norm_key(path);
+        let original = norm(path);
+        let mut f = self.files.lock().unwrap();
+        let stored_orig = f
+            .get(&key)
+            .map(|(orig, _, _)| orig.clone())
+            .unwrap_or(original);
+        f.insert(key, (stored_orig, data.to_vec(), mtime));
     }
 }
 
@@ -107,7 +132,7 @@ impl FileSystem for MemoryFileSystem {
             .lock()
             .unwrap()
             .get(&norm_key(path))
-            .map(|(_, data)| data.clone())
+            .map(|(_, data, _)| data.clone())
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, norm(path)))
     }
 
@@ -121,9 +146,9 @@ impl FileSystem for MemoryFileSystem {
         // entry without updating the stored name.
         let stored_orig = f
             .get(&key)
-            .map(|(orig, _)| orig.clone())
+            .map(|(orig, _, _)| orig.clone())
             .unwrap_or(original);
-        f.insert(key, (stored_orig, data.to_vec()));
+        f.insert(key, (stored_orig, data.to_vec(), 0));
         Ok(())
     }
 
@@ -141,14 +166,14 @@ impl FileSystem for MemoryFileSystem {
             return Err(io::Error::new(io::ErrorKind::NotFound, norm(from)));
         }
         for k in moved {
-            let (orig, data) = f.remove(&k).unwrap();
+            let (orig, data, mtime) = f.remove(&k).unwrap();
             // norm_key lowercases without changing ASCII char count, so fp_key.len()
             // equals norm(from).len() and slicing orig at that offset gives the
             // original-cased suffix: "" for an exact file match, "/Child/Path" for tree entries.
             let suffix = &orig[fp_key.len()..];
             let new_key = format!("{tp_key}{}", suffix.to_lowercase());
             let new_orig = format!("{tp}{suffix}");
-            f.insert(new_key, (new_orig, data));
+            f.insert(new_key, (new_orig, data, mtime));
         }
         Ok(())
     }
@@ -173,7 +198,7 @@ impl FileSystem for MemoryFileSystem {
         let prefix_key = format!("{}/", norm_key(path));
         let f = self.files.lock().unwrap();
         let mut kids: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-        for (k, (orig, _)) in f.iter() {
+        for (k, (orig, _, _)) in f.iter() {
             if k.strip_prefix(&prefix_key).is_some() {
                 // norm_key lowercases without changing ASCII char count, so prefix_key.len()
                 // is the same byte offset in both the lowercase key and the original-cased path.
@@ -202,6 +227,15 @@ impl FileSystem for MemoryFileSystem {
         let mut f = self.files.lock().unwrap();
         f.retain(|k, _| *k != p && !k.starts_with(&format!("{p}/")));
         Ok(())
+    }
+
+    fn mtime_secs(&self, path: &Path) -> io::Result<u64> {
+        self.files
+            .lock()
+            .unwrap()
+            .get(&norm_key(path))
+            .map(|(_, _, mtime)| *mtime)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, norm(path)))
     }
 }
 
