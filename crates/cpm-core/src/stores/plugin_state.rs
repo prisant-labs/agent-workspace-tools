@@ -115,12 +115,7 @@ impl Store for PluginState {
         // Convention <basename>-<sha256(abs)[:16]> (DESIGN.md Section 2 item 4). BOTH parts
         // derive from the DESTINATION: a plugin recomputing state for the new path looks for
         // basename(dst)-hash(dst), so keeping the OLD basename would re-orphan the dir (LEAD-04).
-        let basename = |p: &str| {
-            p.rsplit(['\\', '/'])
-                .next()
-                .unwrap_or(p)
-                .to_string()
-        };
+        let basename = |p: &str| p.rsplit(['\\', '/']).next().unwrap_or(p).to_string();
         let new_name = format!("{}-{}", basename(&mv.dst_abs), state_hash(&mv.dst_abs));
         let parent = hit.target.parent().unwrap().to_path_buf();
         Ok(vec![Change::RenameDir {
