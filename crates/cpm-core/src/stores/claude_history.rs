@@ -82,8 +82,41 @@ impl Store for ClaudeHistory {
         Ok(stale)
     }
 
-    fn plan(&self, _ctx: &Ctx, _mv: &Move, _hit: &Hit) -> Result<Vec<Change>> {
-        Ok(vec![])
+    fn plan(&self, ctx: &Ctx, mv: &Move, hit: &Hit) -> Result<Vec<Change>> {
+        let esc = |p: &str| p.replace('\\', "\\\\");
+        let key = normalize_path(&mv.src_abs);
+        let bytes = ctx.fs.read(&hit.target)?;
+        let text = std::str::from_utf8(&bytes)
+            .map_err(|e| CpmError::UnrecognizedFormat(format!("history.jsonl: {e}")))?;
+        // One rule per DISTINCT stored `project` form that normalizes to src, each mapped to
+        // dst preserving that form's separator style (mirrors claude_json's dst_key, LEAD-03).
+        let mut forms = std::collections::BTreeSet::new();
+        for l in text.lines() {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(l) {
+                if let Some(pr) = v.get("project").and_then(|x| x.as_str()) {
+                    if normalize_path(pr) == key {
+                        forms.insert(pr.to_string());
+                    }
+                }
+            }
+        }
+        let rules: Vec<crate::rewrite::RewriteRule> = forms
+            .iter()
+            .map(|f| crate::rewrite::RewriteRule {
+                find: format!("\"project\":\"{}\"", esc(f)),
+                replace: format!(
+                    "\"project\":\"{}\"",
+                    esc(&crate::paths::dst_key(f, &mv.src_abs, &mv.dst_abs))
+                ),
+            })
+            .collect();
+        // expected = sum of dry-run counts across every variant rule
+        let (_, n) = crate::rewrite::anchored_rewrite(text, &rules);
+        Ok(vec![Change::RewriteFile {
+            path: hit.target.clone(),
+            rules,
+            expected: n,
+        }])
     }
 
     fn verify(&self, _ctx: &Ctx, _mv: &Move) -> Result<Vec<VerifyResult>> {
@@ -98,6 +131,37 @@ mod tests {
     use crate::index::ProjectIndex;
     use crate::model::{Ctx, Move};
     use std::path::{Path, PathBuf};
+
+    #[test]
+    fn plan_emits_one_rule_per_variant_form() {
+        let fs = MemoryFileSystem::new();
+        // two DISTINCT stored forms of the same path: backslash and forward-slash
+        let body = "{\"project\":\"E:\\\\Projects\\\\A\"}\n{\"project\":\"E:/Projects/A\"}\n";
+        fs.write(Path::new("/h/.claude/history.jsonl"), body.as_bytes())
+            .unwrap();
+        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let ctx = Ctx {
+            fs: &fs,
+            home: PathBuf::from("/h"),
+            index: &idx,
+            scope: crate::model::Scope::Standard,
+        };
+        let mv = Move {
+            src_abs: "E:\\Projects\\A".into(),
+            dst_abs: "E:\\Projects\\B".into(),
+        };
+        let hit = ClaudeHistory.detect(&ctx, &mv).unwrap().remove(0);
+        let changes = ClaudeHistory.plan(&ctx, &mv, &hit).unwrap();
+        if let crate::model::Change::RewriteFile {
+            rules, expected, ..
+        } = &changes[0]
+        {
+            assert_eq!(rules.len(), 2); // one rule per distinct variant form
+            assert_eq!(*expected, 2); // both lines rewritten
+        } else {
+            panic!("expected RewriteFile");
+        }
+    }
 
     #[test]
     fn detect_finds_matching_project_lines() {

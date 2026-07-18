@@ -6,3 +6,5 @@ pub mod model;
 pub mod paths;
 pub mod rewrite;
 pub mod stores;
+
+pub use paths::dst_key as paths_dst_key;
