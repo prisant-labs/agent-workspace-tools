@@ -113,26 +113,41 @@ as its first effort.
 - Every doc change lands with a `docs/CHANGELOG.md` entry; session logs go to
   `_agent-context/session-log/`.
 
-## 7. Current status (2026-07-17)
+## 7. Current status (2026-07-20)
 
-**Code: Phases 1-5 complete on `main`, pushed.** Phase 1 (workspace scaffold, FileSystem
-trait, sanitized fixtures, CI gates), Phase 2 (path encoding + reverse index), Phase 3
-(six adapter read paths), Phase 4 (doctor + scan engine and the `cpm` CLI), and Phase 5
-(anchored rewrite engine: `anchored_rewrite` + `build_path_rules`). 42 tests pass, clippy
-and fmt clean.
+**v1.0 is feature-complete on `main`, pushed.** All engine phases (1-9) plus the retention
+features (13-15) are implemented, committed, and pushed; `main` is level with origin. 82
+tests pass, clippy and fmt clean.
 
-**The doctor honesty checkpoint has passed on the real machine.** `cpm doctor` reports the
-hand-verified residue (stale `githubRepoPaths`, stale `history.jsonl` values, the orphaned
-plugin dir) and leaves live state alone, so the v0.1.0 gate is met and Phase-5 write code
-was cleared to land. v0.1.0 is ready to tag when the maintainer runs the ceremony.
+- Phases 1-4: scaffold + FileSystem trait + reverse index + six adapter read paths +
+  `doctor`/`scan` and the `cpm` CLI. This is the v0.1.0 read-only milestone; the doctor
+  honesty checkpoint passed on the real machine (reports the hand-verified residue, leaves
+  live state alone).
+- Phase 5: anchored rewrite engine (count-checked, byte-preserving). The golden test
+  reproduces the reference-move counts (1467 + 588 + 27 = 2082) while proving package and
+  branch mentions come through byte-identical.
+- Phases 6-9: plan + guards, backup + transactional apply, verify + auto-rollback + lock
+  detection + hard-fail, and the full CLI (`plan`/`apply`/`verify`/`rollback`).
+- F13-F15: `cpm list` inventory (health flags + 30-day-cliff ages), `cpm archive`
+  (content-hash incremental + cumulative manifest + SessionEnd retention hook), `cpm
+  associate` (re-associate and/or from-scoped export, working on a gone source folder).
 
-**Sweep scope resolved (2026-07-17).** The sweep now skips vendored and archival regions
-(`plugins/`, `file-history/`, `backups/`), where an old path is correct by design rather
-than rot. This cut `doctor` from ~345s to ~8s and its non-actionable findings from 52 to 1,
-and sweep results moved to `DoctorReport.report_only` so the Phase-6 rewrite path is
-structurally unable to touch a region no adapter owns.
+**Sweep scope resolved.** The sweep skips vendored and archival regions (`plugins/`,
+`file-history/`, `backups/`) where an old path is correct by design, cutting `doctor` from
+~345s to ~8s; sweep results live in `DoctorReport.report_only`, structurally out of the
+rewrite path.
 
-**Next action: Phase 6 (plan + guards)** - the adapter `plan()` methods and `build_plan`,
-the first phase that assembles `Change` objects toward the write path. Open maintainer
-decisions remain tracked in the release plan's Decisions section (v0.1.0 tag ceremony;
-one-time manual archive copy destination; P10/P11 timing).
+**Adversarial review pass.** Per-feature Codex adversarial reviews were run; they surfaced
+and drove fixes for fail-silent read errors in `list`/`ProjectIndex` (now fail loud on a real
+I/O error while a missing projects dir stays a valid empty result) and for the F14 archive
+manifest (now cumulative + atomic) and SessionEnd hook (now reads the hook JSON from stdin,
+which is the real Claude Code hook contract).
+
+**Remaining before the v1.0 tag (not features):** the release ceremony
+(`docs/reference/commands.md`, `docs/release-runbook.md`, README command list, and the
+signing / SmartScreen posture per CI-3 - v1.0 may ship source-first) and the manual
+acceptance run (the real reference move against a COPY of `~/.claude`).
+
+**Next major work: v2.0.0** - the Tauri + React GUI ("Taura") over the identical `cpm-core`;
+conceptual mockups exist. Open maintainer decisions remain tracked in the release plan's
+Decisions section (tag ceremony; one-time manual archive copy destination; P10/P11 timing).
