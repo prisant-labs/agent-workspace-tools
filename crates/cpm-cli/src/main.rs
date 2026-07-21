@@ -2,6 +2,7 @@ mod exit;
 
 use clap::{Parser, Subcommand};
 use cpm_core::apply::{apply_verified, ApplyOpts};
+use cpm_core::associate::{associate, AssociateOpts};
 use cpm_core::doctor::{doctor, scan};
 use cpm_core::error::CpmError;
 use cpm_core::fs::FileSystem;
@@ -88,6 +89,24 @@ enum Cmd {
     Rollback {
         #[arg(long)]
         report: PathBuf,
+    },
+    /// Re-associate session history from one project path to another, and/or export a portable copy
+    Associate {
+        /// Source project absolute path (may no longer exist on disk)
+        #[arg(long)]
+        from: String,
+        /// Destination project absolute path
+        #[arg(long)]
+        to: String,
+        /// Subdirectory under --to for the exported archive (default: .claude-sessions)
+        #[arg(long)]
+        export_subdir: Option<String>,
+        /// Disable the re-association step (export only)
+        #[arg(long)]
+        no_reassociate: bool,
+        /// Disable the export step (reassociate only)
+        #[arg(long)]
+        no_export: bool,
     },
     /// Archive Claude session state before the 30-day auto-delete window
     Archive {
@@ -191,6 +210,7 @@ fn plan_opts(cli: &Cli) -> PlanOpts {
         recursive: cli.recursive,
         on_collision,
         force: cli.force,
+        move_folder: true,
         scope,
     }
 }
@@ -338,6 +358,38 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> cpm_core::erro
             Ok(())
         }
         Cmd::Rollback { report } => rollback(report, fs),
+        Cmd::Associate {
+            from,
+            to,
+            export_subdir,
+            no_reassociate,
+            no_export,
+        } => {
+            let reassociate = !no_reassociate;
+            let export = !no_export;
+            if !reassociate && !export {
+                return Err(CpmError::Locked(
+                    "--no-reassociate and --no-export together leave nothing to do".into(),
+                ));
+            }
+            let on_collision = match cli.on_collision.as_deref() {
+                Some("keep-dest") => Collision::KeepDest,
+                Some("keep-src") => Collision::KeepSrc,
+                _ => Collision::Refuse,
+            };
+            let aopts = AssociateOpts {
+                reassociate,
+                export,
+                export_subdir: export_subdir
+                    .clone()
+                    .unwrap_or_else(|| ".claude-sessions".into()),
+                run_id: pick_run_id(),
+                on_collision,
+            };
+            let r = associate(fs, home, from, to, &aopts)?;
+            println!("associate complete: {} changes applied", r.applied.len());
+            Ok(())
+        }
         Cmd::Archive {
             archive_dir,
             session,

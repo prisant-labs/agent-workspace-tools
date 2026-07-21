@@ -6,6 +6,7 @@ use crate::paths::normalize_path;
 use crate::stores::registry;
 use std::path::Path;
 
+#[derive(Clone)]
 pub enum Collision {
     Refuse,
     KeepDest,
@@ -15,6 +16,7 @@ pub struct PlanOpts {
     pub recursive: bool,
     pub on_collision: Collision,
     pub force: bool,
+    pub move_folder: bool,
     pub scope: Scope,
 }
 #[derive(Debug)]
@@ -27,8 +29,8 @@ pub struct Plan {
 }
 
 pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) -> Result<Plan> {
-    // Guard: destination folder exists
-    if fs.exists(Path::new(&mv.dst_abs.replace('\\', "/"))) {
+    // Guard: destination folder exists (only relevant when we will move the folder there)
+    if opts.move_folder && fs.exists(Path::new(&mv.dst_abs.replace('\\', "/"))) {
         return Err(CpmError::DestinationExists(mv.dst_abs.clone()));
     }
     // Guard: worktree source (.git is a file, not a dir)
@@ -79,11 +81,13 @@ pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) 
         ));
     }
 
-    // Folder move is the LAST change (see apply ordering).
-    changes.push(Change::MoveTree {
-        from: Path::new(&mv.src_abs.replace('\\', "/")).to_path_buf(),
-        to: Path::new(&mv.dst_abs.replace('\\', "/")).to_path_buf(),
-    });
+    // Folder move is the LAST change (see apply ordering). Skipped for associate mode.
+    if opts.move_folder {
+        changes.push(Change::MoveTree {
+            from: Path::new(&mv.src_abs.replace('\\', "/")).to_path_buf(),
+            to: Path::new(&mv.dst_abs.replace('\\', "/")).to_path_buf(),
+        });
+    }
     Ok(Plan {
         mv: mv.clone(),
         changes,
@@ -146,6 +150,7 @@ mod tests {
             recursive: false,
             on_collision: Collision::Refuse,
             force: false,
+            move_folder: true,
             scope: crate::model::Scope::Standard,
         }
     }

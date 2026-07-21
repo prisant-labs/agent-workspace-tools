@@ -139,6 +139,31 @@ fn write_index(fs: &dyn FileSystem, path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Archive only the single project whose encoded dir matches `from_abs`. Used by
+/// `associate --export` so the export copies just that project, not the whole machine.
+pub fn archive_project(
+    fs: &dyn FileSystem,
+    home: &Path,
+    from_abs: &str,
+    opts: &ArchiveOpts,
+) -> Result<ArchiveReport> {
+    use crate::paths::encode_project_dir;
+    let dir = home
+        .join(".claude")
+        .join("projects")
+        .join(encode_project_dir(from_abs));
+    let mut rep = ArchiveReport {
+        copied: 0,
+        skipped: 0,
+    };
+    let mut man = Vec::new();
+    archive_project_dir(fs, home, &dir, opts, &mut man, &mut rep)?;
+    let manifest_path = opts.archive_dir.join("manifest.json");
+    write_manifest(fs, &manifest_path, &man)?;
+    write_index(fs, &opts.archive_dir.join("index.json"))?;
+    Ok(rep)
+}
+
 /// Archive a single session transcript and its associated file-history entries.
 pub fn archive_session(
     fs: &dyn FileSystem,

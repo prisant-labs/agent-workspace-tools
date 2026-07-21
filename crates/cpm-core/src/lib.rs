@@ -1,5 +1,6 @@
 pub mod apply;
 pub mod archive;
+pub mod associate;
 pub mod backup;
 pub mod doctor;
 pub mod error;

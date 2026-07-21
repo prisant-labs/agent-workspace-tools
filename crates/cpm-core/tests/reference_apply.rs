@@ -29,6 +29,7 @@ fn reference_move_end_to_end_leaves_no_old_cwd() {
         recursive: false,
         on_collision: Collision::Refuse,
         force: false,
+        move_folder: true,
         scope: Scope::Standard,
     };
     let plan = build_plan(&fs, home, &mv, &opts).unwrap();

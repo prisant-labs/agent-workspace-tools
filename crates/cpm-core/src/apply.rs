@@ -169,6 +169,7 @@ mod tests {
             recursive: false,
             on_collision: Collision::Refuse,
             force: false,
+            move_folder: true,
             scope: crate::model::Scope::Standard,
         };
         let plan = build_plan(&fs, Path::new("/h"), &mv, &opts).unwrap();
@@ -196,6 +197,7 @@ mod tests {
             recursive: false,
             on_collision: Collision::Refuse,
             force: false,
+            move_folder: true,
             scope: crate::model::Scope::Standard,
         };
         let mut plan = build_plan(&fs, Path::new("/h"), &mv, &opts).unwrap();
@@ -243,6 +245,7 @@ mod tests {
             recursive: false,
             on_collision: Collision::Refuse,
             force: false,
+            move_folder: true,
             scope: crate::model::Scope::Standard,
         };
         let plan = build_plan(&fs, Path::new("/h"), &mv, &opts).unwrap();
@@ -280,6 +283,7 @@ mod tests {
             recursive: false,
             on_collision: Collision::Refuse,
             force: false,
+            move_folder: true,
             scope: crate::model::Scope::Standard,
         };
         let err = build_plan(&fs, Path::new("/h"), &mv, &opts).unwrap_err();
