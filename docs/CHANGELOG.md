@@ -3,6 +3,36 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-07-20 - v1.0 feature-complete (Phases 6-9 + F13-F15) with adversarial-review fixes
+
+The engine and CLI are complete. Landed since the Phase 4-5 entry:
+- Phase 6 (`e7ec6d0`, `056bd84`): adapter `plan()` methods + `build_plan` (destination-exists,
+  git-worktree, and claude.json-collision guards; nested-project detection; folder move last).
+- Phase 7 (`e2aa334`): snapshot backup with a sha256 manifest, transactional count-guarded
+  `apply`, and an end-to-end golden that applies the reference move against the real 9 MB fixture.
+- Phase 8 (`a2801e8`, `c758613`): per-store + aggregate `verify`, `rollback` (pulled forward from
+  Phase 9 because `apply_verified` depends on it), `apply_verified` with auto-rollback on any
+  failure, lock detection, idempotency, and hard-fail on unrecognized formats.
+- Phase 9 (`2285784`): the full `cpm` CLI (`plan`/`apply`/`verify`/`rollback`) with the exit-code
+  contract.
+- F13 (`c31b1c0`): `cpm list` inventory (session linkage, health flags, 30-day-cliff ages).
+- F14 (`be48c94`): `cpm archive` (content-hash incremental copy, INDEX + manifest, retention hook).
+- F15 (`82a090f`): `cpm associate` (re-associate and/or from-scoped export; `PlanOpts.move_folder`).
+
+Per-feature Codex adversarial reviews were run and drove three fixes:
+- `d66c49b`: `list`/`ProjectIndex` now fail loud on a real read error (a missing projects dir still
+  yields an empty result) instead of silently reporting zero - a refuse-rather-than-guess violation.
+- `809e94e`: the archive manifest is now cumulative and atomic (it was emptied on incremental
+  reruns), and the SessionEnd retention hook reads the hook JSON from stdin (`transcript_path`),
+  the real Claude Code hook contract, rather than a nonexistent env var - so the hook actually
+  archives.
+
+Doc impact: `docs/ROADMAP.md` Section 7 rewritten from "Phase 6 next" to v1.0 feature-complete;
+`docs/reference/commands.md` (per-subcommand reference) and `docs/release-runbook.md` (tag ceremony
+plus signing/SmartScreen posture) added; `README.md` command list refreshed; `docs/index.md`
+updated. Remaining before the v1.0 tag is the release ceremony and the manual real-machine apply
+acceptance - both non-code.
+
 ## 2026-07-17 - Phases 4-5 shipped; sweep scope resolved; doctor made fast
 
 Phase 4 (doctor + scan engine and the `cpm` CLI, commits `afc8ecf`, `9c824e0`) and Phase 5

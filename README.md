@@ -2,7 +2,7 @@
 
 A deterministic, offline, Windows-native Rust CLI that relocates a project folder and migrates all Claude Code state keyed to its old absolute path.
 
-> **Pre-release - nothing installable yet.** Design and plan complete and audited 2026-07-11. Implementation starting at Phase 1.
+> **v1.0 feature-complete.** Install from source: `cargo install --path crates/cpm-cli`, or clone and `cargo build --release`. See [docs/reference/commands.md](docs/reference/commands.md) for the full command reference.
 
 ## The problem
 
@@ -30,8 +30,8 @@ CPM refuses to write until it has probed every store for a recognized format - a
 
 | Release | Contents | Status |
 |---|---|---|
-| v0.1 (Phase 4 milestone) | `cpm doctor` and `cpm scan` - read-only | Implementation starting (Phase 1) |
-| v1.0.0 | Full CLI - all mover commands (Phases 1-9) plus features F13-F15 | Planned |
+| v0.1.0 (Phase 4 milestone) | `cpm doctor` and `cpm scan` - read-only | Shipped |
+| v1.0.0 | Full CLI: mover (`plan`/`apply`/`verify`/`rollback`) plus `list`, `archive`, `associate` | Feature-complete; v1.0 tag pending |
 | v2 | Tauri 2 + React GUI over the identical core | Deferred |
 
 Full program plan: [docs/ROADMAP.md](docs/ROADMAP.md).
@@ -41,6 +41,8 @@ Full program plan: [docs/ROADMAP.md](docs/ROADMAP.md).
 | Doc | For whom | What |
 |---|---|---|
 | README (this file) | Everyone | Orientation: what CPM is, what it does, how to get started |
+| [docs/reference/commands.md](docs/reference/commands.md) | Everyone | Per-subcommand reference: flags, behavior, exit codes |
+| [docs/release-runbook.md](docs/release-runbook.md) | Maintainers | v1.0 tag ceremony checklist |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Maintainers | Program plan for v1 and v2 |
 | [docs/DESIGN.md](docs/DESIGN.md) | Engineers | Validated design: architecture, safety model, CLI surface, phase plan |
 | [docs/superpowers/plans/2026-07-10-claude-project-mover.md](docs/superpowers/plans/2026-07-10-claude-project-mover.md) | Engineers, AI agents | Executable TDD plan, task by task |
