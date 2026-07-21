@@ -36,7 +36,7 @@ pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) 
     if fs.is_file(Path::new(&git)) && !opts.force {
         return Err(CpmError::WorktreeSource(mv.src_abs.clone()));
     }
-    let index = ProjectIndex::build(fs, home);
+    let index = ProjectIndex::build(fs, home)?;
     let ctx = Ctx {
         fs,
         home: home.to_path_buf(),

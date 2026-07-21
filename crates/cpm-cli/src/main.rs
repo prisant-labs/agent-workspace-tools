@@ -201,7 +201,7 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> cpm_core::erro
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs();
-            let recs = cpm_core::list::list(fs, home, now_secs);
+            let recs = cpm_core::list::list(fs, home, now_secs)?;
             if cli.json {
                 let arr: Vec<_> = recs
                     .iter()

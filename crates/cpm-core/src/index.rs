@@ -1,7 +1,16 @@
+use crate::error::Result;
 use crate::fs::FileSystem;
 use crate::paths::normalize_path;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+
+fn read_dir_or_empty(fs: &dyn FileSystem, path: &Path) -> Result<Vec<PathBuf>> {
+    match fs.read_dir(path) {
+        Ok(d) => Ok(d),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+        Err(e) => Err(e.into()),
+    }
+}
 
 /// Read the first non-empty `cwd` value from a transcript. Scans lines (the
 /// first line is often a summary with no cwd) and validates each as JSON before
@@ -27,6 +36,7 @@ pub fn read_stored_cwd(fs: &dyn FileSystem, transcript: &Path) -> Option<String>
     None
 }
 
+#[derive(Debug)]
 pub struct ProjectIndex {
     /// normalize(cwd) -> the `projects/` dirs that resolve to it.
     pub by_cwd: HashMap<String, Vec<PathBuf>>,
@@ -45,14 +55,14 @@ pub struct ProjectIndex {
 }
 
 impl ProjectIndex {
-    pub fn build(fs: &dyn FileSystem, home: &Path) -> Self {
+    pub fn build(fs: &dyn FileSystem, home: &Path) -> Result<Self> {
         let mut by_cwd: HashMap<String, Vec<PathBuf>> = HashMap::new();
         let mut unresolved = Vec::new();
         let mut cwds = Vec::new();
         let mut ambiguous = Vec::new();
         let mut stale: HashMap<PathBuf, Vec<String>> = HashMap::new();
         let projects = home.join(".claude").join("projects");
-        let dirs = fs.read_dir(&projects).unwrap_or_default();
+        let dirs = read_dir_or_empty(fs, &projects)?;
         for dir in dirs {
             if !fs.is_dir(&dir) {
                 continue;
@@ -64,7 +74,7 @@ impl ProjectIndex {
             // to report. Stopping early both discards it and makes the answer depend
             // on which filename happens to sort first.
             let mut found: Vec<String> = Vec::new();
-            for child in fs.read_dir(&dir).unwrap_or_default() {
+            for child in read_dir_or_empty(fs, &dir)? {
                 if child.extension().and_then(|e| e.to_str()) != Some("jsonl") {
                     continue;
                 }
@@ -113,13 +123,13 @@ impl ProjectIndex {
                 }
             }
         }
-        Self {
+        Ok(Self {
             by_cwd,
             unresolved,
             cwds,
             ambiguous,
             stale,
-        }
+        })
     }
 }
 
@@ -169,7 +179,7 @@ mod tests {
             b"{\"type\":\"last-prompt\"}\n",
         )
         .unwrap();
-        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let idx = ProjectIndex::build(&fs, Path::new("/h")).unwrap();
         assert_eq!(
             idx.by_cwd.get("e:/projects/a").unwrap(),
             &vec![PathBuf::from("/h/.claude/projects/E--a")]
@@ -199,7 +209,7 @@ mod tests {
             line("E:\\Projects\\A").as_bytes(),
         )
         .unwrap();
-        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let idx = ProjectIndex::build(&fs, Path::new("/h")).unwrap();
         assert_eq!(
             idx.by_cwd.get("e:/projects/a").unwrap(),
             &vec![PathBuf::from("/h/.claude/projects/E--a")]
@@ -231,7 +241,7 @@ mod tests {
         fs.write(Path::new("E:\\Projects\\new\\proj\\.keep"), b"x")
             .unwrap();
 
-        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let idx = ProjectIndex::build(&fs, Path::new("/h")).unwrap();
         let dir = PathBuf::from("/h/.claude/projects/E--proj");
 
         assert_eq!(
@@ -287,7 +297,7 @@ mod tests {
         )
         .unwrap();
 
-        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let idx = ProjectIndex::build(&fs, Path::new("/h")).unwrap();
         let d = PathBuf::from(dir);
 
         assert_eq!(
@@ -327,7 +337,7 @@ mod tests {
         fs.write(Path::new("E:\\Projects\\Live\\.keep"), b"x")
             .unwrap();
 
-        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let idx = ProjectIndex::build(&fs, Path::new("/h")).unwrap();
         let d = PathBuf::from("/h/.claude/projects/E--proj");
         assert_eq!(
             idx.by_cwd.get("e:/projects/live").unwrap(),
@@ -353,7 +363,7 @@ mod tests {
             line("E:\\Projects\\gone-two").as_bytes(),
         )
         .unwrap();
-        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let idx = ProjectIndex::build(&fs, Path::new("/h")).unwrap();
         let d = PathBuf::from("/h/.claude/projects/E--proj");
         // Unresolvable, but the doctor still needs to say WHICH dead paths it saw.
         assert_eq!(idx.unresolved, vec![d.clone()]);
@@ -378,7 +388,7 @@ mod tests {
         fs.write(Path::new("E:\\Projects\\two\\.keep"), b"x")
             .unwrap();
 
-        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let idx = ProjectIndex::build(&fs, Path::new("/h")).unwrap();
         // Two live candidates. There is no honest winner, so refuse rather than guess.
         assert_eq!(
             idx.ambiguous,
@@ -401,12 +411,77 @@ mod tests {
         )
         .unwrap();
         // Neither path exists. We cannot tell which one the project was.
-        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let idx = ProjectIndex::build(&fs, Path::new("/h")).unwrap();
         assert_eq!(
             idx.unresolved,
             vec![PathBuf::from("/h/.claude/projects/E--proj")]
         );
         assert!(idx.by_cwd.is_empty());
         assert!(idx.ambiguous.is_empty());
+    }
+
+    struct FailingReadDir {
+        inner: MemoryFileSystem,
+        fail_on: String,
+    }
+
+    impl crate::fs::FileSystem for FailingReadDir {
+        fn read_dir(&self, path: &std::path::Path) -> std::io::Result<Vec<std::path::PathBuf>> {
+            if path.to_string_lossy().replace('\\', "/") == self.fail_on {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "denied",
+                ));
+            }
+            self.inner.read_dir(path)
+        }
+        fn read(&self, path: &std::path::Path) -> std::io::Result<Vec<u8>> {
+            self.inner.read(path)
+        }
+        fn write(&self, path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {
+            self.inner.write(path, data)
+        }
+        fn rename(&self, from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+            self.inner.rename(from, to)
+        }
+        fn exists(&self, path: &std::path::Path) -> bool {
+            self.inner.exists(path)
+        }
+        fn is_file(&self, path: &std::path::Path) -> bool {
+            self.inner.is_file(path)
+        }
+        fn is_dir(&self, path: &std::path::Path) -> bool {
+            self.inner.is_dir(path)
+        }
+        fn create_dir_all(&self, path: &std::path::Path) -> std::io::Result<()> {
+            self.inner.create_dir_all(path)
+        }
+        fn copy(&self, from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+            self.inner.copy(from, to)
+        }
+        fn remove_dir_all(&self, path: &std::path::Path) -> std::io::Result<()> {
+            self.inner.remove_dir_all(path)
+        }
+        fn mtime_secs(&self, path: &std::path::Path) -> std::io::Result<u64> {
+            self.inner.mtime_secs(path)
+        }
+    }
+
+    #[test]
+    fn build_propagates_a_real_projects_read_error() {
+        let inner = MemoryFileSystem::new();
+        let fs = FailingReadDir {
+            inner,
+            fail_on: "/h/.claude/projects".into(),
+        };
+        let err = ProjectIndex::build(&fs, std::path::Path::new("/h")).unwrap_err();
+        assert!(matches!(err, crate::error::CpmError::Io(_)), "{err:?}");
+    }
+
+    #[test]
+    fn build_treats_a_missing_projects_dir_as_empty_not_an_error() {
+        let fs = MemoryFileSystem::new(); // nothing under /h/.claude/projects
+        let idx = ProjectIndex::build(&fs, std::path::Path::new("/h")).unwrap();
+        assert!(idx.by_cwd.is_empty() && idx.unresolved.is_empty());
     }
 }

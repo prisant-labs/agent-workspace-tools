@@ -1,6 +1,7 @@
 use crate::fs::FileSystem;
 use std::path::Path;
 
+#[derive(Debug)]
 pub struct SessionFootprint {
     pub session_ids: Vec<String>,
     pub todos: usize,

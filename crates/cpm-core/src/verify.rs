@@ -12,7 +12,7 @@ pub fn verify(
     mv: &Move,
     manifest: Option<&Manifest>,
 ) -> Result<Vec<VerifyResult>> {
-    let index = ProjectIndex::build(fs, home);
+    let index = ProjectIndex::build(fs, home)?;
     let ctx = Ctx {
         fs,
         home: home.to_path_buf(),

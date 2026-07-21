@@ -35,7 +35,7 @@ fn ctx_for<'a>(fs: &'a dyn FileSystem, home: &Path, index: &'a ProjectIndex) -> 
 
 /// Report every path-keyed reference to a folder that no longer exists.
 pub fn doctor(fs: &dyn FileSystem, home: &Path) -> Result<DoctorReport> {
-    let index = ProjectIndex::build(fs, home);
+    let index = ProjectIndex::build(fs, home)?;
     let ctx = ctx_for(fs, home, &index);
 
     let mut stale = Vec::new();
@@ -67,7 +67,7 @@ pub fn doctor(fs: &dyn FileSystem, home: &Path) -> Result<DoctorReport> {
 
 /// List every reference to `src_abs`, across every store.
 pub fn scan(fs: &dyn FileSystem, home: &Path, src_abs: &str) -> Result<ScanReport> {
-    let index = ProjectIndex::build(fs, home);
+    let index = ProjectIndex::build(fs, home)?;
     let ctx = ctx_for(fs, home, &index);
 
     // detect() reads only src_abs; the empty dst is never consulted on this path.
