@@ -89,6 +89,30 @@ enum Cmd {
         #[arg(long)]
         report: PathBuf,
     },
+    /// Archive Claude session state before the 30-day auto-delete window
+    Archive {
+        /// Destination directory for archived data
+        #[arg(long)]
+        archive_dir: Option<PathBuf>,
+        /// Archive a single session transcript (path to the .jsonl file)
+        #[arg(long)]
+        session: Option<PathBuf>,
+        /// Install the cpm SessionEnd hook in ~/.claude/settings.json
+        #[arg(long)]
+        install_hook: bool,
+        /// Remove the cpm SessionEnd hook from ~/.claude/settings.json
+        #[arg(long)]
+        uninstall_hook: bool,
+        /// Set cleanupPeriodDays in ~/.claude/settings.json
+        #[arg(long)]
+        set_retention: Option<u32>,
+        /// Allow setting cleanupPeriodDays to 0 (read issues #23710 and #62272 first)
+        #[arg(long)]
+        force_zero: bool,
+        /// Request HTML rendering of archived sessions (reserved for future use)
+        #[arg(long)]
+        render: bool,
+    },
 }
 
 fn home_of(cli: &Cli) -> Option<PathBuf> {
@@ -186,6 +210,31 @@ fn health_to_str(h: &cpm_core::list::Health) -> &'static str {
         cpm_core::list::Health::Ok => "ok",
         cpm_core::list::Health::Stale => "stale",
         cpm_core::list::Health::Unresolved => "unresolved",
+    }
+}
+
+/// Warn on stderr (non-fatal) if the chosen archive directory appears to live
+/// under a known cloud-sync root. Uses path-segment-boundary matching so that
+/// a folder named "OneDriveFoo" does not trigger the warning for "OneDrive".
+fn warn_if_cloud_synced(dir: &std::path::Path) {
+    let dir_norm = dir.to_string_lossy().replace('\\', "/").to_lowercase();
+    let vars = [
+        "OneDrive",
+        "OneDriveConsumer",
+        "OneDriveCommercial",
+        "Dropbox",
+    ];
+    for var in &vars {
+        if let Ok(val) = std::env::var(var) {
+            let root = val.replace('\\', "/").to_lowercase();
+            if dir_norm == root || dir_norm.starts_with(&format!("{root}/")) {
+                eprintln!(
+                    "warning: --archive-dir appears to be under a cloud-sync root (${var}); \
+                     cloud-synced archives may upload sensitive session data"
+                );
+                return;
+            }
+        }
     }
 }
 
@@ -289,6 +338,60 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> cpm_core::erro
             Ok(())
         }
         Cmd::Rollback { report } => rollback(report, fs),
+        Cmd::Archive {
+            archive_dir,
+            session,
+            install_hook,
+            uninstall_hook,
+            set_retention: days,
+            force_zero,
+            render,
+        } => {
+            if *install_hook {
+                let exe = std::env::current_exe().map_err(cpm_core::error::CpmError::Io)?;
+                cpm_core::settings::install_session_end_hook(fs, home, &exe)?;
+                println!("cpm SessionEnd hook installed in ~/.claude/settings.json");
+                return Ok(());
+            }
+            if *uninstall_hook {
+                cpm_core::settings::uninstall_session_end_hook(fs, home)?;
+                println!("cpm SessionEnd hook removed from ~/.claude/settings.json");
+                return Ok(());
+            }
+            if let Some(d) = days {
+                cpm_core::settings::set_retention(fs, home, *d, *force_zero)?;
+                println!("cleanupPeriodDays set to {d}");
+                eprintln!(
+                    "note: issues #23710 and #62272 warn against setting this to 0; \
+                     minimum safe value is 1"
+                );
+                return Ok(());
+            }
+            if let Some(transcript) = session.as_ref() {
+                let dir = archive_dir.clone().ok_or_else(|| {
+                    CpmError::Locked("--archive-dir is required with --session".into())
+                })?;
+                warn_if_cloud_synced(&dir);
+                let opts = cpm_core::archive::ArchiveOpts {
+                    archive_dir: dir,
+                    render: *render,
+                };
+                let r = cpm_core::archive::archive_session(fs, home, transcript, &opts)?;
+                println!("archived: {} copied, {} skipped", r.copied, r.skipped);
+                return Ok(());
+            }
+            let dir = archive_dir
+                .clone()
+                .ok_or_else(|| CpmError::Locked("--archive-dir is required for archive".into()))?;
+            warn_if_cloud_synced(&dir);
+            let opts = cpm_core::archive::ArchiveOpts {
+                archive_dir: dir,
+                render: *render,
+            };
+            let r = cpm_core::archive::archive_all(fs, home, &opts)?;
+            println!("archived: {} copied, {} skipped", r.copied, r.skipped);
+            Ok(())
+        }
     }
 }
 
