@@ -129,7 +129,7 @@ mod tests {
             b"ref E:\\Gone\\project here",
         )
         .unwrap();
-        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let idx = ProjectIndex::build(&fs, Path::new("/h")).unwrap();
         let ctx = Ctx {
             fs: &fs,
             home: PathBuf::from("/h"),
@@ -169,7 +169,7 @@ mod tests {
         fs.write(Path::new("/h/.claude/stray-rename.log"), body)
             .unwrap();
 
-        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let idx = ProjectIndex::build(&fs, Path::new("/h")).unwrap();
         let ctx = Ctx {
             fs: &fs,
             home: PathBuf::from("/h"),
@@ -202,7 +202,7 @@ mod tests {
             b"ref E:\\Gone\\project here",
         )
         .unwrap();
-        let idx = ProjectIndex::build(&fs, Path::new("/data/projects/home"));
+        let idx = ProjectIndex::build(&fs, Path::new("/data/projects/home")).unwrap();
         let ctx = Ctx {
             fs: &fs,
             home: PathBuf::from("/data/projects/home"),
@@ -231,7 +231,7 @@ mod tests {
             b"ref E:\\Gone\\project here",
         )
         .unwrap();
-        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let idx = ProjectIndex::build(&fs, Path::new("/h")).unwrap();
         let ctx = Ctx {
             fs: &fs,
             home: PathBuf::from("/h"),
@@ -248,7 +248,7 @@ mod tests {
     #[test]
     fn plan_returns_no_changes() {
         let fs = MemoryFileSystem::new();
-        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let idx = ProjectIndex::build(&fs, Path::new("/h")).unwrap();
         let ctx = Ctx {
             fs: &fs,
             home: PathBuf::from("/h"),

@@ -184,7 +184,7 @@ mod tests {
         let state_dir_path =
             format!("/h/.claude/plugins/data/codex/state/A-{src_suffix}/state.json");
         fs.write(Path::new(&state_dir_path), b"{}").unwrap();
-        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let idx = ProjectIndex::build(&fs, Path::new("/h")).unwrap();
         let ctx = Ctx {
             fs: &fs,
             home: PathBuf::from("/h"),
@@ -258,7 +258,7 @@ mod tests {
         )
         .unwrap();
 
-        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let idx = ProjectIndex::build(&fs, Path::new("/h")).unwrap();
         let ctx = Ctx {
             fs: &fs,
             home: PathBuf::from("/h"),

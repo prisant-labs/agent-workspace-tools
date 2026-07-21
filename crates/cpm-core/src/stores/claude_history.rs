@@ -161,7 +161,7 @@ mod tests {
         let body = "{\"project\":\"E:\\\\Projects\\\\A\"}\n{\"project\":\"E:/Projects/A\"}\n";
         fs.write(Path::new("/h/.claude/history.jsonl"), body.as_bytes())
             .unwrap();
-        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let idx = ProjectIndex::build(&fs, Path::new("/h")).unwrap();
         let ctx = Ctx {
             fs: &fs,
             home: PathBuf::from("/h"),
@@ -192,7 +192,7 @@ mod tests {
                     {\"project\":\"E:\\\\Projects\\\\Other\",\"sessionId\":\"2\"}\n";
         fs.write(Path::new("/h/.claude/history.jsonl"), body.as_bytes())
             .unwrap();
-        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let idx = ProjectIndex::build(&fs, Path::new("/h")).unwrap();
         let ctx = Ctx {
             fs: &fs,
             home: PathBuf::from("/h"),

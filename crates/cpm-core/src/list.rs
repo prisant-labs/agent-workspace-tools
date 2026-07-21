@@ -1,3 +1,4 @@
+use crate::error::Result;
 use crate::fs::FileSystem;
 use crate::index::ProjectIndex;
 use crate::model::{Ctx, Move, Scope, Store};
@@ -15,6 +16,7 @@ pub enum Health {
     Unresolved,
 }
 
+#[derive(Debug)]
 pub struct ProjectRecord {
     pub cwd: Option<String>,
     pub encoded_dir: String,
@@ -76,7 +78,7 @@ fn ac31_counts(
     index: &ProjectIndex,
     cwd_key: &str,
     original_cwd: Option<&str>,
-) -> (usize, usize, usize, usize) {
+) -> Result<(usize, usize, usize, usize)> {
     let mv_norm = Move {
         src_abs: cwd_key.to_string(),
         dst_abs: String::new(),
@@ -88,7 +90,7 @@ fn ac31_counts(
         scope: Scope::Standard,
     };
 
-    let json_hits = ClaudeJson.detect(&ctx, &mv_norm).unwrap_or_default();
+    let json_hits = ClaudeJson.detect(&ctx, &mv_norm)?;
     let json_keys = json_hits
         .iter()
         .filter(|h| h.detail.starts_with("projects key"))
@@ -98,7 +100,7 @@ fn ac31_counts(
         .filter(|h| h.detail.starts_with("githubRepoPaths"))
         .count();
 
-    let hist_hits = ClaudeHistory.detect(&ctx, &mv_norm).unwrap_or_default();
+    let hist_hits = ClaudeHistory.detect(&ctx, &mv_norm)?;
     let history_lines: usize = hist_hits
         .iter()
         .map(|h| {
@@ -116,12 +118,9 @@ fn ac31_counts(
         src_abs: plugin_src.to_string(),
         dst_abs: String::new(),
     };
-    let plugin_dirs = PluginState
-        .detect(&ctx, &mv_plugin)
-        .unwrap_or_default()
-        .len();
+    let plugin_dirs = PluginState.detect(&ctx, &mv_plugin)?.len();
 
-    (json_keys, github_paths, history_lines, plugin_dirs)
+    Ok((json_keys, github_paths, history_lines, plugin_dirs))
 }
 
 /// Build a ProjectRecord for one project dir.
@@ -135,7 +134,7 @@ fn build_record(
     cwd_key: Option<&str>,
     health: Health,
     now_secs: u64,
-) -> ProjectRecord {
+) -> Result<ProjectRecord> {
     let (sessions, bytes, oldest_days, newest_days) = scan_dir(fs, dir, now_secs);
     let fp = footprint(fs, home, dir);
     let encoded = dir
@@ -145,11 +144,11 @@ fn build_record(
         .to_string();
 
     let (json_keys, github_paths, history_lines, plugin_dirs) = match cwd_key {
-        Some(key) => ac31_counts(fs, home, index, key, cwd.as_deref()),
+        Some(key) => ac31_counts(fs, home, index, key, cwd.as_deref())?,
         None => (0, 0, 0, 0),
     };
 
-    ProjectRecord {
+    Ok(ProjectRecord {
         cwd,
         encoded_dir: encoded,
         sessions,
@@ -162,7 +161,7 @@ fn build_record(
         history_lines,
         plugin_dirs,
         health,
-    }
+    })
 }
 
 /// Enumerate every project Claude has state for, with session counts, size,
@@ -172,8 +171,8 @@ fn build_record(
 /// the function fully testable and consistent with the rest of the codebase.
 /// Ambiguous dirs (multiple live cwds) are included as Unresolved rather than
 /// silently dropped, preserving the inventory's completeness guarantee.
-pub fn list(fs: &dyn FileSystem, home: &Path, now_secs: u64) -> Vec<ProjectRecord> {
-    let index = ProjectIndex::build(fs, home);
+pub fn list(fs: &dyn FileSystem, home: &Path, now_secs: u64) -> Result<Vec<ProjectRecord>> {
+    let index = ProjectIndex::build(fs, home)?;
     let mut records = Vec::new();
 
     // Resolved projects: one canonical cwd per entry.
@@ -197,7 +196,7 @@ pub fn list(fs: &dyn FileSystem, home: &Path, now_secs: u64) -> Vec<ProjectRecor
                 Some(cwd_key.as_str()),
                 health,
                 now_secs,
-            );
+            )?;
             records.push(rec);
         }
     }
@@ -213,7 +212,7 @@ pub fn list(fs: &dyn FileSystem, home: &Path, now_secs: u64) -> Vec<ProjectRecor
             None,
             Health::Unresolved,
             now_secs,
-        );
+        )?;
         records.push(rec);
     }
 
@@ -229,11 +228,11 @@ pub fn list(fs: &dyn FileSystem, home: &Path, now_secs: u64) -> Vec<ProjectRecor
             None,
             Health::Unresolved,
             now_secs,
-        );
+        )?;
         records.push(rec);
     }
 
-    records
+    Ok(records)
 }
 
 fn escape_html(s: &str) -> String {
@@ -366,7 +365,7 @@ mod tests {
         )
         .unwrap();
         // The source folder E:/Projects/A is NOT written to the fs -> fs.is_dir is false -> STALE
-        let recs = list(&fs, Path::new("/h"), 1_000_000);
+        let recs = list(&fs, Path::new("/h"), 1_000_000).unwrap();
         assert_eq!(recs.len(), 1);
         assert_eq!(recs[0].sessions, 1);
         assert!(matches!(recs[0].health, Health::Stale));
@@ -382,7 +381,7 @@ mod tests {
         )
         .unwrap();
         fs.write(Path::new("E:/Projects/A/.keep"), b"x").unwrap(); // folder exists -> OK
-        let recs = list(&fs, Path::new("/h"), 1_000_000);
+        let recs = list(&fs, Path::new("/h"), 1_000_000).unwrap();
         assert!(matches!(recs[0].health, Health::Ok), "{:?}", recs[0].health);
     }
 
@@ -399,7 +398,24 @@ mod tests {
             br#"{"projects":{"E:\\Projects\\A":{}}}"#,
         )
         .unwrap();
-        let recs = list(&fs, Path::new("/h"), 1_000_000);
+        let recs = list(&fs, Path::new("/h"), 1_000_000).unwrap();
         assert!(recs.iter().any(|r| r.json_keys >= 1));
+    }
+
+    #[test]
+    fn list_errors_on_malformed_claude_json() {
+        let fs = MemoryFileSystem::new();
+        fs.write(
+            Path::new("/h/.claude/projects/E--Projects-A/s.jsonl"),
+            b"{\"cwd\":\"E:\\\\Projects\\\\A\"}\n",
+        )
+        .unwrap();
+        fs.write(Path::new("/h/.claude.json"), b"{ not json")
+            .unwrap();
+        let err = list(&fs, Path::new("/h"), 1_000_000).unwrap_err();
+        assert!(
+            matches!(err, crate::error::CpmError::UnrecognizedFormat(_)),
+            "{err:?}"
+        );
     }
 }

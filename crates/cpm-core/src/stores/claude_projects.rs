@@ -183,7 +183,7 @@ mod tests {
             cwd_line("E:\\Projects\\Github Repos\\markdown-for-humans").as_bytes(),
         )
         .unwrap();
-        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let idx = ProjectIndex::build(&fs, Path::new("/h")).unwrap();
         let ctx = Ctx {
             fs: &fs,
             home: PathBuf::from("/h"),
@@ -209,7 +209,7 @@ mod tests {
             cwd_line("E:\\Projects\\Other").as_bytes(),
         )
         .unwrap();
-        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let idx = ProjectIndex::build(&fs, Path::new("/h")).unwrap();
         let ctx = Ctx {
             fs: &fs,
             home: PathBuf::from("/h"),
@@ -233,7 +233,7 @@ mod tests {
             cwd_line("E:\\Projects\\Deleted").as_bytes(),
         )
         .unwrap();
-        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let idx = ProjectIndex::build(&fs, Path::new("/h")).unwrap();
         let ctx = Ctx {
             fs: &fs,
             home: PathBuf::from("/h"),
@@ -269,7 +269,7 @@ mod tests {
             cwd_line("E:\\Projects\\Dead").as_bytes(),
         )
         .unwrap();
-        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let idx = ProjectIndex::build(&fs, Path::new("/h")).unwrap();
         let ctx = Ctx {
             fs: &fs,
             home: PathBuf::from("/h"),
@@ -289,7 +289,7 @@ mod tests {
             b"{\"cwd\":\"E:\\\\Projects\\\\A\"}\n",
         )
         .unwrap();
-        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let idx = ProjectIndex::build(&fs, Path::new("/h")).unwrap();
         let ctx = Ctx {
             fs: &fs,
             home: PathBuf::from("/h"),
@@ -328,7 +328,7 @@ mod tests {
             cwd_line("E:\\Projects\\Dead").as_bytes(),
         )
         .unwrap();
-        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let idx = ProjectIndex::build(&fs, Path::new("/h")).unwrap();
         let ctx = Ctx {
             fs: &fs,
             home: PathBuf::from("/h"),

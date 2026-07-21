@@ -208,7 +208,7 @@ mod tests {
     fn ctx_with(json: &str, fs: &MemoryFileSystem) -> ProjectIndex {
         fs.write(Path::new("/h/.claude.json"), json.as_bytes())
             .unwrap();
-        ProjectIndex::build(fs, Path::new("/h"))
+        ProjectIndex::build(fs, Path::new("/h")).unwrap()
     }
 
     #[test]
@@ -251,7 +251,7 @@ mod tests {
             r#"{"projects":{"E:\\Projects\\A":{}},"githubRepoPaths":{"o/r":["E:\\Projects\\A"]}}"#;
         fs.write(Path::new("/h/.claude.json"), json.as_bytes())
             .unwrap();
-        let idx = ProjectIndex::build(&fs, Path::new("/h"));
+        let idx = ProjectIndex::build(&fs, Path::new("/h")).unwrap();
         let ctx = Ctx {
             fs: &fs,
             home: PathBuf::from("/h"),
