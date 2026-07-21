@@ -116,7 +116,7 @@ enum Cmd {
         /// Archive a single session transcript (path to the .jsonl file)
         #[arg(long)]
         session: Option<PathBuf>,
-        /// Install the cpm SessionEnd hook in ~/.claude/settings.json
+        /// Install the cpm SessionEnd hook in ~/.claude/settings.json (requires --archive-dir)
         #[arg(long)]
         install_hook: bool,
         /// Remove the cpm SessionEnd hook from ~/.claude/settings.json
@@ -131,6 +131,9 @@ enum Cmd {
         /// Request HTML rendering of archived sessions (reserved for future use)
         #[arg(long)]
         render: bool,
+        /// Read SessionEnd hook context from stdin as JSON and archive the transcript_path field
+        #[arg(long)]
+        hook_stdin: bool,
     },
 }
 
@@ -398,10 +401,14 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> cpm_core::erro
             set_retention: days,
             force_zero,
             render,
+            hook_stdin,
         } => {
             if *install_hook {
+                let dir = archive_dir.clone().ok_or_else(|| {
+                    CpmError::Locked("--archive-dir is required with --install-hook".into())
+                })?;
                 let exe = std::env::current_exe().map_err(cpm_core::error::CpmError::Io)?;
-                cpm_core::settings::install_session_end_hook(fs, home, &exe)?;
+                cpm_core::settings::install_session_end_hook(fs, home, &exe, &dir)?;
                 println!("cpm SessionEnd hook installed in ~/.claude/settings.json");
                 return Ok(());
             }
@@ -417,6 +424,35 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> cpm_core::erro
                     "note: issues #23710 and #62272 warn against setting this to 0; \
                      minimum safe value is 1"
                 );
+                return Ok(());
+            }
+            if *hook_stdin {
+                let dir = archive_dir.clone().ok_or_else(|| {
+                    CpmError::Locked("--archive-dir is required with --hook-stdin".into())
+                })?;
+                let mut input = String::new();
+                std::io::Read::read_to_string(&mut std::io::stdin(), &mut input)
+                    .map_err(cpm_core::error::CpmError::Io)?;
+                let json: serde_json::Value = serde_json::from_str(&input).map_err(|e| {
+                    CpmError::UnrecognizedFormat(format!("hook stdin is not valid JSON: {e}"))
+                })?;
+                let transcript_path = json["transcript_path"].as_str().ok_or_else(|| {
+                    CpmError::UnrecognizedFormat(
+                        "hook stdin JSON missing 'transcript_path' field".into(),
+                    )
+                })?;
+                warn_if_cloud_synced(&dir);
+                let opts = cpm_core::archive::ArchiveOpts {
+                    archive_dir: dir,
+                    render: *render,
+                };
+                let r = cpm_core::archive::archive_session(
+                    fs,
+                    home,
+                    std::path::Path::new(transcript_path),
+                    &opts,
+                )?;
+                println!("archived: {} copied, {} skipped", r.copied, r.skipped);
                 return Ok(());
             }
             if let Some(transcript) = session.as_ref() {

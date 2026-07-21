@@ -51,6 +51,13 @@ fn copy_if_changed(
 ) -> Result<()> {
     let bytes = fs.read(src)?;
     let src_hash = sha(&bytes);
+    // Record every examined file in the manifest regardless of copy-vs-skip,
+    // so a no-change rerun never produces an empty or incomplete manifest.
+    entries.push(ArchEntry {
+        src: src.to_path_buf(),
+        dst: dst.to_path_buf(),
+        sha256: src_hash.clone(),
+    });
     if fs.exists(dst) {
         if let Ok(dst_bytes) = fs.read(dst) {
             if sha(&dst_bytes) == src_hash {
@@ -60,11 +67,6 @@ fn copy_if_changed(
         }
     }
     fs.write(dst, &bytes)?;
-    entries.push(ArchEntry {
-        src: src.to_path_buf(),
-        dst: dst.to_path_buf(),
-        sha256: src_hash,
-    });
     report.copied += 1;
     Ok(())
 }
@@ -118,18 +120,43 @@ fn archive_project_dir(
 }
 
 fn write_manifest(fs: &dyn FileSystem, path: &Path, entries: &[ArchEntry]) -> Result<()> {
-    let files: Vec<_> = entries
-        .iter()
-        .map(|e| {
+    // Read any existing manifest and build a keyed map so this run merges rather
+    // than overwrites. A no-change rerun (all files skipped) still records every
+    // file; a single-session archive_session call preserves other sessions' entries.
+    let mut file_map: std::collections::BTreeMap<String, serde_json::Value> =
+        std::collections::BTreeMap::new();
+    if let Ok(existing_bytes) = fs.read(path) {
+        if let Ok(existing) = serde_json::from_slice::<serde_json::Value>(&existing_bytes) {
+            if let Some(arr) = existing["files"].as_array() {
+                for entry in arr {
+                    if let Some(src) = entry["src"].as_str() {
+                        file_map.insert(src.to_string(), entry.clone());
+                    }
+                }
+            }
+        }
+    }
+    // Upsert this run's entries; newer data wins for any given source path.
+    for e in entries {
+        let src_str = e.src.to_string_lossy().into_owned();
+        file_map.insert(
+            src_str.clone(),
             serde_json::json!({
-                "src": e.src.to_string_lossy(),
+                "src": src_str,
                 "dst": e.dst.to_string_lossy(),
                 "sha256": e.sha256,
-            })
-        })
-        .collect();
+            }),
+        );
+    }
+    let files: Vec<_> = file_map.into_values().collect();
     let json = serde_json::json!({ "files": files });
-    fs.write(path, serde_json::to_vec_pretty(&json).unwrap().as_slice())?;
+    // Atomic write: write to a sibling temp file, then rename over the final path.
+    let tmp_path = path.with_file_name("manifest.json.tmp");
+    fs.write(
+        &tmp_path,
+        serde_json::to_vec_pretty(&json).unwrap().as_slice(),
+    )?;
+    fs.rename(&tmp_path, path)?;
     Ok(())
 }
 
@@ -244,6 +271,105 @@ mod tests {
     use crate::fs::{FileSystem, MemoryFileSystem};
     use sha2::{Digest, Sha256};
     use std::path::Path;
+
+    // --- Finding 2 regression tests ---
+
+    /// A no-change rerun (all files skipped) must leave the manifest populated, not empty.
+    #[test]
+    fn archive_all_rerun_preserves_manifest() {
+        let fs = MemoryFileSystem::new();
+        fs.write(
+            Path::new("/h/.claude/projects/E--A/s.jsonl"),
+            b"{\"cwd\":\"E:\\\\A\"}\n",
+        )
+        .unwrap();
+        let opts = ArchiveOpts {
+            archive_dir: Path::new("/arch").to_path_buf(),
+            render: false,
+        };
+        // First run: file is copied; manifest must record it.
+        let r1 = archive_all(&fs, Path::new("/h"), &opts).unwrap();
+        assert_eq!(r1.copied, 1);
+        // Second run: file is unchanged, so it is skipped; manifest must still list it.
+        let r2 = archive_all(&fs, Path::new("/h"), &opts).unwrap();
+        assert_eq!(r2.copied, 0, "second run should skip unchanged file");
+        assert_eq!(r2.skipped, 1);
+        let m: serde_json::Value =
+            serde_json::from_slice(&fs.read(Path::new("/arch/manifest.json")).unwrap()).unwrap();
+        let files = m["files"].as_array().unwrap();
+        assert!(
+            !files.is_empty(),
+            "manifest must not be empty after a no-change rerun"
+        );
+        assert!(
+            files
+                .iter()
+                .any(|e| e["src"].as_str().unwrap_or("").contains("s.jsonl")),
+            "manifest must still list the transcript after a no-change rerun"
+        );
+    }
+
+    /// archive_session for a new transcript must not discard entries from earlier runs.
+    #[test]
+    fn archive_session_merges_not_overwrites() {
+        let fs = MemoryFileSystem::new();
+        let opts = ArchiveOpts {
+            archive_dir: Path::new("/arch").to_path_buf(),
+            render: false,
+        };
+
+        // Seed only project A and run archive_all so the manifest has A's entry.
+        fs.write(
+            Path::new("/h/.claude/projects/E--A/a.jsonl"),
+            b"{\"cwd\":\"E:\\\\A\"}\n",
+        )
+        .unwrap();
+        archive_all(&fs, Path::new("/h"), &opts).unwrap();
+
+        let m1: serde_json::Value =
+            serde_json::from_slice(&fs.read(Path::new("/arch/manifest.json")).unwrap()).unwrap();
+        assert_eq!(
+            m1["files"].as_array().unwrap().len(),
+            1,
+            "manifest should have 1 entry after archiving A"
+        );
+
+        // Now add project B and archive just that session into the same archive_dir.
+        fs.write(
+            Path::new("/h/.claude/projects/E--B/b.jsonl"),
+            b"{\"cwd\":\"E:\\\\B\"}\n",
+        )
+        .unwrap();
+        archive_session(
+            &fs,
+            Path::new("/h"),
+            Path::new("/h/.claude/projects/E--B/b.jsonl"),
+            &opts,
+        )
+        .unwrap();
+
+        // Both A and B must appear in the manifest.
+        let m2: serde_json::Value =
+            serde_json::from_slice(&fs.read(Path::new("/arch/manifest.json")).unwrap()).unwrap();
+        let files = m2["files"].as_array().unwrap();
+        assert_eq!(
+            files.len(),
+            2,
+            "manifest should have 2 entries after archiving B"
+        );
+        assert!(
+            files
+                .iter()
+                .any(|e| e["src"].as_str().unwrap_or("").contains("a.jsonl")),
+            "manifest must still contain A's entry after archiving B"
+        );
+        assert!(
+            files
+                .iter()
+                .any(|e| e["src"].as_str().unwrap_or("").contains("b.jsonl")),
+            "manifest must contain B's entry"
+        );
+    }
 
     #[test]
     fn archive_is_content_hash_incremental() {
