@@ -2,7 +2,7 @@ use crate::error::{CpmError, Result};
 use crate::fs::FileSystem;
 use std::path::{Path, PathBuf};
 
-const CPM_HOOK_MARKER: &str = "cpm archive";
+const CPM_HOOK_MARKER: &str = "archive --hook-stdin";
 
 fn settings_path(home: &Path) -> PathBuf {
     home.join(".claude").join("settings.json")
@@ -54,14 +54,21 @@ fn is_cpm_entry(entry: &serde_json::Value) -> bool {
         .unwrap_or(false)
 }
 
-/// Install a SessionEnd hook in ~/.claude/settings.json that calls
-/// `<exe_path> archive --session "$CLAUDE_SESSION_ID"`.
+/// Install a SessionEnd hook in ~/.claude/settings.json.
+/// The installed command reads hook context from stdin as JSON (Claude Code's confirmed
+/// contract) rather than env vars, and archives the transcript to archive_dir.
 /// Idempotent: any existing cpm archive entry is removed before the new one is added.
-pub fn install_session_end_hook(fs: &dyn FileSystem, home: &Path, exe_path: &Path) -> Result<()> {
+pub fn install_session_end_hook(
+    fs: &dyn FileSystem,
+    home: &Path,
+    exe_path: &Path,
+    archive_dir: &Path,
+) -> Result<()> {
     let mut v = load_settings(fs, home);
     let cmd = format!(
-        "{} archive --session \"$CLAUDE_SESSION_ID\"",
-        exe_path.to_string_lossy()
+        "{} archive --hook-stdin --archive-dir \"{}\"",
+        exe_path.to_string_lossy(),
+        archive_dir.to_string_lossy()
     );
     let new_entry = serde_json::json!({
         "matcher": "",
@@ -110,6 +117,38 @@ mod tests {
         assert!(!fs.exists(Path::new("/h/.claude/settings.json")));
     }
 
+    /// The installed hook command must carry --hook-stdin and --archive-dir,
+    /// and must NOT use the defunct $CLAUDE_SESSION_ID env var.
+    #[test]
+    fn install_hook_emits_hook_stdin_and_archive_dir() {
+        let fs = MemoryFileSystem::new();
+        install_session_end_hook(
+            &fs,
+            Path::new("/h"),
+            Path::new("/usr/bin/cpm"),
+            Path::new("/archive"),
+        )
+        .unwrap();
+        let v: serde_json::Value =
+            serde_json::from_slice(&fs.read(Path::new("/h/.claude/settings.json")).unwrap())
+                .unwrap();
+        let cmd = v["hooks"]["SessionEnd"][0]["hooks"][0]["command"]
+            .as_str()
+            .unwrap();
+        assert!(
+            cmd.contains("--hook-stdin"),
+            "installed command must contain --hook-stdin; got: {cmd}"
+        );
+        assert!(
+            cmd.contains("--archive-dir"),
+            "installed command must contain --archive-dir; got: {cmd}"
+        );
+        assert!(
+            !cmd.contains("$CLAUDE_SESSION_ID"),
+            "installed command must not reference $CLAUDE_SESSION_ID; got: {cmd}"
+        );
+    }
+
     #[test]
     fn uninstall_preserves_other_hooks() {
         let fs = MemoryFileSystem::new();
@@ -118,7 +157,7 @@ mod tests {
                 "SessionEnd": [
                     {
                         "matcher": "",
-                        "hooks": [{"type": "command", "command": "cpm archive --session x"}]
+                        "hooks": [{"type": "command", "command": "cpm archive --hook-stdin --archive-dir \"/archive\""}]
                     },
                     {
                         "matcher": "",
