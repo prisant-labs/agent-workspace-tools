@@ -1,4 +1,5 @@
 pub mod apply;
+pub mod archive;
 pub mod backup;
 pub mod doctor;
 pub mod error;
@@ -13,6 +14,7 @@ pub mod report;
 pub mod rewrite;
 pub mod rollback;
 pub mod sessions;
+pub mod settings;
 pub mod stores;
 pub mod verify;
 
