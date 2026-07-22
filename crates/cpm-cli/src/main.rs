@@ -390,7 +390,10 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> cpm_core::erro
                 on_collision,
             };
             let r = associate(fs, home, from, to, &aopts)?;
-            println!("associate complete: {} changes applied", r.applied.len());
+            let export_loc = format!("{}/{}", to.replace('\\', "/"), aopts.export_subdir);
+            for line in associate_result_lines(&r, aopts.export, &export_loc) {
+                println!("{line}");
+            }
             Ok(())
         }
         Cmd::Archive {
@@ -441,10 +444,12 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> cpm_core::erro
                         "hook stdin JSON missing 'transcript_path' field".into(),
                     )
                 })?;
+                check_transcript_confinement(transcript_path, home)?;
                 warn_if_cloud_synced(&dir);
                 let opts = cpm_core::archive::ArchiveOpts {
                     archive_dir: dir,
                     render: *render,
+                    run_token: pick_run_id(),
                 };
                 let r = cpm_core::archive::archive_session(
                     fs,
@@ -463,6 +468,7 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> cpm_core::erro
                 let opts = cpm_core::archive::ArchiveOpts {
                     archive_dir: dir,
                     render: *render,
+                    run_token: pick_run_id(),
                 };
                 let r = cpm_core::archive::archive_session(fs, home, transcript, &opts)?;
                 println!("archived: {} copied, {} skipped", r.copied, r.skipped);
@@ -475,12 +481,53 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> cpm_core::erro
             let opts = cpm_core::archive::ArchiveOpts {
                 archive_dir: dir,
                 render: *render,
+                run_token: pick_run_id(),
             };
             let r = cpm_core::archive::archive_all(fs, home, &opts)?;
             println!("archived: {} copied, {} skipped", r.copied, r.skipped);
             Ok(())
         }
     }
+}
+
+/// Build the output lines for a completed `associate` command.
+/// Prints the backup path when a reassociation ran; otherwise prints the export location.
+fn associate_result_lines(
+    r: &cpm_core::report::Report,
+    export: bool,
+    export_loc: &str,
+) -> Vec<String> {
+    let mut lines = vec![format!(
+        "associate complete: {} changes applied",
+        r.applied.len()
+    )];
+    if !r.backup_dir.is_empty() {
+        lines.push(format!("backup {}", r.backup_dir));
+    } else if export {
+        lines.push(format!("export {export_loc}"));
+    }
+    lines
+}
+
+/// Verify that `transcript_path` is under `home/.claude/projects`.
+/// Returns an error if not, so the hook-stdin dispatch fails loudly on unexpected input.
+fn check_transcript_confinement(
+    transcript_path: &str,
+    home: &std::path::Path,
+) -> cpm_core::error::Result<()> {
+    let projects_root = home.join(".claude").join("projects");
+    let tp_norm = transcript_path.replace('\\', "/").to_lowercase();
+    let pr_norm = projects_root
+        .to_string_lossy()
+        .replace('\\', "/")
+        .to_lowercase();
+    if tp_norm != pr_norm && !tp_norm.starts_with(&format!("{pr_norm}/")) {
+        return Err(CpmError::UnrecognizedFormat(format!(
+            "transcript_path '{transcript_path}' is outside ~/.claude/projects; \
+             hook-stdin input may be malformed"
+        )));
+    }
+    Ok(())
 }
 
 fn main() -> ExitCode {
@@ -498,5 +545,94 @@ fn main() -> ExitCode {
             eprintln!("error: {e:?}");
             ExitCode::from(exit::code_for(&e) as u8)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    // --- Finding 8 tests: hook-stdin transcript path confinement ---
+
+    #[test]
+    fn transcript_confinement_rejects_path_outside_projects() {
+        assert!(
+            check_transcript_confinement("/etc/passwd", Path::new("/home/user")).is_err(),
+            "path outside home must be rejected"
+        );
+    }
+
+    #[test]
+    fn transcript_confinement_rejects_sibling_of_projects() {
+        // A path that is a sibling of the projects dir, not inside it.
+        assert!(
+            check_transcript_confinement(
+                "/home/user/.claude/settings.json",
+                Path::new("/home/user"),
+            )
+            .is_err(),
+            "path outside projects dir must be rejected"
+        );
+    }
+
+    #[test]
+    fn transcript_confinement_accepts_path_under_projects() {
+        assert!(
+            check_transcript_confinement(
+                "/home/user/.claude/projects/myproj/session.jsonl",
+                Path::new("/home/user"),
+            )
+            .is_ok(),
+            "path under home/.claude/projects must be accepted"
+        );
+    }
+
+    // --- Finding 7 tests: associate result lines ---
+
+    #[test]
+    fn associate_result_shows_backup_dir_when_set() {
+        let r = cpm_core::report::Report {
+            run_id: "x".into(),
+            applied: vec![],
+            backup_dir: "/tmp/backup/x".into(),
+            verify: None,
+        };
+        let lines = associate_result_lines(&r, false, "E:/B/.claude-sessions");
+        assert!(
+            lines.iter().any(|l| l.contains("/tmp/backup/x")),
+            "backup dir must appear in output lines"
+        );
+    }
+
+    #[test]
+    fn associate_result_shows_export_loc_when_no_backup() {
+        let r = cpm_core::report::Report {
+            run_id: "x".into(),
+            applied: vec![],
+            backup_dir: String::new(),
+            verify: None,
+        };
+        let lines = associate_result_lines(&r, true, "E:/B/.claude-sessions");
+        assert!(
+            lines.iter().any(|l| l.contains("E:/B/.claude-sessions")),
+            "export location must appear in output lines when backup_dir is empty"
+        );
+    }
+
+    #[test]
+    fn associate_result_omits_location_when_export_false_and_no_backup() {
+        let r = cpm_core::report::Report {
+            run_id: "x".into(),
+            applied: vec![],
+            backup_dir: String::new(),
+            verify: None,
+        };
+        let lines = associate_result_lines(&r, false, "E:/B/.claude-sessions");
+        assert_eq!(
+            lines.len(),
+            1,
+            "no location line when neither backup nor export"
+        );
     }
 }

@@ -1,4 +1,4 @@
-use crate::error::Result;
+use crate::error::{CpmError, Result};
 use crate::fs::FileSystem;
 use crate::index::ProjectIndex;
 use crate::sessions::footprint;
@@ -8,8 +8,12 @@ use std::path::{Path, PathBuf};
 pub struct ArchiveOpts {
     pub archive_dir: PathBuf,
     pub render: bool,
+    /// Per-run token used to name the sibling temp file during manifest writes.
+    /// Must be unique per concurrent archive process to reduce collision risk.
+    pub run_token: String,
 }
 
+#[derive(Debug)]
 pub struct ArchiveReport {
     pub copied: usize,
     pub skipped: usize,
@@ -119,7 +123,16 @@ fn archive_project_dir(
     Ok(())
 }
 
-fn write_manifest(fs: &dyn FileSystem, path: &Path, entries: &[ArchEntry]) -> Result<()> {
+/// Write (merge) manifest entries to `path`. Uses `run_token` to name the sibling
+/// temp file (`manifest.json.<run_token>.tmp`) to reduce same-archive collision risk
+/// when two archive processes run concurrently against the same archive directory.
+/// Note: the residual read-merge-write lost-update race is a documented v1.x follow-up (needs a lock).
+fn write_manifest(
+    fs: &dyn FileSystem,
+    path: &Path,
+    entries: &[ArchEntry],
+    run_token: &str,
+) -> Result<()> {
     // Read any existing manifest and build a keyed map so this run merges rather
     // than overwrites. A no-change rerun (all files skipped) still records every
     // file; a single-session archive_session call preserves other sessions' entries.
@@ -150,8 +163,8 @@ fn write_manifest(fs: &dyn FileSystem, path: &Path, entries: &[ArchEntry]) -> Re
     }
     let files: Vec<_> = file_map.into_values().collect();
     let json = serde_json::json!({ "files": files });
-    // Atomic write: write to a sibling temp file, then rename over the final path.
-    let tmp_path = path.with_file_name("manifest.json.tmp");
+    // Atomic write: write to a token-named sibling temp file, then rename over the final path.
+    let tmp_path = path.with_file_name(format!("manifest.json.{run_token}.tmp"));
     fs.write(
         &tmp_path,
         serde_json::to_vec_pretty(&json).unwrap().as_slice(),
@@ -166,27 +179,33 @@ fn write_index(fs: &dyn FileSystem, path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Archive only the single project whose encoded dir matches `from_abs`. Used by
-/// `associate --export` so the export copies just that project, not the whole machine.
+/// Archive the project(s) whose recorded cwd resolves to `from_abs` via the
+/// `ProjectIndex` reverse lookup. Returns an error rather than silently exporting
+/// nothing when no Claude state is found for that path.
 pub fn archive_project(
     fs: &dyn FileSystem,
     home: &Path,
     from_abs: &str,
     opts: &ArchiveOpts,
 ) -> Result<ArchiveReport> {
-    use crate::paths::encode_project_dir;
-    let dir = home
-        .join(".claude")
-        .join("projects")
-        .join(encode_project_dir(from_abs));
+    use crate::paths::normalize_path;
+    let index = ProjectIndex::build(fs, home)?;
+    let key = normalize_path(from_abs);
+    let dirs = index.by_cwd.get(&key).ok_or_else(|| {
+        CpmError::UnrecognizedFormat(format!(
+            "no Claude state found for project '{from_abs}'; run 'cpm list' to see known projects"
+        ))
+    })?;
     let mut rep = ArchiveReport {
         copied: 0,
         skipped: 0,
     };
     let mut man = Vec::new();
-    archive_project_dir(fs, home, &dir, opts, &mut man, &mut rep)?;
+    for dir in dirs {
+        archive_project_dir(fs, home, dir, opts, &mut man, &mut rep)?;
+    }
     let manifest_path = opts.archive_dir.join("manifest.json");
-    write_manifest(fs, &manifest_path, &man)?;
+    write_manifest(fs, &manifest_path, &man, &opts.run_token)?;
     write_index(fs, &opts.archive_dir.join("index.json"))?;
     Ok(rep)
 }
@@ -229,7 +248,7 @@ pub fn archive_session(
     }
 
     let manifest_path = opts.archive_dir.join("manifest.json");
-    write_manifest(fs, &manifest_path, &entries)?;
+    write_manifest(fs, &manifest_path, &entries, &opts.run_token)?;
 
     Ok(report)
 }
@@ -258,7 +277,7 @@ pub fn archive_all(fs: &dyn FileSystem, home: &Path, opts: &ArchiveOpts) -> Resu
     }
 
     let manifest_path = opts.archive_dir.join("manifest.json");
-    write_manifest(fs, &manifest_path, &entries)?;
+    write_manifest(fs, &manifest_path, &entries, &opts.run_token)?;
 
     write_index(fs, &opts.archive_dir.join("index.json"))?;
 
@@ -286,6 +305,7 @@ mod tests {
         let opts = ArchiveOpts {
             archive_dir: Path::new("/arch").to_path_buf(),
             render: false,
+            run_token: "test".into(),
         };
         // First run: file is copied; manifest must record it.
         let r1 = archive_all(&fs, Path::new("/h"), &opts).unwrap();
@@ -316,6 +336,7 @@ mod tests {
         let opts = ArchiveOpts {
             archive_dir: Path::new("/arch").to_path_buf(),
             render: false,
+            run_token: "test".into(),
         };
 
         // Seed only project A and run archive_all so the manifest has A's entry.
@@ -382,6 +403,7 @@ mod tests {
         let opts = ArchiveOpts {
             archive_dir: Path::new("/arch").to_path_buf(),
             render: false,
+            run_token: "test".into(),
         };
         let r1 = archive_all(&fs, Path::new("/h"), &opts).unwrap();
         assert_eq!(r1.copied, 1);
@@ -401,9 +423,87 @@ mod tests {
         let opts = ArchiveOpts {
             archive_dir: Path::new("/arch").to_path_buf(),
             render: false,
+            run_token: "test".into(),
         };
         archive_all(&fs, Path::new("/h"), &opts).unwrap();
         assert!(fs.exists(Path::new("/arch/projects/E--Ghost/s.jsonl")));
+    }
+
+    // --- Finding 2 tests: archive_project uses ProjectIndex ---
+
+    /// archive_project resolves the project dir via the reverse index (not encode_project_dir),
+    /// so it finds the correct dir even when the encoding would differ.
+    #[test]
+    fn archive_project_resolves_via_index() {
+        let fs = MemoryFileSystem::new();
+        // Transcript has a cwd that normalizes to "e:/a"
+        fs.write(
+            Path::new("/h/.claude/projects/E--A/s.jsonl"),
+            b"{\"cwd\":\"E:\\\\A\"}\n",
+        )
+        .unwrap();
+        let opts = ArchiveOpts {
+            archive_dir: Path::new("/arch").to_path_buf(),
+            render: false,
+            run_token: "test".into(),
+        };
+        let r = archive_project(&fs, Path::new("/h"), "E:\\A", &opts).unwrap();
+        assert!(r.copied >= 1, "archive_project must copy at least one file");
+        assert!(
+            fs.exists(Path::new("/arch/projects/E--A/s.jsonl")),
+            "archived transcript must be present"
+        );
+    }
+
+    /// archive_project returns an error when no Claude state resolves to the given path,
+    /// rather than silently writing an empty archive.
+    #[test]
+    fn archive_project_errors_for_unknown_project() {
+        let fs = MemoryFileSystem::new();
+        // No transcripts in the projects dir
+        let opts = ArchiveOpts {
+            archive_dir: Path::new("/arch").to_path_buf(),
+            render: false,
+            run_token: "test".into(),
+        };
+        let err = archive_project(&fs, Path::new("/h"), "E:\\NoSuchProject", &opts).unwrap_err();
+        assert!(
+            matches!(err, crate::error::CpmError::UnrecognizedFormat(_)),
+            "expected UnrecognizedFormat, got {err:?}"
+        );
+    }
+
+    // --- Finding 4 test: run_token is used for the temp file name ---
+
+    /// After archive_all completes, the final manifest.json exists and the
+    /// old fixed-name temp file ("manifest.json.tmp") does NOT exist, confirming
+    /// the token-based temp name is used instead.
+    #[test]
+    fn archive_uses_run_token_in_temp_name() {
+        let fs = MemoryFileSystem::new();
+        fs.write(
+            Path::new("/h/.claude/projects/E--A/s.jsonl"),
+            b"{\"cwd\":\"E:\\\\A\"}\n",
+        )
+        .unwrap();
+        let opts = ArchiveOpts {
+            archive_dir: Path::new("/arch").to_path_buf(),
+            render: false,
+            run_token: "tok42".into(),
+        };
+        archive_all(&fs, Path::new("/h"), &opts).unwrap();
+        assert!(
+            fs.exists(Path::new("/arch/manifest.json")),
+            "final manifest must exist"
+        );
+        assert!(
+            !fs.exists(Path::new("/arch/manifest.json.tmp")),
+            "old fixed-name temp must not exist"
+        );
+        assert!(
+            !fs.exists(Path::new("/arch/manifest.json.tok42.tmp")),
+            "token-named temp must be cleaned up by rename"
+        );
     }
 
     #[test]
@@ -420,6 +520,7 @@ mod tests {
         let opts = ArchiveOpts {
             archive_dir: Path::new("/arch").to_path_buf(),
             render: false,
+            run_token: "test".into(),
         };
         archive_all(&fs, Path::new("/h"), &opts).unwrap();
         assert!(fs.exists(Path::new(
