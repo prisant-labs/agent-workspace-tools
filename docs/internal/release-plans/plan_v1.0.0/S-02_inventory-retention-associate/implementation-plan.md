@@ -2,7 +2,7 @@
 id: S-02-plan
 title: "Implementation plan wrapper: v1.1 features (phases 13-15)"
 type: implementation-plan
-status: in-progress
+status: complete
 created: 2026-07-11
 updated: 2026-07-11
 linked-spec: spec.md
@@ -34,8 +34,11 @@ implementation detail; this file is a navigation aid only.
 
 ## Completion Status
 
+Last updated 2026-07-21. All three features are implemented, tested, and pushed to `main`;
+each was adversarially reviewed and its findings fixed.
+
 | Phase | Status |
 |-------|--------|
-| 13 | Not started |
-| 14 | Not started |
-| 15 | Not started |
+| 13 | Complete (`cpm list` inventory: session linkage, health flags, 30-day-cliff ages, `c31b1c0`; fail-loud read hardening `d66c49b`) |
+| 14 | Complete (`cpm archive`: content-hash incremental + INDEX/manifest + SessionEnd retention hook, `be48c94`; cumulative/atomic manifest + working hook `809e94e`) |
+| 15 | Complete (`cpm associate`: re-associate and/or from-scoped export, `82a090f`; merge-into-existing-destination `c541dea`; remaining review fixes `43ef230`) |
