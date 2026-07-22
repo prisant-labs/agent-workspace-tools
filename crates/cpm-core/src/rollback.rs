@@ -1,23 +1,38 @@
 use crate::error::{CpmError, Result};
 use crate::fs::FileSystem;
 use sha2::{Digest, Sha256};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub fn rollback(manifest_path: &Path, fs: &dyn FileSystem) -> Result<()> {
     let v: serde_json::Value = serde_json::from_slice(&fs.read(manifest_path)?)
         .map_err(|e| CpmError::UnrecognizedFormat(e.to_string()))?;
     let src = v["src_abs"].as_str().unwrap().replace('\\', "/");
     let dst = v["dst_abs"].as_str().unwrap().replace('\\', "/");
-    // 1. move the folder back if it was moved
-    if fs.exists(Path::new(&dst)) && !fs.exists(Path::new(&src)) {
+    let entries = v["entries"].as_array().unwrap();
+    // 1. Move the real project FOLDER back, but ONLY if this run actually moved it. A folder
+    //    move is recorded as a <move-tree> marker; an `associate` (which re-homes HISTORY via
+    //    a merge or a rename but never moves the folder) records none. Without this gate, an
+    //    associate into an EXISTING B - where B's folder is present on disk and A's is gone -
+    //    would satisfy `exists(dst) && !exists(src)` and spuriously rename B's real folder onto
+    //    A's path, corrupting B. Scope the move-back strictly to genuine folder moves.
+    let had_move_tree = entries.iter().any(|e| {
+        e["backup"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("<move-tree")
+    });
+    if had_move_tree && fs.exists(Path::new(&dst)) && !fs.exists(Path::new(&src)) {
         fs.rename(Path::new(&dst), Path::new(&src))?;
     }
     // 2. restore each backed-up file to its original path; rename dirs back
-    for e in v["entries"].as_array().unwrap() {
+    for e in entries {
         let original = e["original"].as_str().unwrap();
         let backup = e["backup"].as_str().unwrap();
-        if backup.starts_with("<dir-rename") || backup.starts_with("<move-tree") {
-            continue; // handled by the whole-tree restore above
+        if backup.starts_with("<dir-rename")
+            || backup.starts_with("<move-tree")
+            || backup.starts_with("<merge-dir")
+        {
+            continue; // markers: whole-tree restore (above) or un-merge (below) handle these
         }
         let bytes = fs.read(Path::new(backup))?;
         let want = e["sha256"].as_str().unwrap_or_default();
@@ -41,7 +56,7 @@ pub fn rollback(manifest_path: &Path, fs: &dyn FileSystem) -> Result<()> {
         crate::paths::encode_project_dir(v["src_abs"].as_str().unwrap()),
         crate::paths::encode_project_dir(v["dst_abs"].as_str().unwrap()),
     );
-    for e in v["entries"].as_array().unwrap() {
+    for e in entries {
         let backup = e["backup"].as_str().unwrap();
         if !backup.starts_with("<dir-rename") {
             continue;
@@ -51,6 +66,45 @@ pub fn rollback(manifest_path: &Path, fs: &dyn FileSystem) -> Result<()> {
             let new_dir = old_dir.replace(&old_enc, &new_enc);
             if fs.exists(Path::new(&new_dir)) {
                 fs.remove_dir_all(Path::new(&new_dir))?;
+            }
+        }
+    }
+    // 4. Un-merge (the merge counterpart of step 3). For a merge into an existing B, step 2
+    //    already restored A's files to their pre-merge paths under E--A; here we remove EXACTLY
+    //    the copies that were merged into B, addressed by RELATIVE path, and nothing else. B's
+    //    own transcripts were never backed up, so they never appear in `entries` and are never
+    //    removed. This is deliberately NOT the wholesale remove_dir_all used for <dir-rename>
+    //    above - doing that to a merge target would destroy B's own history. Any now-empty
+    //    subdirectory left behind in B is acceptable v1 residue; removing B's dirs is not worth
+    //    the risk. (Session filenames are UUIDs, so a relative path from A cannot alias one of
+    //    B's own files; apply additionally refuses on any collision before moving.)
+    for e in entries {
+        if !e["backup"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("<merge-dir")
+        {
+            continue;
+        }
+        let from = e["original"].as_str().unwrap().replace('\\', "/");
+        // B's projects dir is A's sibling, named for the destination encoding.
+        let to = match Path::new(&from).parent() {
+            Some(parent) => parent.join(&new_enc),
+            None => PathBuf::from(&new_enc),
+        };
+        let prefix = format!("{from}/");
+        for e2 in entries {
+            // Only real content entries (nonempty sha256) name files that came from A; markers
+            // and the merge marker itself carry an empty sha256 and are skipped.
+            if e2["sha256"].as_str().unwrap_or_default().is_empty() {
+                continue;
+            }
+            let orig2 = e2["original"].as_str().unwrap().replace('\\', "/");
+            if let Some(rel) = orig2.strip_prefix(&prefix) {
+                let merged = to.join(rel);
+                if fs.exists(&merged) {
+                    fs.remove_file(&merged)?;
+                }
             }
         }
     }

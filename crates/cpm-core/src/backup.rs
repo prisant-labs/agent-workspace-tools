@@ -47,6 +47,22 @@ pub fn snapshot(
                     sha256: String::new(),
                 });
             }
+            Change::MergeDir { from, .. } => {
+                // A merge MOVES A's files into an existing B and then removes A, so - unlike
+                // a rename, which leaves the bytes on disk under the new dir - the only way to
+                // restore A is a full content backup of EVERY file under `from` (transcripts
+                // AND sidecars), captured here PRE-merge. Each file's `original` is its real
+                // pre-merge path; rollback restores those bytes and, via the marker below,
+                // removes exactly these files' relative paths from B (never B's own files).
+                for (j, child) in crate::fs::walk_files(fs, from).into_iter().enumerate() {
+                    backup_one(fs, &dir, &child, &format!("m{i}-{j}"), &mut entries)?;
+                }
+                entries.push(ManifestEntry {
+                    original: from.to_string_lossy().into_owned(),
+                    backup: format!("<merge-dir {i}>"),
+                    sha256: String::new(),
+                });
+            }
             Change::RewriteFile { path, .. } => {
                 backup_one(fs, &dir, path, &format!("f{i}"), &mut entries)?
             }

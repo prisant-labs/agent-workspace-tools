@@ -59,10 +59,23 @@ impl Store for ClaudeProjects {
         use crate::rewrite::{anchored_rewrite, build_path_rules};
         let projects = ctx.home.join(".claude").join("projects");
         let new_dir = projects.join(encode_project_dir(&mv.dst_abs));
-        let mut changes = vec![Change::RenameDir {
-            from: hit.target.clone(),
-            to: new_dir.clone(),
-        }];
+        // Choose between a plain rename and a merge. If the destination projects dir already
+        // exists (B is a live project with its own history), a rename would try to move A's dir
+        // ONTO B's - which the OS refuses. Merge A's files into B instead. If B's dir does not
+        // exist, the historical rename is correct. Either way the transcripts end up at
+        // new_dir/<name>, exactly where the RewriteFile changes below expect them.
+        let first = if ctx.fs.is_dir(&new_dir) {
+            Change::MergeDir {
+                from: hit.target.clone(),
+                to: new_dir.clone(),
+            }
+        } else {
+            Change::RenameDir {
+                from: hit.target.clone(),
+                to: new_dir.clone(),
+            }
+        };
+        let mut changes = vec![first];
         let rules = build_path_rules(&mv.src_abs, &mv.dst_abs);
         // Scope tiers (B-05): Minimal renames the dir and rewrites nothing inside; Standard
         // (default) rewrites the moved project's own transcripts; Full also rewrites sidecars.
