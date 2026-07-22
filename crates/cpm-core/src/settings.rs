@@ -3,6 +3,8 @@ use crate::fs::FileSystem;
 use std::path::{Path, PathBuf};
 
 const CPM_HOOK_MARKER: &str = "archive --hook-stdin";
+/// Legacy marker used by the earlier broken hook that passed a session id via env var.
+const CPM_HOOK_LEGACY_MARKER: &str = "archive --session";
 
 fn settings_path(home: &Path) -> PathBuf {
     home.join(".claude").join("settings.json")
@@ -39,7 +41,7 @@ pub fn set_retention(fs: &dyn FileSystem, home: &Path, days: u32, force_zero: bo
     Ok(())
 }
 
-/// Returns true if a hook group entry is one installed by cpm archive.
+/// Returns true if a hook group entry is one installed by cpm archive (current or legacy).
 fn is_cpm_entry(entry: &serde_json::Value) -> bool {
     entry["hooks"]
         .as_array()
@@ -47,7 +49,7 @@ fn is_cpm_entry(entry: &serde_json::Value) -> bool {
             hooks.iter().any(|h| {
                 h["command"]
                     .as_str()
-                    .map(|c| c.contains(CPM_HOOK_MARKER))
+                    .map(|c| c.contains(CPM_HOOK_MARKER) || c.contains(CPM_HOOK_LEGACY_MARKER))
                     .unwrap_or(false)
             })
         })
@@ -146,6 +148,52 @@ mod tests {
         assert!(
             !cmd.contains("$CLAUDE_SESSION_ID"),
             "installed command must not reference $CLAUDE_SESSION_ID; got: {cmd}"
+        );
+    }
+
+    // --- Finding 1 test: legacy hook is also recognized and removed ---
+
+    /// A settings.json with BOTH a legacy cpm entry (archive --session) and an unrelated
+    /// user entry: after uninstall the legacy cpm entry is gone and the user entry survives.
+    #[test]
+    fn uninstall_removes_legacy_hook_and_preserves_user_entry() {
+        let fs = MemoryFileSystem::new();
+        let settings = serde_json::json!({
+            "hooks": {
+                "SessionEnd": [
+                    {
+                        "matcher": "",
+                        "hooks": [{
+                            "type": "command",
+                            "command": "cpm archive --session \"$CLAUDE_SESSION_ID\" --archive-dir \"/archive\""
+                        }]
+                    },
+                    {
+                        "matcher": "",
+                        "hooks": [{"type": "command", "command": "my-other-tool"}]
+                    }
+                ]
+            }
+        });
+        fs.write(
+            Path::new("/h/.claude/settings.json"),
+            serde_json::to_vec_pretty(&settings).unwrap().as_slice(),
+        )
+        .unwrap();
+        uninstall_session_end_hook(&fs, Path::new("/h")).unwrap();
+        let v: serde_json::Value =
+            serde_json::from_slice(&fs.read(Path::new("/h/.claude/settings.json")).unwrap())
+                .unwrap();
+        let ses_end = v["hooks"]["SessionEnd"].as_array().unwrap();
+        assert_eq!(ses_end.len(), 1, "legacy cpm entry must be removed");
+        let remaining_cmd = ses_end[0]["hooks"][0]["command"].as_str().unwrap();
+        assert!(
+            remaining_cmd.contains("my-other-tool"),
+            "user entry must survive"
+        );
+        assert!(
+            !remaining_cmd.contains("cpm archive"),
+            "cpm archive must be gone"
         );
     }
 
