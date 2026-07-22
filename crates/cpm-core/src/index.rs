@@ -459,6 +459,9 @@ mod tests {
         fn copy(&self, from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
             self.inner.copy(from, to)
         }
+        fn remove_file(&self, path: &std::path::Path) -> std::io::Result<()> {
+            self.inner.remove_file(path)
+        }
         fn remove_dir_all(&self, path: &std::path::Path) -> std::io::Result<()> {
             self.inner.remove_dir_all(path)
         }

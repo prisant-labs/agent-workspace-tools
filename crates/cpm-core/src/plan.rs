@@ -121,6 +121,9 @@ pub fn render_plan(plan: &Plan) -> String {
             Change::RenameDir { from, to } => {
                 format!("  rename dir {} -> {}\n", from.display(), to.display())
             }
+            Change::MergeDir { from, to } => {
+                format!("  merge dir  {} -> {}\n", from.display(), to.display())
+            }
             Change::MoveTree { from, to } => {
                 format!("  move tree  {} -> {}\n", from.display(), to.display())
             }

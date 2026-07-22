@@ -17,16 +17,55 @@ pub fn apply(plan: &Plan, fs: &dyn FileSystem, backup_root: &Path, run_id: &str)
     let _m = snapshot(plan, fs, backup_root, run_id)?;
     let mut applied = Vec::new();
 
-    // 1. rename dirs first (so post-rename RewriteFile paths resolve), except MoveTree
+    // 1. rename dirs first (so post-rename RewriteFile paths resolve), except MoveTree.
+    //    MergeDir is handled here too (before pass-2 rewrites the moved *.jsonl in place).
     for c in &plan.changes {
-        if let Change::RenameDir { from, to } = c {
-            if fs.exists(from) {
-                fs.rename(from, to)?;
+        match c {
+            Change::RenameDir { from, to } => {
+                if fs.exists(from) {
+                    fs.rename(from, to)?;
+                }
+                applied.push(Applied {
+                    change: format!("rename {} -> {}", from.display(), to.display()),
+                    counts: 0,
+                });
             }
-            applied.push(Applied {
-                change: format!("rename {} -> {}", from.display(), to.display()),
-                counts: 0,
-            });
+            Change::MergeDir { from, to } => {
+                // Move every file under `from` into the existing `to`, preserving relative
+                // sub-paths. Refuse to overwrite any file B already has (never clobber B's
+                // history) - session filenames are UUIDs so this should never fire, but if it
+                // does we stop loudly rather than lose data. Then remove the now-empty `from`.
+                let mut moved = 0usize;
+                for file in crate::fs::walk_files(fs, from) {
+                    let rel = file.strip_prefix(from).map_err(|e| {
+                        CpmError::VerifyFailed(format!(
+                            "merge: {} not under {}: {e}",
+                            file.display(),
+                            from.display()
+                        ))
+                    })?;
+                    let dest = to.join(rel);
+                    if fs.exists(&dest) {
+                        return Err(CpmError::VerifyFailed(format!(
+                            "merge collision: {} exists",
+                            dest.display()
+                        )));
+                    }
+                    if let Some(parent) = dest.parent() {
+                        fs.create_dir_all(parent)?;
+                    }
+                    fs.rename(&file, &dest)?;
+                    moved += 1;
+                }
+                if fs.exists(from) {
+                    fs.remove_dir_all(from)?;
+                }
+                applied.push(Applied {
+                    change: format!("merge {} -> {}", from.display(), to.display()),
+                    counts: moved,
+                });
+            }
+            _ => {}
         }
     }
     // 2. rewrites and json edits

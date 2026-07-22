@@ -47,6 +47,14 @@ pub enum Change {
         from: PathBuf,
         to: PathBuf,
     },
+    /// Merge every file under `from` into `to` (which ALREADY exists), preserving relative
+    /// sub-paths, refusing if any destination file already exists, then remove `from`. Used
+    /// when associating A -> B and B already has its own history. Distinct from RenameDir,
+    /// which requires the destination NOT to exist.
+    MergeDir {
+        from: PathBuf,
+        to: PathBuf,
+    },
     MoveTree {
         from: PathBuf,
         to: PathBuf,

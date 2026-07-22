@@ -13,8 +13,27 @@ pub trait FileSystem {
     fn read_dir(&self, path: &Path) -> io::Result<Vec<PathBuf>>;
     fn create_dir_all(&self, path: &Path) -> io::Result<()>;
     fn copy(&self, from: &Path, to: &Path) -> io::Result<()>;
+    fn remove_file(&self, path: &Path) -> io::Result<()>;
     fn remove_dir_all(&self, path: &Path) -> io::Result<()>;
     fn mtime_secs(&self, path: &Path) -> io::Result<u64>;
+}
+
+/// Recursively collect every FILE path under `root` (directories are descended into, not
+/// returned). Order is unspecified. Used by the merge apply and merge backup to enumerate a
+/// directory's files without depending on `Ctx`.
+pub fn walk_files(fs: &dyn FileSystem, root: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        for child in fs.read_dir(&dir).unwrap_or_default() {
+            if fs.is_dir(&child) {
+                stack.push(child);
+            } else {
+                out.push(child);
+            }
+        }
+    }
+    out
 }
 
 /// Returns the normalized path string: backslashes replaced with forward slashes.
@@ -68,6 +87,9 @@ impl FileSystem for RealFileSystem {
             std::fs::create_dir_all(parent)?;
         }
         std::fs::copy(from, to).map(|_| ())
+    }
+    fn remove_file(&self, path: &Path) -> io::Result<()> {
+        std::fs::remove_file(path)
     }
     fn remove_dir_all(&self, path: &Path) -> io::Result<()> {
         std::fs::remove_dir_all(path)
@@ -157,6 +179,18 @@ impl FileSystem for MemoryFileSystem {
         let fp_key = norm_key(from);
         let tp = norm(to);
         let tp_key = norm_key(to);
+        // Model Windows rename semantics faithfully. Rust's std::fs::rename maps to
+        // MoveFileExW with MOVEFILE_REPLACE_EXISTING, which REPLACES an existing destination
+        // FILE (so the atomic "write temp, rename over target" pattern works), but CANNOT
+        // rename onto an existing DIRECTORY - the OS returns ERROR_ALREADY_EXISTS. The old
+        // MemFS silently MERGED a source tree into an existing destination directory, which
+        // hid the "associate A -> B when B already has history" bug (renaming E--A onto a
+        // live E--B). Refuse that case loudly instead; a rename onto a fresh (absent)
+        // destination, or a file overwrite, still succeeds.
+        let dest_is_nonempty_dir = f.keys().any(|k| k.starts_with(&format!("{tp_key}/")));
+        if dest_is_nonempty_dir {
+            return Err(io::Error::new(io::ErrorKind::AlreadyExists, tp));
+        }
         let moved: Vec<String> = f
             .keys()
             .filter(|k| **k == fp_key || k.starts_with(&format!("{fp_key}/")))
@@ -220,6 +254,19 @@ impl FileSystem for MemoryFileSystem {
     fn copy(&self, from: &Path, to: &Path) -> io::Result<()> {
         let data = self.read(from)?;
         self.write(to, &data)
+    }
+
+    fn remove_file(&self, path: &Path) -> io::Result<()> {
+        let key = norm_key(path);
+        let mut f = self.files.lock().unwrap();
+        // Remove the single file entry. A path that is not present as a file is an error,
+        // matching std::fs::remove_file (NotFound), so callers can distinguish "removed" from
+        // "was never there".
+        if f.remove(&key).is_some() {
+            Ok(())
+        } else {
+            Err(io::Error::new(io::ErrorKind::NotFound, norm(path)))
+        }
     }
 
     fn remove_dir_all(&self, path: &Path) -> io::Result<()> {
