@@ -2,7 +2,7 @@
 id: S-01-plan
 title: "Implementation plan wrapper: v1 mover (phases 1-9)"
 type: implementation-plan
-status: in-progress
+status: complete
 created: 2026-07-11
 updated: 2026-07-11
 linked-spec: spec.md
@@ -39,17 +39,21 @@ implementation detail; this file is a navigation aid only.
 
 ## Completion Status
 
-Last updated 2026-07-12. The live task-level ledger is `.superpowers/sdd/progress.md`
+Last updated 2026-07-21. The live task-level ledger is `.superpowers/sdd/progress.md`
 (gitignored); this table is the human-facing summary.
+
+All nine phases are implemented, tested (96 workspace tests green, clippy and fmt clean),
+and pushed to `main`. Post-implementation adversarial reviews drove the hardening fixes noted.
 
 | Phase | Status |
 |-------|--------|
-| 1 | Complete (workspace + CI `d17ec2f`, `FileSystem` trait `b6bbf41`, golden fixtures `25dd5ab`; opus whole-branch review: READY WITH NOTES) |
-| 2 | In progress (Task 2.1 path encoding complete and reviewed; Task 2.2 reverse `ProjectIndex` not started) |
-| 3 | Not started |
-| 4 | Not started |
-| 5 | Not started |
-| 6 | Not started |
-| 7 | Not started |
-| 8 | Not started |
-| 9 | Not started |
+| 1 | Complete (workspace + CI `d17ec2f`, `FileSystem` trait `b6bbf41`, golden fixtures `25dd5ab`) |
+| 2 | Complete (path encoding + reverse `ProjectIndex` with ambiguity/stale resolution) |
+| 3 | Complete (`Store` trait + six adapter read paths + `sweep.unknown`, `c3401d9`) |
+| 4 | Complete (`cpm doctor` + `cpm scan` + CLI, `afc8ecf`, `9c824e0`; doctor honesty checkpoint passed) |
+| 5 | Complete (anchored rewrite engine + golden reference-move test, `76226bc`) |
+| 6 | Complete (`plan` + guards + nested detection + `render_plan`, `e7ec6d0`, `056bd84`) |
+| 7 | Complete (snapshot backup + transactional apply + end-to-end golden, `e2aa334`) |
+| 8 | Complete (per-store + aggregate verify, rollback, `apply_verified` auto-rollback, locks, `a2801e8`, `c758613`) |
+| 9 | Complete (full CLI `plan`/`apply`/`verify`/`rollback` + exit-code contract, `2285784`) |
+| review | Fail-loud read hardening from the F13 review, `d66c49b` |
