@@ -3,13 +3,14 @@ mod exit;
 use clap::{Parser, Subcommand};
 use cpm_core::apply::{apply_verified, ApplyOpts};
 use cpm_core::associate::{associate, AssociateOpts};
+use cpm_core::backup::Manifest;
 use cpm_core::doctor::{doctor, scan};
 use cpm_core::error::CpmError;
 use cpm_core::fs::FileSystem;
 use cpm_core::fs::RealFileSystem;
 use cpm_core::model::{Move, Scope};
 use cpm_core::plan::{build_plan, render_plan, Collision, PlanOpts};
-use cpm_core::rollback::rollback;
+use cpm_core::rollback::{rollback, verify_rollback};
 use cpm_core::verify::verify;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -369,7 +370,55 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> cpm_core::erro
             }
             Ok(())
         }
-        Cmd::Rollback { report } => rollback(report, fs),
+        Cmd::Rollback { report } => {
+            rollback(report, fs)?;
+            let results = verify_rollback(report, fs)?;
+            // Load the manifest to get run_id for the report (manifest still present after rollback).
+            let run_id = Manifest::load(fs, report)
+                .map(|m| m.run_id)
+                .unwrap_or_default();
+
+            let failed = results.iter().filter(|r| !r.ok).count();
+            let total = results.len();
+            for r in &results {
+                println!(
+                    "  [{}] {}: {}",
+                    if r.ok { "ok" } else { "FAIL" },
+                    r.check,
+                    r.detail
+                );
+            }
+            let summary = if failed == 0 {
+                format!("revert verified: {total}/{total} files byte-identical to pre-migration")
+            } else {
+                format!("FAILED: {failed}/{total} checks failed")
+            };
+            println!("{summary}");
+
+            // Build the rollback report (serde_json::json! - no serde-derive).
+            let report_json = serde_json::json!({
+                "run_id": run_id,
+                "checks": results.iter().map(|r| serde_json::json!({
+                    "check": r.check,
+                    "ok": r.ok,
+                    "detail": r.detail,
+                })).collect::<Vec<_>>(),
+            });
+            let report_str = serde_json::to_string_pretty(&report_json).unwrap();
+
+            // Always write rollback-report.json next to the manifest.
+            let rollback_report_path = report.with_file_name("rollback-report.json");
+            fs.write(&rollback_report_path, report_str.as_bytes())?;
+
+            if cli.json {
+                println!("{report_str}");
+            }
+
+            if failed > 0 {
+                return Err(CpmError::VerifyFailed(format!("{failed} checks failed")));
+            }
+            Ok(())
+        }
         Cmd::Associate {
             from,
             to,

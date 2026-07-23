@@ -1,7 +1,86 @@
 use crate::error::{CpmError, Result};
 use crate::fs::FileSystem;
+use crate::model::VerifyResult;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
+
+/// Re-read every file named in a manifest's content entries and confirm that each is
+/// byte-identical to the pre-migration original recorded in the manifest. Call this AFTER
+/// `rollback` to produce a proof that the restore succeeded.
+///
+/// Returns one `VerifyResult` per content entry (non-empty sha256) plus one result for the
+/// project folder if a move-tree occurred. Never short-circuits: all checks run regardless of
+/// individual failures so the caller gets a complete picture.
+pub fn verify_rollback(manifest_path: &Path, fs: &dyn FileSystem) -> Result<Vec<VerifyResult>> {
+    let m = crate::backup::Manifest::load(fs, manifest_path)?;
+    let mut out = Vec::new();
+
+    // Folder-restoration check: present iff the plan included a move-tree step.
+    let had_move_tree = m.entries.iter().any(|e| e.backup.starts_with("<move-tree"));
+    if had_move_tree {
+        let src = m.mv.src_abs.replace('\\', "/");
+        let dst = m.mv.dst_abs.replace('\\', "/");
+        let src_present = fs.exists(Path::new(&src));
+        let dst_absent = !fs.exists(Path::new(&dst));
+        let ok = src_present && dst_absent;
+        out.push(VerifyResult {
+            check: format!("folder restored {src}"),
+            ok,
+            detail: if ok {
+                format!("src {src} present, dst {dst} absent")
+            } else {
+                format!(
+                    "expected src {src} present ({src_present}) and dst {dst} absent ({})",
+                    !dst_absent
+                )
+            },
+        });
+    }
+
+    // Per-file content checks: skip markers (empty sha256 = not a content file).
+    for e in &m.entries {
+        if e.sha256.is_empty() {
+            continue;
+        }
+        let check = format!("restored {}", e.original);
+        let orig_path = Path::new(&e.original);
+        if !fs.exists(orig_path) {
+            out.push(VerifyResult {
+                check,
+                ok: false,
+                detail: format!("file missing at {}", e.original),
+            });
+            continue;
+        }
+        match fs.read(orig_path) {
+            Err(err) => {
+                out.push(VerifyResult {
+                    check,
+                    ok: false,
+                    detail: format!("read error at {}: {err}", e.original),
+                });
+            }
+            Ok(bytes) => {
+                let got: String = Sha256::digest(&bytes)
+                    .iter()
+                    .map(|x| format!("{x:02x}"))
+                    .collect();
+                let ok = got == e.sha256;
+                out.push(VerifyResult {
+                    check,
+                    ok,
+                    detail: if ok {
+                        "byte-identical to pre-migration".into()
+                    } else {
+                        format!("expected {} got {}", e.sha256, got)
+                    },
+                });
+            }
+        }
+    }
+
+    Ok(out)
+}
 
 pub fn rollback(manifest_path: &Path, fs: &dyn FileSystem) -> Result<()> {
     let v: serde_json::Value = serde_json::from_slice(&fs.read(manifest_path)?)
@@ -155,6 +234,89 @@ mod tests {
         assert!(
             !fs.exists(Path::new("/h/.claude/projects/E--Projects-B")),
             "new-encoded projects dir must be removed on rollback"
+        );
+    }
+
+    // --- verify_rollback: positive test (all checks ok, anti-vacuity) ---
+
+    #[test]
+    fn verify_rollback_positive_all_checks_pass() {
+        let fs = MemoryFileSystem::new();
+        let orig = b"{\"cwd\":\"E:\\\\Projects\\\\A\"}\n";
+        fs.write(Path::new("/h/.claude/projects/E--Projects-A/s.jsonl"), orig)
+            .unwrap();
+        fs.write(Path::new("E:/Projects/A/f.txt"), b"x").unwrap();
+        let mv = Move {
+            src_abs: "E:\\Projects\\A".into(),
+            dst_abs: "E:\\Projects\\B".into(),
+        };
+        let opts = PlanOpts {
+            recursive: false,
+            on_collision: Collision::Refuse,
+            force: false,
+            move_folder: true,
+            scope: crate::model::Scope::Standard,
+        };
+        let plan = build_plan(&fs, Path::new("/h"), &mv, &opts).unwrap();
+        apply(&plan, &fs, Path::new("/backup"), "T").unwrap();
+        rollback(Path::new("/backup/cpm-T/manifest.json"), &fs).unwrap();
+        let results = verify_rollback(Path::new("/backup/cpm-T/manifest.json"), &fs).unwrap();
+        // Anti-vacuity: must have produced at least one check.
+        assert!(
+            !results.is_empty(),
+            "verify_rollback returned an empty result set - vacuous proof"
+        );
+        // Every check must pass after a clean rollback.
+        for r in &results {
+            assert!(
+                r.ok,
+                "check failed after clean rollback: check={:?} detail={:?}",
+                r.check, r.detail
+            );
+        }
+    }
+
+    // --- verify_rollback: negative test (tampered file flagged as failed) ---
+
+    #[test]
+    fn verify_rollback_negative_tampered_file_flagged() {
+        let fs = MemoryFileSystem::new();
+        let orig = b"{\"cwd\":\"E:\\\\Projects\\\\A\"}\n";
+        fs.write(Path::new("/h/.claude/projects/E--Projects-A/s.jsonl"), orig)
+            .unwrap();
+        fs.write(Path::new("E:/Projects/A/f.txt"), b"x").unwrap();
+        let mv = Move {
+            src_abs: "E:\\Projects\\A".into(),
+            dst_abs: "E:\\Projects\\B".into(),
+        };
+        let opts = PlanOpts {
+            recursive: false,
+            on_collision: Collision::Refuse,
+            force: false,
+            move_folder: true,
+            scope: crate::model::Scope::Standard,
+        };
+        let plan = build_plan(&fs, Path::new("/h"), &mv, &opts).unwrap();
+        apply(&plan, &fs, Path::new("/backup"), "T").unwrap();
+        rollback(Path::new("/backup/cpm-T/manifest.json"), &fs).unwrap();
+        // Tamper: overwrite the restored transcript with different bytes post-rollback.
+        fs.write(
+            Path::new("/h/.claude/projects/E--Projects-A/s.jsonl"),
+            b"tampered content that does not match pre-migration hash",
+        )
+        .unwrap();
+        let results = verify_rollback(Path::new("/backup/cpm-T/manifest.json"), &fs).unwrap();
+        let failed: Vec<_> = results.iter().filter(|r| !r.ok).collect();
+        assert!(
+            !failed.is_empty(),
+            "tampered file must produce at least one failed check; all ok: {results:?}"
+        );
+        // The failed check detail must name the expected and actual hash.
+        assert!(
+            failed
+                .iter()
+                .any(|r| r.detail.contains("expected") && r.detail.contains("got")),
+            "failed check detail must describe the hash mismatch: {failed:?}"
         );
     }
 }
