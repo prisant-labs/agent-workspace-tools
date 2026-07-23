@@ -18,6 +18,7 @@ This index lists every document in the repository, who it is for, and when to re
 | [docs/internal/v2-gui-design-brief.md](internal/v2-gui-design-brief.md) | Designers, design agents | Generating v2 GUI concepts - self-contained, no repo access needed |
 | [AGENTS.md](../AGENTS.md) | AI agents | Operating manual: invariants, conventions, environment notes |
 | [docs/release-runbook.md](release-runbook.md) | Maintainers | v1.0 tag ceremony checklist: pre-tag gates, tag steps, signing posture |
+| [docs/troubleshooting.md](troubleshooting.md) | Everyone | What an exit code means and what to do: the 0/1/2/3/4 contract, guard refusals, idempotency, and the report artifacts |
 | [docs/CHANGELOG.md](CHANGELOG.md) | Everyone | Doc-impact history - updated with every doc change |
 
 ---

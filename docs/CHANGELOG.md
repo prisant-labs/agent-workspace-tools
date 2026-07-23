@@ -3,6 +3,26 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-07-23 - S-01 AC-gap remediation + troubleshooting doc
+
+An AC-to-test traceability review of S-01 (mover CLI) found five acceptance criteria that
+were detected but not enforced by the shipping build. Closed them on branch
+`s01-ac-gap-remediation`:
+
+- AC-1 (`fb400e0`): cross-volume guard - refuse (exit 2) rather than fail at apply.
+- AC-21 (`fb400e0`): lock detection wired into `build_plan` (refuse without `--force`).
+- AC-7 (`fb400e0`): ambiguous histories now fail closed and surface the candidates (7a);
+  the AC-7 wording was amended - the `--attribute` resolver moves to v1.x.
+- AC-22 (`ef10583`): machine-readable `report.json` written by default, plus `--json`.
+- AC-17v (`dfb9ee6`): verifiable revert - a post-rollback byte-identity proof and
+  `rollback-report.json`.
+- AC-26 (`485e565`): a deps-guard test that keeps network/LLM crates out of the tree.
+
+AC-19 was amended (19b) to idempotent-by-refusal (exit 2). New docs:
+`docs/troubleshooting.md` (exit-code contract, idempotency, guard messages, report
+artifacts) and the review evidence at
+`docs/internal/release-plans/plan_v1.0.0/S-01_mover-cli/ac-traceability.md`.
+
 ## 2026-07-20 - v1.0 feature-complete (Phases 6-9 + F13-F15) with adversarial-review fixes
 
 The engine and CLI are complete. Landed since the Phase 4-5 entry:
