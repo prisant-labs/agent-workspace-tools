@@ -212,8 +212,9 @@ backup `E:\tmp\claude-move-backup-20260709-090053` [S1].
   folder, When `plan` runs, Then mapping is decided by the `cwd` stored inside the
   transcripts, not the dir name. [S1][S2]
 - **AC-7** - Given a history whose stored path differs from the folder (rename or
-  shared clone), When `plan` runs, Then the tool marks it AMBIGUOUS and requires an
-  attribution decision (interactive prompt or `--attribute` flag). [S1]
+  shared clone), When `plan` runs, Then the tool marks it AMBIGUOUS and refuses to
+  proceed (fail-closed), surfacing the candidate paths; the `--attribute` resolver is
+  deferred to v1.x (amended 2026-07-23, maintainer decision 7a). [S1]
 - **AC-8** - When `apply` runs, Then `~/.claude/projects/<old-encoded>` is renamed
   to `<new-encoded>` and the old dir no longer exists. [S1]
 - **AC-9** - The encoded path the tool computes for a known input equals Claude
@@ -241,7 +242,8 @@ backup `E:\tmp\claude-move-backup-20260709-090053` [S1].
   (dir at new path, cwd rewritten, 0 old refs where required, JSON valid, line
   counts unchanged); otherwise it returns a listed failure. [S1][S3]
 - **AC-19** - Running `apply` a second time on an already-migrated project makes no
-  changes and exits success (no-op). [S3]
+  changes and refuses via the destination-exists guard (exit 2); that refusal is the
+  idempotency signal (amended 2026-07-23, maintainer decision 19b). [S3]
 - **AC-20** - Given a store whose structure does not match a known adapter shape,
   When `plan` runs, Then the tool reports the unrecognized store and refuses to
   apply, leaving all state untouched. [S3]
