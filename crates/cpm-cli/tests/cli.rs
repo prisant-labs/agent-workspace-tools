@@ -110,10 +110,16 @@ fn plan_is_non_empty_and_writes_nothing() {
         .collect();
     assert!(!before.is_empty(), "fixture seeding failed");
 
-    // Use a destination path that does not exist (inside the temp dir) so the
-    // DestinationExists guard does not fire on a developer machine that already has
-    // the real target folder.
-    let dst = tmp.path().join("dst-project");
+    // The destination must be on the same volume as src (E:) to pass the
+    // cross-volume guard (AC-1). Use E:\tmp as the base so tempfile picks
+    // an E:-rooted path. The child "dst-project" must NOT exist so the
+    // DestinationExists guard does not fire.
+    std::fs::create_dir_all("E:\\tmp").ok();
+    let dst_tmp = tempfile::Builder::new()
+        .prefix("cpm-plan-dst-")
+        .tempdir_in("E:\\tmp")
+        .unwrap();
+    let dst = dst_tmp.path().join("dst-project");
     let dst_str = dst.to_str().unwrap().to_string();
 
     let out = Command::new(env!("CARGO_BIN_EXE_cpm"))
