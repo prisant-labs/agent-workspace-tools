@@ -9,7 +9,8 @@ pub fn code_for(err: &CpmError) -> i32 {
         CpmError::DestinationExists(_)
         | CpmError::WorktreeSource(_)
         | CpmError::Ambiguous(_)
-        | CpmError::Locked(_) => 2,
+        | CpmError::Locked(_)
+        | CpmError::CrossVolume(_) => 2,
         CpmError::VerifyFailed(_) => 3,
         CpmError::UnrecognizedFormat(_) => 4,
         CpmError::Io(_) => 1,
@@ -27,6 +28,7 @@ mod tests {
         assert_eq!(code_for(&CpmError::WorktreeSource("w".into())), 2);
         assert_eq!(code_for(&CpmError::Ambiguous("a".into())), 2);
         assert_eq!(code_for(&CpmError::Locked("l".into())), 2);
+        assert_eq!(code_for(&CpmError::CrossVolume("c".into())), 2);
         // These three each need their own code: a script must be able to tell a bad
         // write (3) from a shape we refused to touch at all (4) from plain io (1).
         assert_eq!(code_for(&CpmError::VerifyFailed("v".into())), 3);
