@@ -130,16 +130,11 @@ fn plan_is_non_empty_and_writes_nothing() {
     assert!(!before.is_empty(), "fixture seeding failed");
 
     // The destination must be on the same volume as src (E:) to pass the
-    // cross-volume guard (AC-1). Use E:\tmp as the base so tempfile picks
-    // an E:-rooted path. The child "dst-project" must NOT exist so the
-    // DestinationExists guard does not fire.
-    std::fs::create_dir_all("E:\\tmp").ok();
-    let dst_tmp = tempfile::Builder::new()
-        .prefix("cpm-plan-dst-")
-        .tempdir_in("E:\\tmp")
-        .unwrap();
-    let dst = dst_tmp.path().join("dst-project");
-    let dst_str = dst.to_str().unwrap().to_string();
+    // cross-volume guard (AC-1). Use a non-existent string path: volume
+    // comparison is string-based (both "E:"), and existence check returns
+    // false for any non-existent path. No real directory is created, so
+    // the test runs even when the runner has no E: drive.
+    let dst_str = "E:\\cpm-plan-nonexistent-dst".to_string();
 
     let out = Command::new(env!("CARGO_BIN_EXE_cpm"))
         .args([
@@ -184,39 +179,26 @@ fn plan_is_non_empty_and_writes_nothing() {
 /// containing the required top-level fields (AC-22).
 #[test]
 fn apply_json_flag_emits_json_to_stdout() {
-    // All project-side paths must be on E:\ so the cross-volume guard passes.
-    std::fs::create_dir_all("E:\\tmp").ok();
-
+    // All project-side and backup paths share one temp root so they live on the
+    // same volume, satisfying the cross-volume guard (AC-1) without requiring E:\.
+    let root = tempfile::tempdir().unwrap();
     let home_tmp = tempfile::tempdir().unwrap();
 
-    // Create the source project dir on E:\.
-    let src_base = tempfile::Builder::new()
-        .prefix("cpm-apply-src-")
-        .tempdir_in("E:\\tmp")
-        .unwrap();
-    let src_dir = src_base.path().join("proj");
+    // Create the source project dir under root.
+    let src_dir = root.path().join("src").join("proj");
     std::fs::create_dir_all(&src_dir).unwrap();
     std::fs::write(src_dir.join("f.txt"), b"x").unwrap();
     let src_abs = src_dir.to_str().unwrap().to_string();
 
     seed_home(home_tmp.path(), &src_abs);
 
-    // Dst parent on E:\; the child dir must NOT exist (DestinationExists guard).
-    let dst_base = tempfile::Builder::new()
-        .prefix("cpm-apply-dst-")
-        .tempdir_in("E:\\tmp")
-        .unwrap();
-    let dst_abs = dst_base
-        .path()
-        .join("proj-moved")
-        .to_str()
-        .unwrap()
-        .to_string();
+    // Dst parent under root; the child proj-moved must NOT exist (DestinationExists guard).
+    let dst_parent = root.path().join("dst");
+    std::fs::create_dir_all(&dst_parent).unwrap();
+    let dst_abs = dst_parent.join("proj-moved").to_str().unwrap().to_string();
 
-    let backup_root = tempfile::Builder::new()
-        .prefix("cpm-backup-")
-        .tempdir_in("E:\\tmp")
-        .unwrap();
+    let backup_root = root.path().join("backup");
+    std::fs::create_dir_all(&backup_root).unwrap();
 
     let out = Command::new(env!("CARGO_BIN_EXE_cpm"))
         .args([
@@ -225,7 +207,7 @@ fn apply_json_flag_emits_json_to_stdout() {
             "--home",
             home_tmp.path().to_str().unwrap(),
             "--backup-root",
-            backup_root.path().to_str().unwrap(),
+            backup_root.to_str().unwrap(),
             "--src",
             &src_abs,
             "--dst",
@@ -262,36 +244,24 @@ fn apply_json_flag_emits_json_to_stdout() {
 /// backup dir and prints a human summary that includes the report path (AC-22).
 #[test]
 fn apply_default_writes_report_json_to_backup_dir() {
-    std::fs::create_dir_all("E:\\tmp").ok();
-
+    // All project-side and backup paths share one temp root so they live on the
+    // same volume, satisfying the cross-volume guard (AC-1) without requiring E:\.
+    let root = tempfile::tempdir().unwrap();
     let home_tmp = tempfile::tempdir().unwrap();
 
-    let src_base = tempfile::Builder::new()
-        .prefix("cpm-apply-src2-")
-        .tempdir_in("E:\\tmp")
-        .unwrap();
-    let src_dir = src_base.path().join("proj");
+    let src_dir = root.path().join("src").join("proj");
     std::fs::create_dir_all(&src_dir).unwrap();
     std::fs::write(src_dir.join("f.txt"), b"x").unwrap();
     let src_abs = src_dir.to_str().unwrap().to_string();
 
     seed_home(home_tmp.path(), &src_abs);
 
-    let dst_base = tempfile::Builder::new()
-        .prefix("cpm-apply-dst2-")
-        .tempdir_in("E:\\tmp")
-        .unwrap();
-    let dst_abs = dst_base
-        .path()
-        .join("proj-moved")
-        .to_str()
-        .unwrap()
-        .to_string();
+    let dst_parent = root.path().join("dst");
+    std::fs::create_dir_all(&dst_parent).unwrap();
+    let dst_abs = dst_parent.join("proj-moved").to_str().unwrap().to_string();
 
-    let backup_root = tempfile::Builder::new()
-        .prefix("cpm-backup2-")
-        .tempdir_in("E:\\tmp")
-        .unwrap();
+    let backup_root = root.path().join("backup");
+    std::fs::create_dir_all(&backup_root).unwrap();
 
     let out = Command::new(env!("CARGO_BIN_EXE_cpm"))
         .args([
@@ -299,7 +269,7 @@ fn apply_default_writes_report_json_to_backup_dir() {
             "--home",
             home_tmp.path().to_str().unwrap(),
             "--backup-root",
-            backup_root.path().to_str().unwrap(),
+            backup_root.to_str().unwrap(),
             "--src",
             &src_abs,
             "--dst",
@@ -327,7 +297,7 @@ fn apply_default_writes_report_json_to_backup_dir() {
     );
 
     // Find the cpm-* backup dir created inside the backup root.
-    let cpm_dir = std::fs::read_dir(backup_root.path())
+    let cpm_dir = std::fs::read_dir(&backup_root)
         .unwrap()
         .find_map(|e| {
             let e = e.unwrap();
