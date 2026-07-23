@@ -333,11 +333,20 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> cpm_core::erro
                 force: cli.force,
             };
             let r = apply_verified(&plan, fs, &backup_root, &opts)?;
-            println!(
-                "applied {} changes; backup {}",
-                r.applied.len(),
-                r.backup_dir
-            );
+            let doc = r.to_json();
+            let doc_str = serde_json::to_string_pretty(&doc).unwrap();
+            let report_path = backup_root.join(&r.backup_dir).join("report.json");
+            fs.write(&report_path, doc_str.as_bytes())?;
+            if cli.json {
+                println!("{}", doc_str);
+            } else {
+                println!(
+                    "applied {} changes; backup {}",
+                    r.applied.len(),
+                    r.backup_dir
+                );
+                println!("report: {}", report_path.display());
+            }
             Ok(())
         }
         Cmd::Verify { src, dst } => {
