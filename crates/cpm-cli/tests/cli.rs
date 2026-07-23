@@ -1,6 +1,25 @@
 use std::io::Write as _;
 use std::process::{Command, Stdio};
 
+/// Mirror of cpm_core::paths::encode_project_dir, kept local so the integration
+/// test does not depend on the library's internals.
+fn encode_project_dir_local(abs: &str) -> String {
+    abs.chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect()
+}
+
+/// Seed a minimal Claude home: one project dir whose transcript records `src_abs`
+/// as its cwd, so build_plan finds something to rewrite.
+fn seed_home(home: &std::path::Path, src_abs: &str) {
+    let encoded = encode_project_dir_local(src_abs);
+    let proj_state = home.join(".claude").join("projects").join(&encoded);
+    std::fs::create_dir_all(&proj_state).unwrap();
+    // The cwd value inside the JSON must use double-backslash for Windows paths.
+    let cwd_json = format!("{{\"cwd\":\"{}\"}}\n", src_abs.replace('\\', "\\\\"));
+    std::fs::write(proj_state.join("s.jsonl"), cwd_json.as_bytes()).unwrap();
+}
+
 // Recursively copy a dir tree (std only).
 fn copy_tree(from: &std::path::Path, to: &std::path::Path) {
     for e in std::fs::read_dir(from).unwrap() {
@@ -159,4 +178,182 @@ fn plan_is_non_empty_and_writes_nothing() {
             p.display()
         );
     }
+}
+
+/// Verifies that `cpm apply --json` prints a machine-readable JSON report to stdout
+/// containing the required top-level fields (AC-22).
+#[test]
+fn apply_json_flag_emits_json_to_stdout() {
+    // All project-side paths must be on E:\ so the cross-volume guard passes.
+    std::fs::create_dir_all("E:\\tmp").ok();
+
+    let home_tmp = tempfile::tempdir().unwrap();
+
+    // Create the source project dir on E:\.
+    let src_base = tempfile::Builder::new()
+        .prefix("cpm-apply-src-")
+        .tempdir_in("E:\\tmp")
+        .unwrap();
+    let src_dir = src_base.path().join("proj");
+    std::fs::create_dir_all(&src_dir).unwrap();
+    std::fs::write(src_dir.join("f.txt"), b"x").unwrap();
+    let src_abs = src_dir.to_str().unwrap().to_string();
+
+    seed_home(home_tmp.path(), &src_abs);
+
+    // Dst parent on E:\; the child dir must NOT exist (DestinationExists guard).
+    let dst_base = tempfile::Builder::new()
+        .prefix("cpm-apply-dst-")
+        .tempdir_in("E:\\tmp")
+        .unwrap();
+    let dst_abs = dst_base
+        .path()
+        .join("proj-moved")
+        .to_str()
+        .unwrap()
+        .to_string();
+
+    let backup_root = tempfile::Builder::new()
+        .prefix("cpm-backup-")
+        .tempdir_in("E:\\tmp")
+        .unwrap();
+
+    let out = Command::new(env!("CARGO_BIN_EXE_cpm"))
+        .args([
+            "apply",
+            "--json",
+            "--home",
+            home_tmp.path().to_str().unwrap(),
+            "--backup-root",
+            backup_root.path().to_str().unwrap(),
+            "--src",
+            &src_abs,
+            "--dst",
+            &dst_abs,
+        ])
+        .output()
+        .unwrap();
+
+    assert!(
+        out.status.success(),
+        "cpm apply --json failed\nstderr: {}\nstdout: {}",
+        String::from_utf8_lossy(&out.stderr),
+        String::from_utf8_lossy(&out.stdout),
+    );
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let v: serde_json::Value = serde_json::from_str(&stdout)
+        .unwrap_or_else(|e| panic!("stdout must be valid JSON; got {stdout:?}: {e}"));
+
+    assert!(v["run_id"].is_string(), "run_id must be a string");
+    assert!(v["applied"].is_array(), "applied must be an array");
+    assert!(
+        !v["applied"].as_array().unwrap().is_empty(),
+        "applied must be non-empty"
+    );
+    assert!(v["backup_dir"].is_string(), "backup_dir must be a string");
+    assert!(
+        v["verify"].is_array(),
+        "verify must be an array after apply_verified"
+    );
+}
+
+/// Verifies that a plain `cpm apply` (no --json flag) writes `report.json` into the
+/// backup dir and prints a human summary that includes the report path (AC-22).
+#[test]
+fn apply_default_writes_report_json_to_backup_dir() {
+    std::fs::create_dir_all("E:\\tmp").ok();
+
+    let home_tmp = tempfile::tempdir().unwrap();
+
+    let src_base = tempfile::Builder::new()
+        .prefix("cpm-apply-src2-")
+        .tempdir_in("E:\\tmp")
+        .unwrap();
+    let src_dir = src_base.path().join("proj");
+    std::fs::create_dir_all(&src_dir).unwrap();
+    std::fs::write(src_dir.join("f.txt"), b"x").unwrap();
+    let src_abs = src_dir.to_str().unwrap().to_string();
+
+    seed_home(home_tmp.path(), &src_abs);
+
+    let dst_base = tempfile::Builder::new()
+        .prefix("cpm-apply-dst2-")
+        .tempdir_in("E:\\tmp")
+        .unwrap();
+    let dst_abs = dst_base
+        .path()
+        .join("proj-moved")
+        .to_str()
+        .unwrap()
+        .to_string();
+
+    let backup_root = tempfile::Builder::new()
+        .prefix("cpm-backup2-")
+        .tempdir_in("E:\\tmp")
+        .unwrap();
+
+    let out = Command::new(env!("CARGO_BIN_EXE_cpm"))
+        .args([
+            "apply",
+            "--home",
+            home_tmp.path().to_str().unwrap(),
+            "--backup-root",
+            backup_root.path().to_str().unwrap(),
+            "--src",
+            &src_abs,
+            "--dst",
+            &dst_abs,
+        ])
+        .output()
+        .unwrap();
+
+    assert!(
+        out.status.success(),
+        "cpm apply failed\nstderr: {}\nstdout: {}",
+        String::from_utf8_lossy(&out.stderr),
+        String::from_utf8_lossy(&out.stdout),
+    );
+
+    // Stdout should be a human summary, not JSON.
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("applied"),
+        "human summary must mention 'applied': {stdout:?}"
+    );
+    assert!(
+        stdout.contains("report:"),
+        "human summary must include the report path: {stdout:?}"
+    );
+
+    // Find the cpm-* backup dir created inside the backup root.
+    let cpm_dir = std::fs::read_dir(backup_root.path())
+        .unwrap()
+        .find_map(|e| {
+            let e = e.unwrap();
+            if e.file_name().to_string_lossy().starts_with("cpm-") {
+                Some(e.path())
+            } else {
+                None
+            }
+        })
+        .expect("backup root must contain a cpm-* dir after apply");
+
+    let report_path = cpm_dir.join("report.json");
+    assert!(
+        report_path.exists(),
+        "report.json must exist at {report_path:?}"
+    );
+
+    let raw = std::fs::read_to_string(&report_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&raw)
+        .unwrap_or_else(|e| panic!("report.json must be valid JSON: {e}\ncontent: {raw:?}"));
+
+    assert!(v["run_id"].is_string(), "run_id must be a string");
+    assert!(v["applied"].is_array(), "applied must be an array");
+    assert!(
+        !v["applied"].as_array().unwrap().is_empty(),
+        "applied must be non-empty"
+    );
+    assert!(v["backup_dir"].is_string(), "backup_dir must be a string");
 }
