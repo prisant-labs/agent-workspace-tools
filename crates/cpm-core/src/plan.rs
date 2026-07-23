@@ -1,8 +1,9 @@
 use crate::error::{CpmError, Result};
 use crate::fs::FileSystem;
 use crate::index::ProjectIndex;
+use crate::locks::detect_live;
 use crate::model::{Change, Ctx, Move, Scope};
-use crate::paths::normalize_path;
+use crate::paths::{normalize_path, same_volume};
 use crate::stores::registry;
 use std::path::Path;
 
@@ -29,6 +30,16 @@ pub struct Plan {
 }
 
 pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) -> Result<Plan> {
+    // Guard: cross-volume moves are not supported in v1.0 (spec AC-2, deferred to v1.x).
+    // Checked first so the refusal is immediate and unambiguous.
+    if opts.move_folder && !same_volume(&mv.src_abs, &mv.dst_abs) {
+        return Err(CpmError::CrossVolume(format!(
+            "cross-volume move refused: source {} is on a different volume from \
+             destination {}. Cross-volume moves are not supported in v1.0 \
+             (spec AC-2, deferred). Move within the same volume instead.",
+            mv.src_abs, mv.dst_abs
+        )));
+    }
     // Guard: destination folder exists (only relevant when we will move the folder there)
     if opts.move_folder && fs.exists(Path::new(&mv.dst_abs.replace('\\', "/"))) {
         return Err(CpmError::DestinationExists(mv.dst_abs.clone()));
@@ -38,7 +49,50 @@ pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) 
     if fs.is_file(Path::new(&git)) && !opts.force {
         return Err(CpmError::WorktreeSource(mv.src_abs.clone()));
     }
+    // Guard: live IDE lock files signal a running CLI that may be editing the project.
+    // Without --force this is a hard refusal; with --force we warn and continue.
+    let live_locks = detect_live(fs, home);
+    let mut warnings = Vec::new();
+    if !live_locks.is_empty() {
+        if !opts.force {
+            return Err(CpmError::Locked(format!(
+                "live IDE lock detected - a running CLI instance may be editing this \
+                 project. Lock(s): {}. Close the running CLI first, or pass --force \
+                 to proceed anyway.",
+                live_locks.join(", ")
+            )));
+        }
+        warnings.push(format!(
+            "proceeding despite {} live lock(s): {}. Editing while a CLI instance \
+             is running could cause conflicts.",
+            live_locks.len(),
+            live_locks.join(", ")
+        ));
+    }
+
     let index = ProjectIndex::build(fs, home)?;
+    let src_key = normalize_path(&mv.src_abs);
+
+    // Guard: ambiguous history - src matches a project dir that records two or more
+    // live paths. The tool refuses rather than guessing which path is correct (AC-7).
+    for (dir, candidates) in &index.ambiguous_candidates {
+        if candidates.iter().any(|c| normalize_path(c) == src_key) {
+            let cands = candidates.join(", ");
+            warnings.push(format!(
+                "ambiguous history at {}: could belong to {}",
+                dir.display(),
+                cands
+            ));
+            return Err(CpmError::Ambiguous(format!(
+                "the project dir {} could belong to more than one live path ({}). \
+                 The tool will not guess which path is correct - resolve this manually. \
+                 The --attribute resolver is planned for v1.x.",
+                dir.display(),
+                cands
+            )));
+        }
+    }
+
     let ctx = Ctx {
         fs,
         home: home.to_path_buf(),
@@ -46,7 +100,6 @@ pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) 
         scope: opts.scope,
     };
     let mut changes = Vec::new();
-    let mut warnings = Vec::new();
     let mut nested = Vec::new();
 
     for store in registry() {
@@ -68,7 +121,6 @@ pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) 
     }
 
     // Nested project detection (keys strictly under src)
-    let src_key = normalize_path(&mv.src_abs);
     for k in index.by_cwd.keys() {
         if k != &src_key && k.starts_with(&format!("{src_key}/")) {
             nested.push(k.clone());
@@ -181,6 +233,107 @@ mod tests {
         };
         let err = build_plan(&fs, Path::new("/h"), &mv, &opts()).unwrap_err();
         assert!(matches!(err, crate::error::CpmError::WorktreeSource(_)));
+    }
+
+    // ---------------------------------------------------------------------------
+    // Sub-task 1a (AC-1): cross-volume guard
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn refuses_cross_volume_move_when_move_folder_true() {
+        // src on E:, dst on F: - different volumes, no stores to hit
+        let fs = MemoryFileSystem::new();
+        let mv = Move {
+            src_abs: "E:\\Projects\\A".into(),
+            dst_abs: "F:\\Projects\\B".into(),
+        };
+        let err = build_plan(&fs, Path::new("/h"), &mv, &opts()).unwrap_err();
+        assert!(
+            matches!(err, crate::error::CpmError::CrossVolume(_)),
+            "expected CrossVolume, got {err:?}"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // Sub-task 1b (AC-21): lock detection
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn refuses_when_lock_exists_and_force_false() {
+        let fs = MemoryFileSystem::new();
+        fs.write(Path::new("/h/.claude/ide/session.lock"), b"")
+            .unwrap();
+        let mv = Move {
+            src_abs: "E:\\Projects\\A".into(),
+            dst_abs: "E:\\Projects\\B".into(),
+        };
+        let err = build_plan(&fs, Path::new("/h"), &mv, &opts()).unwrap_err();
+        assert!(
+            matches!(err, crate::error::CpmError::Locked(_)),
+            "expected Locked, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn proceeds_with_warning_when_lock_exists_and_force_true() {
+        let fs = MemoryFileSystem::new();
+        fs.write(Path::new("/h/.claude/ide/session.lock"), b"")
+            .unwrap();
+        let mv = Move {
+            src_abs: "E:\\Projects\\A".into(),
+            dst_abs: "E:\\Projects\\B".into(),
+        };
+        let mut o = opts();
+        o.force = true;
+        let plan = build_plan(&fs, Path::new("/h"), &mv, &o).unwrap();
+        assert!(
+            plan.warnings.iter().any(|w| w.contains("lock")),
+            "expected a lock warning in plan.warnings, got {:?}",
+            plan.warnings
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // Sub-task 1c (AC-7): ambiguous attribution, fail-closed surfacing
+    // ---------------------------------------------------------------------------
+
+    fn transcript_line(cwd: &str) -> Vec<u8> {
+        format!(
+            "{{\"type\":\"user\",\"cwd\":\"{}\",\"uuid\":\"x\"}}\n",
+            cwd.replace('\\', "\\\\")
+        )
+        .into_bytes()
+    }
+
+    #[test]
+    fn refuses_when_src_matches_ambiguous_history() {
+        let fs = MemoryFileSystem::new();
+        // One projects/ dir whose transcripts record two live cwds - genuine ambiguity
+        fs.write(
+            Path::new("/h/.claude/projects/E--proj/a.jsonl"),
+            &transcript_line("E:\\Projects\\one"),
+        )
+        .unwrap();
+        fs.write(
+            Path::new("/h/.claude/projects/E--proj/b.jsonl"),
+            &transcript_line("E:\\Projects\\two"),
+        )
+        .unwrap();
+        // Both candidate paths still exist on disk
+        fs.write(Path::new("E:\\Projects\\one\\.keep"), b"x")
+            .unwrap();
+        fs.write(Path::new("E:\\Projects\\two\\.keep"), b"x")
+            .unwrap();
+        // Attempting to move "one", which is one of the ambiguous candidates
+        let mv = Move {
+            src_abs: "E:\\Projects\\one".into(),
+            dst_abs: "E:\\Projects\\three".into(),
+        };
+        let err = build_plan(&fs, Path::new("/h"), &mv, &opts()).unwrap_err();
+        assert!(
+            matches!(err, crate::error::CpmError::Ambiguous(_)),
+            "expected Ambiguous, got {err:?}"
+        );
     }
 
     #[test]

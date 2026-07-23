@@ -4,6 +4,8 @@ pub enum CpmError {
     WorktreeSource(String),
     Ambiguous(String),
     Locked(String),
+    /// Cross-volume move attempted. Deferred to v1.x (spec AC-2). Nothing written.
+    CrossVolume(String),
     UnrecognizedFormat(String),
     VerifyFailed(String),
     Io(std::io::Error),

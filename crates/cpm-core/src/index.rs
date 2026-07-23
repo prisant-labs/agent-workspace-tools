@@ -49,6 +49,11 @@ pub struct ProjectIndex {
     /// Dirs whose transcripts name more than one path that still exists. There is
     /// no honest way to pick one, so the tool refuses rather than guesses.
     pub ambiguous: Vec<PathBuf>,
+    /// dir -> the live candidate cwds for each ambiguous dir. Additive companion to
+    /// `ambiguous`: carries the actual candidate paths so `build_plan` can check
+    /// whether `src` is one of them and refuse rather than silently skip (AC-7).
+    /// Consumers of `ambiguous` (list.rs, archive.rs) are not affected.
+    pub ambiguous_candidates: HashMap<PathBuf, Vec<String>>,
     /// dir -> recorded cwds that no longer exist on disk. This is the move residue
     /// the doctor reports: transcripts that were relocated without being rewritten.
     pub stale: HashMap<PathBuf, Vec<String>>,
@@ -60,6 +65,7 @@ impl ProjectIndex {
         let mut unresolved = Vec::new();
         let mut cwds = Vec::new();
         let mut ambiguous = Vec::new();
+        let mut ambiguous_candidates: HashMap<PathBuf, Vec<String>> = HashMap::new();
         let mut stale: HashMap<PathBuf, Vec<String>> = HashMap::new();
         let projects = home.join(".claude").join("projects");
         let dirs = read_dir_or_empty(fs, &projects)?;
@@ -118,7 +124,12 @@ impl ProjectIndex {
                             stale.insert(dir.clone(), found.clone());
                             unresolved.push(dir);
                         }
-                        _ => ambiguous.push(dir),
+                        _ => {
+                            // Two or more live paths: genuine ambiguity. Record the
+                            // candidates so build_plan can detect src matches (AC-7).
+                            ambiguous_candidates.insert(dir.clone(), live);
+                            ambiguous.push(dir);
+                        }
                     }
                 }
             }
@@ -128,6 +139,7 @@ impl ProjectIndex {
             unresolved,
             cwds,
             ambiguous,
+            ambiguous_candidates,
             stale,
         })
     }
