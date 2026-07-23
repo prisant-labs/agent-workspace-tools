@@ -56,15 +56,15 @@ pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) 
     if !live_locks.is_empty() {
         if !opts.force {
             return Err(CpmError::Locked(format!(
-                "live IDE lock detected - a running CLI instance may be editing this \
-                 project. Lock(s): {}. Close the running CLI first, or pass --force \
-                 to proceed anyway.",
+                "live IDE lock detected - a running Claude Code CLI may be editing \
+                 your Claude state. Lock(s): {}. Close the running CLI first, or \
+                 pass --force to proceed anyway.",
                 live_locks.join(", ")
             )));
         }
         warnings.push(format!(
-            "proceeding despite {} live lock(s): {}. Editing while a CLI instance \
-             is running could cause conflicts.",
+            "proceeding despite {} live lock(s): {}. Editing Claude state while \
+             a CLI instance is running could cause conflicts.",
             live_locks.len(),
             live_locks.join(", ")
         ));
@@ -78,11 +78,6 @@ pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) 
     for (dir, candidates) in &index.ambiguous_candidates {
         if candidates.iter().any(|c| normalize_path(c) == src_key) {
             let cands = candidates.join(", ");
-            warnings.push(format!(
-                "ambiguous history at {}: could belong to {}",
-                dir.display(),
-                cands
-            ));
             return Err(CpmError::Ambiguous(format!(
                 "the project dir {} could belong to more than one live path ({}). \
                  The tool will not guess which path is correct - resolve this manually. \

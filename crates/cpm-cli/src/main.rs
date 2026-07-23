@@ -389,7 +389,7 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> cpm_core::erro
                 );
             }
             let summary = if failed == 0 {
-                format!("revert verified: {total}/{total} files byte-identical to pre-migration")
+                format!("revert verified: {total}/{total} checks passed")
             } else {
                 format!("FAILED: {failed}/{total} checks failed")
             };
