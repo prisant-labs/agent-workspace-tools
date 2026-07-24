@@ -30,11 +30,12 @@ CPM refuses to write until it has probed every store for a recognized format - a
 
 | Release | Contents | Status |
 |---|---|---|
-| v0.1.0 (Phase 4 milestone) | `cpm doctor` and `cpm scan` - read-only | Shipped |
-| v1.0.0 | Full CLI: mover (`plan`/`apply`/`verify`/`rollback`) plus `list`, `archive`, `associate` | Feature-complete; v1.0 tag pending |
-| v2 | Tauri 2 + React GUI over the identical core | Deferred |
+| v0.1.0 (Phase 4 milestone) | `cpm doctor` and `cpm scan` - read-only | Internal milestone (not tagged) |
+| v1.0.0 | Full CLI: mover (`plan`/`apply`/`verify`/`rollback`) plus `list`, `archive`, `associate` | Feature-complete; all 24 mover acceptance criteria verified against tests. Tag pending three gates: maintainer spec sign-off, the manual acceptance run, and the `cpm` -> `awt` binary-rename decision. |
+| v1.x (parked) | Cross-volume move; Codex and Gemini adapters | Sit behind the existing adapter boundary; promotable when scheduled |
+| v2.0.0 | Tauri 2 + React GUI over the identical core | Deferred; security and native-parity baselines first |
 
-Full program plan: [docs/ROADMAP.md](docs/ROADMAP.md).
+Full program plan: [docs/ROADMAP.md](docs/ROADMAP.md). How the system works (architecture): [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Documentation map
 
@@ -45,6 +46,7 @@ Full program plan: [docs/ROADMAP.md](docs/ROADMAP.md).
 | [docs/reference/commands.md](docs/reference/commands.md) | Everyone | Per-subcommand reference: flags, behavior, exit codes |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Everyone | Exit codes, guard refusals, idempotency, and the report artifacts |
 | [docs/release-runbook.md](docs/release-runbook.md) | Maintainers | v1.0 tag ceremony checklist |
+| [docs/acceptance-run.md](docs/acceptance-run.md) | Maintainers | Step-by-step manual acceptance run against a copy of ~/.claude |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Maintainers | Program plan for v1 and v2 |
 | [docs/DESIGN.md](docs/DESIGN.md) | Engineers | Validated design: architecture, safety model, CLI surface, phase plan |
 | [docs/superpowers/plans/2026-07-10-claude-project-mover.md](docs/superpowers/plans/2026-07-10-claude-project-mover.md) | Engineers, AI agents | Executable TDD plan, task by task |
@@ -54,12 +56,13 @@ Full program plan: [docs/ROADMAP.md](docs/ROADMAP.md).
 | [docs/internal/release-plans/](docs/internal/release-plans/) | Maintainers | Release scaffolding (jp-release-plan convention) |
 | [docs/index.md](docs/index.md) | Everyone | Full documentation index |
 | [AGENTS.md](AGENTS.md) | AI agents | Operating manual: invariants, conventions, environment notes |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Engineers | How to build, test, and contribute; conventions and PR flow |
 | [CHANGELOG.md](CHANGELOG.md) | Everyone | User-facing release changelog (keepachangelog) |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | Everyone | Doc-impact history |
 
 ## For contributors
 
-Rust stable and cargo are required. Once product code exists: `cargo test --workspace`. Read [AGENTS.md](AGENTS.md) before any agentic work on this repo.
+Rust stable and cargo are required. Build and test with `cargo test --workspace`, and see [CONTRIBUTING.md](CONTRIBUTING.md) for the full build/lint gates, conventions, and PR flow. Read [AGENTS.md](AGENTS.md) before any agentic work on this repo.
 
 ## License
 

@@ -3,6 +3,18 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-07-23 - v1.0 docs refresh: status/architecture sync + acceptance-run + CONTRIBUTING
+
+Documentation pass on branch `v1.0-docs-refresh`:
+- README status/roadmap table refreshed (feature-complete, all 24 AC verified; the three
+  remaining tag gates named); added a pointer to `docs/DESIGN.md` as the architecture doc.
+- ROADMAP Section 7 brought current (110 tests; AC-gap remediation and hygiene done; remaining
+  gates are the S-01 sign-off, the acceptance run, and the `cpm` -> `awt` rename decision).
+- `docs/DESIGN.md`: fixed the stale "v1.1" labels on F13-F15 (they shipped in v1.0) and noted
+  that the `--attribute` resolver is deferred (decision 7a).
+- Added `docs/acceptance-run.md` (a detailed manual-acceptance walkthrough expanding
+  release-runbook Section 2) and `CONTRIBUTING.md` (build/test/lint, conventions, PR flow).
+
 ## 2026-07-23 - v1.0 hygiene: quickstart, root changelog, version bump, cleaner errors
 
 Release-prep hygiene on branch `v1.0-hygiene-display`:

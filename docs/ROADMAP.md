@@ -113,10 +113,10 @@ as its first effort.
 - Every doc change lands with a `docs/CHANGELOG.md` entry; session logs go to
   `_agent-context/session-log/`.
 
-## 7. Current status (2026-07-20)
+## 7. Current status (2026-07-23)
 
 **v1.0 is feature-complete on `main`, pushed.** All engine phases (1-9) plus the retention
-features (13-15) are implemented, committed, and pushed; `main` is level with origin. 82
+features (13-15) are implemented, committed, and pushed; `main` is level with origin. 110
 tests pass, clippy and fmt clean.
 
 - Phases 1-4: scaffold + FileSystem trait + reverse index + six adapter read paths +
@@ -143,10 +143,21 @@ I/O error while a missing projects dir stays a valid empty result) and for the F
 manifest (now cumulative + atomic) and SessionEnd hook (now reads the hook JSON from stdin,
 which is the real Claude Code hook contract).
 
-**Remaining before the v1.0 tag (not features):** the release ceremony
-(`docs/reference/commands.md`, `docs/release-runbook.md`, README command list, and the
-signing / SmartScreen posture per CI-3 - v1.0 may ship source-first) and the manual
-acceptance run (the real reference move against a COPY of `~/.claude`).
+**Since 2026-07-20 (merged to `main`, CI green on windows-latest, PRs #1 and #2):** an
+AC-to-test traceability review closed five acceptance criteria the build detected but did not
+enforce - cross-volume guard, lock detection, ambiguous-history fail-close, machine-readable
+report, and a zero-network guard test - added a verifiable revert (post-rollback byte-identity
+proof), and amended AC-7 (fail-closed, 7a) and AC-19 (idempotent-by-refusal, 19b). A
+release-hygiene pass then added `docs/quickstart.md`, `docs/troubleshooting.md`, and the root
+`CHANGELOG.md`, bumped `Cargo.toml` to 1.0.0, and gave `CpmError` a `Display` impl so guard
+errors surface their plain-language message. Evidence:
+`docs/internal/release-plans/plan_v1.0.0/S-01_mover-cli/ac-traceability.md`.
+
+**Remaining before the v1.0 tag (all non-code):** (1) the maintainer S-01 spec sign-off, now
+evidence-backed by the traceability doc; (2) the manual acceptance run against a COPY of
+`~/.claude`, per `docs/acceptance-run.md`; and (3) the `cpm` -> `awt` binary-rename decision
+(ADR-0001). The signing / SmartScreen posture is CI-3 (the binary channel), not a tag blocker -
+v1.0 may ship source-first.
 
 **Next major work: v2.0.0** - the Tauri + React GUI ("Taura") over the identical `cpm-core`;
 conceptual mockups exist. Open maintainer decisions remain tracked in the release plan's
