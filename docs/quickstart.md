@@ -1,6 +1,6 @@
 # Quickstart
 
-A first run of the tool, safest path first. The CLI is `cpm`. Everything here is deterministic
+A first run of the tool, safest path first. The CLI is `awt`. Everything here is deterministic
 and offline - no network, no LLM.
 
 ## Install
@@ -8,7 +8,7 @@ and offline - no network, no LLM.
 From a clone of the repository:
 
 ```
-cargo install --path crates/cpm-cli
+cargo install --path crates/awt-cli
 ```
 
 or build without installing:
@@ -24,7 +24,7 @@ practice against a COPY. Every command accepts `--home <dir>` to point at a diff
 
 ```
 # make a copy of your Claude home, then point the tool at the copy
-cpm list --home "C:\path\to\claude-home-copy"
+awt list --home "C:\path\to\claude-home-copy"
 ```
 
 Do the first real move against a copy. Only run against your live `~/.claude` once you have seen
@@ -33,7 +33,7 @@ a clean `plan` and a successful `apply` + `verify` + `rollback` on the copy.
 ## 1. See what Claude knows about your projects
 
 ```
-cpm list
+awt list
 ```
 
 Lists every project Claude has state for, with session counts, sizes, and transcript ages, so the
@@ -42,7 +42,7 @@ Lists every project Claude has state for, with session counts, sizes, and transc
 ## 2. Find stale references
 
 ```
-cpm doctor
+awt doctor
 ```
 
 Scans the whole install for path references that no longer resolve (projects that were moved or
@@ -53,7 +53,7 @@ renamed without their Claude state being updated).
 Always dry-run first. `plan` writes nothing:
 
 ```
-cpm plan --src "E:\Projects\old-name" --dst "E:\Projects\new-name"
+awt plan --src "E:\Projects\old-name" --dst "E:\Projects\new-name"
 ```
 
 Read the plan. It lists the folder move, the `projects/` directory rename, each transcript rewrite
@@ -64,7 +64,7 @@ history), the plan refuses and tells you what to do - see `docs/troubleshooting.
 When the plan looks right, apply it:
 
 ```
-cpm apply --src "E:\Projects\old-name" --dst "E:\Projects\new-name" --backup-root "E:\cpm-backups"
+awt apply --src "E:\Projects\old-name" --dst "E:\Projects\new-name" --backup-root "E:\awt-backups"
 ```
 
 `apply` snapshots every file it will touch (with sha256) into `--backup-root` first, then makes the
@@ -74,7 +74,7 @@ changes, then verifies the result from disk and auto-rolls-back if anything fail
 Confirm independently:
 
 ```
-cpm verify --src "E:\Projects\old-name" --dst "E:\Projects\new-name"
+awt verify --src "E:\Projects\old-name" --dst "E:\Projects\new-name"
 ```
 
 Same-volume moves only in v1.0. Both paths must be on the same drive.
@@ -84,7 +84,7 @@ Same-volume moves only in v1.0. Both paths must be on the same drive.
 Point `rollback` at the manifest the apply wrote:
 
 ```
-cpm rollback "E:\cpm-backups\cpm-<run-id>\manifest.json"
+awt rollback "E:\awt-backups\awt-<run-id>\manifest.json"
 ```
 
 `rollback` restores every file to its pre-migration bytes, moves the folder back, then proves the
@@ -94,7 +94,7 @@ It exits non-zero (3) if any file did not come back byte-identical.
 ## 5. Protect transcripts from the 30-day cliff
 
 ```
-cpm archive --archive-dir "E:\claude-archive"
+awt archive --archive-dir "E:\claude-archive"
 ```
 
 Copies transcripts and session artifacts to a durable folder before Claude Code auto-deletes them.

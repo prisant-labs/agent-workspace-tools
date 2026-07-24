@@ -13,14 +13,14 @@ jobs:
       - name: dependency-hygiene gate
         shell: bash
         run: |
-          if cargo tree -p cpm-core | grep -iE 'tauri|clap'; then
-            echo "cpm-core must not depend on tauri or clap"; exit 1
+          if cargo tree -p awt-core | grep -iE 'tauri|clap'; then
+            echo "awt-core must not depend on tauri or clap"; exit 1
           fi
       - name: no-network gate
         shell: bash
         run: |
-          if cargo tree -p cpm-core | grep -iE 'reqwest|ureq|hyper|curl'; then
-            echo "cpm-core must not depend on any network-capable crate"; exit 1
+          if cargo tree -p awt-core | grep -iE 'reqwest|ureq|hyper|curl'; then
+            echo "awt-core must not depend on any network-capable crate"; exit 1
           fi
       - name: advisory audit (RUSTSEC)
         run: cargo install cargo-audit --locked && cargo audit

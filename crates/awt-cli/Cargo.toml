@@ -1,0 +1,17 @@
+[package]
+name = "awt-cli"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "awt"
+path = "src/main.rs"
+
+[dependencies]
+awt-core = { path = "../awt-core" }
+clap = { version = "4", features = ["derive"] }
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -30,7 +30,7 @@ implementation detail; this file is a navigation aid only.
 | 1 | Workspace, `FileSystem` trait + Memory impl, fixtures, no-network + CI dep-gate | AC-16 (foundations) |
 | 2 | `encode_project_dir` (corrected: `[^A-Za-z0-9] -> -`) + reverse `ProjectIndex` | AC-6, AC-9 |
 | 3 | `Store` trait, `probe`/`detect`/`audit`, 6 adapters' read paths + `sweep.unknown` | AC-5 |
-| 4 | `cpm doctor` + `cpm scan` - read-only, exit codes, report | AC-5, AC-15 (partial) |
+| 4 | `awt doctor` + `awt scan` - read-only, exit codes, report | AC-5, AC-15 (partial) |
 | 5 | Anchored rewrite engine + `buildPathRules`, count-checked, golden test | AC-10, AC-11, AC-12 |
 | 6 | `plan` (diff + machine plan), collision + nested + worktree detection | AC-3, AC-4, AC-7, AC-13 (plan), AC-15 |
 | 7 | `snapshot`/backup + manifest, transactional `apply`, folder-move-last | AC-1, AC-8, AC-10, AC-13, AC-14, AC-16, AC-22 |
@@ -50,7 +50,7 @@ and pushed to `main`. Post-implementation adversarial reviews drove the hardenin
 | 1 | Complete (workspace + CI `d17ec2f`, `FileSystem` trait `b6bbf41`, golden fixtures `25dd5ab`) |
 | 2 | Complete (path encoding + reverse `ProjectIndex` with ambiguity/stale resolution) |
 | 3 | Complete (`Store` trait + six adapter read paths + `sweep.unknown`, `c3401d9`) |
-| 4 | Complete (`cpm doctor` + `cpm scan` + CLI, `afc8ecf`, `9c824e0`; doctor honesty checkpoint passed) |
+| 4 | Complete (`awt doctor` + `awt scan` + CLI, `afc8ecf`, `9c824e0`; doctor honesty checkpoint passed) |
 | 5 | Complete (anchored rewrite engine + golden reference-move test, `76226bc`) |
 | 6 | Complete (`plan` + guards + nested detection + `render_plan`, `e7ec6d0`, `056bd84`) |
 | 7 | Complete (snapshot backup + transactional apply + end-to-end golden, `e2aa334`) |

@@ -9,7 +9,7 @@ _local/
 # Rust build output
 target/
 
-# Backup artifacts produced by CPM's own snapshot step during development
+# Backup artifacts produced by awt's own snapshot step during development
 *.bak
 
 # OS and editor noise
