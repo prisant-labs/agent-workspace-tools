@@ -1,4 +1,4 @@
-# AGENTS.md - CPM Operating Manual
+# AGENTS.md - awt Operating Manual
 
 Read these files first, in this order:
 
@@ -21,7 +21,7 @@ These rules are load-bearing. Violating any one invalidates correctness guarante
 
 **Never touch another project's transcripts.** Other projects' transcripts may mention the old path (confirmed: 26 such transcripts on this machine). The correct postcondition is zero old-path refs in the moved project's own path-keyed state, not zero old-path refs everywhere. Other projects' transcripts are read-only at every rewrite tier.
 
-**Zero LLM/network calls in any product code path.** `cpm-core` and `cpm-cli` make no outbound requests at runtime. Enforcement is structural: the CI dependency gate fails if any network-capable crate (reqwest, ureq, hyper, curl) enters the dependency tree.
+**Zero LLM/network calls in any product code path.** `awt-core` and `awt-cli` make no outbound requests at runtime. Enforcement is structural: the CI dependency gate fails if any network-capable crate (reqwest, ureq, hyper, curl) enters the dependency tree.
 
 **Store files must be valid UTF-8.** Hard-fail on any file that is not valid UTF-8. Never lossy-rewrite.
 
@@ -37,7 +37,7 @@ These rules are load-bearing. Violating any one invalidates correctness guarante
   Co-Authored-By: Claude <model> <noreply@anthropic.com>
   Claude-Session: https://claude.ai/code/session_...
   ```
-- `cpm-core` must never depend on `tauri` or `clap`. CI enforces this: `cargo tree -p cpm-core | grep -iE 'tauri|clap' && exit 1`.
+- `awt-core` must never depend on `tauri` or `clap`. CI enforces this: `cargo tree -p awt-core | grep -iE 'tauri|clap' && exit 1`.
 - Tests run against `MemoryFileSystem`, never against live `~/.claude`. Golden fixtures live in `test/fixtures/` and are never refreshed from live files without the sanitization step in plan Task 1.3.
 - Every doc change gets a `docs/CHANGELOG.md` entry.
 - Session logs go in `_agent-context/session-log/` using the `jp-wrap-session` convention. They are tracked in git.
@@ -54,8 +54,8 @@ Shell commands can hang in some harnesses on this machine. For file operations, 
 
 ## Where new code goes
 
-- `crates/cpm-core/` - the engine; pure functions over an injectable `FileSystem` trait; no `clap`, no `tauri`, no network.
-- `crates/cpm-cli/` - the `cpm` binary; thin `clap` wrapper only; delegates everything to `cpm-core`.
+- `crates/awt-core/` - the engine; pure functions over an injectable `FileSystem` trait; no `clap`, no `tauri`, no network.
+- `crates/awt-cli/` - the `awt` binary; thin `clap` wrapper only; delegates everything to `awt-core`.
 - `test/fixtures/` - golden data; never refresh from live files without the sanitization step in plan Task 1.3.
 - `src-tauri/` and `src/` - deferred (v2 GUI); do not add code there during v1 work.
 
@@ -65,7 +65,7 @@ Shell commands can hang in some harnesses on this machine. For file operations, 
 
 Implement the TDD plan task by task using `superpowers:subagent-driven-development` (fresh subagent per task, parent reviews between tasks). Each step is red-green: write the failing test first, run it, implement, run again, commit.
 
-Phase 4 is the honesty checkpoint. `cpm doctor` on the real machine must report exactly the residue found by hand: 6 stale `githubRepoPaths`, 11 stale `history.jsonl` values, and the `markdown-for-humans-e854827f52137cd9` plugin dir. All write-phase work (phases 5-9) is gated on passing this checkpoint.
+Phase 4 is the honesty checkpoint. `awt doctor` on the real machine must report exactly the residue found by hand: 6 stale `githubRepoPaths`, 11 stale `history.jsonl` values, and the `markdown-for-humans-e854827f52137cd9` plugin dir. All write-phase work (phases 5-9) is gated on passing this checkpoint.
 
 ---
 

@@ -1,4 +1,4 @@
-# CPM v1.0 Release Runbook
+# awt v1.0 Release Runbook
 
 Tag ceremony checklist for v1.0.0. Run this in order. Every gate must pass before the tag is pushed.
 
@@ -11,7 +11,7 @@ These run on every push via the CI-0 workflow. Confirm they are green on the com
 - [ ] `cargo fmt --check` - no unformatted files
 - [ ] `cargo clippy -- -D warnings` - no warnings
 - [ ] `cargo test --workspace` - all tests pass
-- [ ] Dependency-hygiene gate: `cpm-core` has no dependency on `tauri`, `clap`, `reqwest`, `ureq`, `hyper`, or `curl`
+- [ ] Dependency-hygiene gate: `awt-core` has no dependency on `tauri`, `clap`, `reqwest`, `ureq`, `hyper`, or `curl`
 - [ ] No-network gate: none of the above network crates appear anywhere in the tree
 - [ ] `cargo audit` - no unresolved vulnerability advisories
 
@@ -28,15 +28,15 @@ This test must be run on the real machine against a COPY of `~/.claude`. Never r
 
 **Acceptance sequence:**
 
-- [ ] `cpm doctor --home <scratch>` completes without error and reports the expected stale-reference categories (stale `githubRepoPaths`, stale `history.jsonl` values, orphaned plugin dir). Compare counts to the last known-good baseline in the session log.
-- [ ] `cpm scan --home <scratch> --src <a project path you know has state>` returns hits for that project.
-- [ ] `cpm list --home <scratch>` prints a table with at least one row; no panic or I/O error.
-- [ ] `cpm plan --home <scratch> --src <test-src> --dst <test-dst>` prints a change list; exit 0. (`--src` and `--dst` do not need to exist on disk for plan to run.)
-- [ ] `cpm apply --home <scratch> --src <test-src> --dst <test-dst>` applies the move in the scratch copy; reports applied count and backup path; exit 0.
-- [ ] `cpm verify --home <scratch> --src <test-src> --dst <test-dst>` reports all checks `[ok]`; exit 0.
-- [ ] `cpm rollback --home <scratch> --report <backup-manifest-from-apply>` restores the scratch copy; exit 0. Confirm the scratch copy is back to its pre-apply state by re-running `cpm verify` (expect it to fail, confirming rollback succeeded).
-- [ ] `cpm archive --home <scratch> --archive-dir <scratch-archive>` completes; exit 0.
-- [ ] `cpm associate --home <scratch> --from <old-path> --to <new-path>` completes; exit 0.
+- [ ] `awt doctor --home <scratch>` completes without error and reports the expected stale-reference categories (stale `githubRepoPaths`, stale `history.jsonl` values, orphaned plugin dir). Compare counts to the last known-good baseline in the session log.
+- [ ] `awt scan --home <scratch> --src <a project path you know has state>` returns hits for that project.
+- [ ] `awt list --home <scratch>` prints a table with at least one row; no panic or I/O error.
+- [ ] `awt plan --home <scratch> --src <test-src> --dst <test-dst>` prints a change list; exit 0. (`--src` and `--dst` do not need to exist on disk for plan to run.)
+- [ ] `awt apply --home <scratch> --src <test-src> --dst <test-dst>` applies the move in the scratch copy; reports applied count and backup path; exit 0.
+- [ ] `awt verify --home <scratch> --src <test-src> --dst <test-dst>` reports all checks `[ok]`; exit 0.
+- [ ] `awt rollback --home <scratch> --report <backup-manifest-from-apply>` restores the scratch copy; exit 0. Confirm the scratch copy is back to its pre-apply state by re-running `awt verify` (expect it to fail, confirming rollback succeeded).
+- [ ] `awt archive --home <scratch> --archive-dir <scratch-archive>` completes; exit 0.
+- [ ] `awt associate --home <scratch> --from <old-path> --to <new-path>` completes; exit 0.
 
 **Clean up:** delete the scratch copy and scratch archive when done.
 
@@ -75,7 +75,7 @@ cargo build --release
 or:
 
 ```
-cargo install --path crates/cpm-cli
+cargo install --path crates/awt-cli
 ```
 
 Source distribution requires no binary signing, no certificate, and no submission to an OS package manager. There is no SmartScreen or Gatekeeper surface because no pre-built binary is distributed.

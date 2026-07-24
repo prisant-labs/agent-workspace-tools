@@ -53,6 +53,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "awt-cli"
+version = "1.0.0"
+dependencies = [
+ "awt-core",
+ "clap",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "awt-core"
+version = "1.0.0"
+dependencies = [
+ "dunce",
+ "insta",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "walkdir",
+]
+
+[[package]]
 name = "bitflags"
 version = "2.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -128,28 +150,6 @@ dependencies = [
  "encode_unicode",
  "libc",
  "windows-sys",
-]
-
-[[package]]
-name = "cpm-cli"
-version = "1.0.0"
-dependencies = [
- "clap",
- "cpm-core",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "cpm-core"
-version = "1.0.0"
-dependencies = [
- "dunce",
- "insta",
- "serde_json",
- "sha2",
- "tempfile",
- "walkdir",
 ]
 
 [[package]]

@@ -107,18 +107,22 @@ repointed so no live reference to the old path survives outside historical recor
 
 ## More Information
 
-Tracked as follow-up (name locked, execution deferred):
+Executed 2026-07-24 on branch `rename-cpm-to-awt`.
+
+The rename covered: the crate directories (`crates/cpm-core` -> `crates/awt-core`,
+`crates/cpm-cli` -> `crates/awt-cli`), Cargo package names, the `[[bin]]` name,
+every `cpm_core`/`cpm_cli` Rust identifier, every `cpm <subcommand>` invocation in
+tests and docs, the CI dependency-hygiene gates, and the "CPM" / "Claude Project Mover"
+branding. Historical records (`_agent-context/`, existing `CHANGELOG.md` entries, the
+dated plan in `docs/superpowers/plans/`) were preserved.
+
+Original rationale (preserved for context):
 
 - Binary rename `cpm` -> **`awt`**, accepted 2026-07-17. Chosen over a memorable
   wordmark for predictability: `awt` is the repo's initials, so there is one name to
   remember, and it reads fine as a command prefix (`awt doctor`, `awt scan`). Repo
   name and binary name need not match; here, matching them was the deciding virtue.
 - Crate renames follow: `cpm-core` -> `awt-core`, `cpm-cli` -> `awt-cli`.
-- Execution is a dedicated code pass scheduled AFTER the folder/state migration, to
-  keep one change in flight at a time. It renames the crates, the `[[bin]]`, every
-  `cpm ...` invocation in tests and docs, and the "CPM" / "Claude Project Mover"
-  branding. It must land before the v0.1 tag, the point after which a binary rename
-  stops being cheap.
 
 Related: the sweep-scope decision (`docs/superpowers/plans/2026-07-10-claude-project-mover.md`),
 which applies the same preserve-vs-rewrite distinction to `doctor` output.

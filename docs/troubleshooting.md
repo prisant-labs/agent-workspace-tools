@@ -1,6 +1,6 @@
 # Troubleshooting
 
-What each exit code means, what the tool is telling you, and what to do next. Every `cpm`
+What each exit code means, what the tool is telling you, and what to do next. Every `awt`
 command returns a script-friendly exit code. The guards refuse loudly and write nothing
 rather than guess.
 
@@ -82,5 +82,5 @@ bytes to undo it" live in the same place.
 ## Where the backup lives
 
 `apply` takes a full sha256 snapshot of every file it will modify before the first write,
-under `<backup-root>/cpm-<run-id>/` (the backup root defaults to the system temp dir; set it
-with `--backup-root`). To undo an apply, run `cpm rollback <backup-root>/cpm-<run-id>/manifest.json`.
+under `<backup-root>/awt-<run-id>/` (the backup root defaults to the system temp dir; set it
+with `--backup-root`). To undo an apply, run `awt rollback <backup-root>/awt-<run-id>/manifest.json`.

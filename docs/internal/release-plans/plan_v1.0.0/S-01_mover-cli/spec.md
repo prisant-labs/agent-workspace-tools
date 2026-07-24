@@ -1,6 +1,6 @@
 ---
 id: S-01
-title: "CPM v1 mover CLI - deterministic Claude-state-aware project relocation"
+title: "awt v1 mover CLI - deterministic Claude-state-aware project relocation"
 type: spec
 status: draft
 created: 2026-07-11
@@ -13,7 +13,7 @@ requires-human-review: true
 supersedes: "_local/initial-discovery/04-requirements.md (CPM-01, sections F1-F10+F12; local-only)"
 ---
 
-# S-01: CPM v1 mover CLI - deterministic Claude-state-aware project relocation
+# S-01: awt v1 mover CLI - deterministic Claude-state-aware project relocation
 
 > Carved from umbrella spec CPM-01 (`_local/initial-discovery/04-requirements.md`),
 > which is gitignored by design. This committed spec covers the v1.0.0 mover CLI
@@ -64,7 +64,7 @@ The manual precedent and its gaps are recorded in the local discovery notes
 mapped in `_local/initial-discovery/02-hidden-files-and-external-state.md` [S2].
 Empirical corrections to those notes are in `docs/DESIGN.md` Section 2.
 
-**Implementation stack:** Rust (`cpm-core` + `cpm-cli` crates), reversing the
+**Implementation stack:** Rust (`awt-core` + `awt-cli` crates), reversing the
 strategy brief's TypeScript recommendation. Rationale and portfolio evidence in
 `docs/DESIGN.md` Section 3.
 
@@ -290,7 +290,7 @@ reproduce these exact counts against the fixture. [S1]
 existed. The tool must surface this and take the operator's choice (fork / base /
 both), exactly the decision made manually in the move log section 5. [S1]
 
-**Dry-run first (AC-15).** `cpm plan --src "E:\Projects\Github Repos\markdown-for-humans_jp-updates" --dst "E:\Projects\prisant-labs\vs-code-markdown-max"` prints the
+**Dry-run first (AC-15).** `awt plan --src "E:\Projects\Github Repos\markdown-for-humans_jp-updates" --dst "E:\Projects\prisant-labs\vs-code-markdown-max"` prints the
 folder move, the `projects/` rename, the 2 transcript rewrites with counts, the
 `claude.json` key change, and the `history.jsonl` edits, and writes nothing. [S3]
 

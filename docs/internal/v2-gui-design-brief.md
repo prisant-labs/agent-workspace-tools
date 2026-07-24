@@ -1,4 +1,4 @@
-# CPM v2 GUI: Design Brief
+# agent-workspace-tools v2 GUI: Design Brief
 
 **Audience:** a design agent or designer generating GUI concepts. You have never seen this
 product and you do not have access to the codebase. Everything you need is in this document.
@@ -17,7 +17,7 @@ Developers using Claude Code accumulate a large amount of AI session history: tr
 every conversation, per-project settings, a global command history, plugin state. All of it is
 **keyed to the project folder's absolute path**. So the moment you move or rename a project
 folder, that history silently detaches. Your sessions are still on disk, but Claude can no
-longer find them, `--resume` stops working, and the project's config is orphaned. **CPM (Claude
+longer find them, `--resume` stops working, and the project's config is orphaned. **awt (Claude
 Project Mover) moves the folder and migrates all the associated state with it, so nothing
 breaks.** It also inventories what history exists, archives it before it gets auto-deleted, and
 can re-attach one project's history to a different project.
@@ -204,7 +204,7 @@ Do not design these:
 - Cross-machine sync.
 - A general-purpose backup product.
 - A cost or usage analytics dashboard. (Every existing tool in this space is a usage/cost lens.
-  CPM deliberately is not. Its differentiator is the plain "what exists and is it healthy" view,
+  awt deliberately is not. Its differentiator is the plain "what exists and is it healthy" view,
   which nothing else provides.)
 - Editing or rendering the *contents* of AI conversations as a reading experience. Session
   transcripts are cargo here, not content. (A read-only archive browser is a legitimate

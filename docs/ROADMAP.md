@@ -1,4 +1,4 @@
-# CPM Roadmap - program plan across v1 and v2
+# awt Roadmap - program plan across v1 and v2
 
 Status: active. Created 2026-07-11. Owner: maintainer (jprisant).
 Scope: this is the program-level plan spanning releases. Version-scoped execution
@@ -10,10 +10,10 @@ lives in `docs/superpowers/plans/2026-07-10-claude-project-mover.md`.
 
 | Version | Contents | Gate to ship |
 |---|---|---|
-| v0.1.0 (milestone tag) | Read-only CLI: `doctor` + `scan` (TDD plan phases 1-4) | The honesty checkpoint: `cpm doctor` on the real machine reports exactly the residue verified by hand (6 stale githubRepoPaths, ~11 stale history values, the orphaned plugin dir). No write code ships before this passes. |
-| v1.0.0 | The complete Windows-native CLI: mover (`plan`/`apply`/`verify`/`rollback`, phases 5-9) plus F13 `cpm list`, F14 `cpm archive`, F15 `cpm associate` (phases 13-15) | Release plan hygiene gates + doc checklist at `docs/internal/release-plans/plan_v1.0.0/` |
+| v0.1.0 (milestone tag) | Read-only CLI: `doctor` + `scan` (TDD plan phases 1-4) | The honesty checkpoint: `awt doctor` on the real machine reports exactly the residue verified by hand (6 stale githubRepoPaths, ~11 stale history values, the orphaned plugin dir). No write code ships before this passes. |
+| v1.0.0 | The complete Windows-native CLI: mover (`plan`/`apply`/`verify`/`rollback`, phases 5-9) plus F13 `awt list`, F14 `awt archive`, F15 `awt associate` (phases 13-15) | Release plan hygiene gates + doc checklist at `docs/internal/release-plans/plan_v1.0.0/` |
 | v1.x (parked candidates) | P10 cross-volume move (AC-2); P11 Codex/Gemini adapters (AC-27) | Promotion into a release plan when scheduled; both sit behind the existing adapter boundary and copy primitives, no re-architecture needed |
-| v2.0.0 | Tauri 2 + React GUI over the identical `cpm-core` for every v1 capability (old phase 12; AC-25 parity) | GUI security baseline and native-parity requirements written into DESIGN.md BEFORE build starts; parity test `GUI plan model == cpm plan --json`; signing + updater pipeline |
+| v2.0.0 | Tauri 2 + React GUI over the identical `awt-core` for every v1 capability (old phase 12; AC-25 parity) | GUI security baseline and native-parity requirements written into DESIGN.md BEFORE build starts; parity test `GUI plan model == awt plan --json`; signing + updater pipeline |
 
 Scope decision of record: the old numbering ("v1.0 mover" + "v1.1 features") folds
 into a single v1.0.0, because v1 is defined as everything the CLI does. Old phases
@@ -51,7 +51,7 @@ Progressive hardening; each stage lands with the phase that makes it meaningful.
 
 | Stage | Lands with | Jobs |
 |---|---|---|
-| CI-0 | Phase 1 Task 1.1 | windows-latest: `cargo fmt --check`, `clippy -D warnings`, `cargo test --workspace`, dependency-hygiene gate (cpm-core must not depend on tauri/clap), no-network gate (no reqwest/ureq/hyper/curl in tree), `cargo audit` |
+| CI-0 | Phase 1 Task 1.1 | windows-latest: `cargo fmt --check`, `clippy -D warnings`, `cargo test --workspace`, dependency-hygiene gate (awt-core must not depend on tauri/clap), no-network gate (no reqwest/ureq/hyper/curl in tree), `cargo audit` |
 | CI-1 | Phase 1 Task 1.3 | Golden-fixture tests run in CI (sanitized fixtures committed; counts locked) |
 | CI-2 | macOS scope opens (post-v1.0.0 unless promoted) | macos-latest matrix entry + POSIX-path encoding/normalization test cases; same_volume device-id fix; iCloud-path cloud-sync detection |
 | CI-3 | First binary distribution (may follow the v1.0.0 tag) | Release workflow: matrix build, minisign checksums, winget manifest, code signing or a documented SmartScreen/Gatekeeper posture; release runbook executed, not improvised |
@@ -92,7 +92,7 @@ Prerequisites to write into DESIGN.md BEFORE v2 build starts (both were audit
 findings): a security baseline (Tauri capability scoping per window, CSP, typed IPC
 allowlist via tauri-specta, minisign-pinned updater, stale-bindings CI gate) and a
 native-parity baseline (Cmd/Ctrl shortcut policy, window chrome, system theme,
-high-DPI, native dialogs). The GUI calls the identical `cpm-core`; the CLI parity
+high-DPI, native dialogs). The GUI calls the identical `awt-core`; the CLI parity
 test (plan --json equivalence) is the correctness spine. Model repo: repo-sync-tool
 (Rust + Tauri 2 + React 19 + tauri-specta).
 
@@ -120,7 +120,7 @@ features (13-15) are implemented, committed, and pushed; `main` is level with or
 tests pass, clippy and fmt clean.
 
 - Phases 1-4: scaffold + FileSystem trait + reverse index + six adapter read paths +
-  `doctor`/`scan` and the `cpm` CLI. This is the v0.1.0 read-only milestone; the doctor
+  `doctor`/`scan` and the `awt` CLI. This is the v0.1.0 read-only milestone; the doctor
   honesty checkpoint passed on the real machine (reports the hand-verified residue, leaves
   live state alone).
 - Phase 5: anchored rewrite engine (count-checked, byte-preserving). The golden test
@@ -128,8 +128,8 @@ tests pass, clippy and fmt clean.
   branch mentions come through byte-identical.
 - Phases 6-9: plan + guards, backup + transactional apply, verify + auto-rollback + lock
   detection + hard-fail, and the full CLI (`plan`/`apply`/`verify`/`rollback`).
-- F13-F15: `cpm list` inventory (health flags + 30-day-cliff ages), `cpm archive`
-  (content-hash incremental + cumulative manifest + SessionEnd retention hook), `cpm
+- F13-F15: `awt list` inventory (health flags + 30-day-cliff ages), `awt archive`
+  (content-hash incremental + cumulative manifest + SessionEnd retention hook), `awt
   associate` (re-associate and/or from-scoped export, working on a gone source folder).
 
 **Sweep scope resolved.** The sweep skips vendored and archival regions (`plugins/`,
@@ -149,16 +149,16 @@ enforce - cross-volume guard, lock detection, ambiguous-history fail-close, mach
 report, and a zero-network guard test - added a verifiable revert (post-rollback byte-identity
 proof), and amended AC-7 (fail-closed, 7a) and AC-19 (idempotent-by-refusal, 19b). A
 release-hygiene pass then added `docs/quickstart.md`, `docs/troubleshooting.md`, and the root
-`CHANGELOG.md`, bumped `Cargo.toml` to 1.0.0, and gave `CpmError` a `Display` impl so guard
+`CHANGELOG.md`, bumped `Cargo.toml` to 1.0.0, and gave `AwtError` a `Display` impl so guard
 errors surface their plain-language message. Evidence:
 `docs/internal/release-plans/plan_v1.0.0/S-01_mover-cli/ac-traceability.md`.
 
 **Remaining before the v1.0 tag (all non-code):** (1) the maintainer S-01 spec sign-off, now
 evidence-backed by the traceability doc; (2) the manual acceptance run against a COPY of
-`~/.claude`, per `docs/acceptance-run.md`; and (3) the `cpm` -> `awt` binary-rename decision
-(ADR-0001). The signing / SmartScreen posture is CI-3 (the binary channel), not a tag blocker -
-v1.0 may ship source-first.
+`~/.claude`, per `docs/acceptance-run.md`; and (3) the `cpm` -> `awt` binary rename was
+executed 2026-07-24 (ADR-0001, branch `rename-cpm-to-awt`). The signing / SmartScreen posture
+is CI-3 (the binary channel), not a tag blocker - v1.0 may ship source-first.
 
-**Next major work: v2.0.0** - the Tauri + React GUI ("Taura") over the identical `cpm-core`;
+**Next major work: v2.0.0** - the Tauri + React GUI ("Taura") over the identical `awt-core`;
 conceptual mockups exist. Open maintainer decisions remain tracked in the release plan's
 Decisions section (tag ceremony; one-time manual archive copy destination; P10/P11 timing).

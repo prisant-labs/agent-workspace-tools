@@ -1,4 +1,4 @@
-# Claude Project Mover (CPM) - Validated Design
+# Agent Workspace Tools (awt) - Validated Design
 
 Status: approved design (brainstorming output), 2026-07-10.
 Supersedes the tech-stack and encoding claims in `_local/initial-discovery/03-05`.
@@ -15,7 +15,7 @@ lives outside the folder and is keyed to its old absolute path: Claude Code
 transcripts, `~/.claude.json`, `history.jsonl`, and (later) Codex and Gemini
 equivalents. A manual move on 2026-07-09 relocated six folders, worked, but was
 slow, needed judgment on a shared/renamed history, and still left `history.jsonl`
-and other stores stale. CPM turns that judgment-heavy manual procedure into a
+and other stores stale. awt turns that judgment-heavy manual procedure into a
 deterministic, verifiable tool with zero LLM/network use at runtime.
 
 The goal is a tool that is provably safer than a careful human: dry-run, backup,
@@ -65,12 +65,12 @@ The strategy brief picked TypeScript. Portfolio evidence reverses it:
   (`cargo tree -p reposync-core | grep -i tauri` -> exit 1). Typed IPC via
   `tauri-specta` into `src/lib/bindings.ts`, with a stale-bindings CI gate. Ships
   as a single dependency-free binary with a winget + minisign updater pipeline.
-  This structurally guarantees CPM's core/GUI parity requirement.
+  This structurally guarantees awt's core/GUI parity requirement.
 - **`adobe-cclib-liberator`**: Python + pywebview + PyInstaller. Its own
   `docs/tech-stack.md` says the ONLY reason it isn't Rust/Tauri is a pre-existing
   tested Python engine. It then paid: no typed IPC, PyInstaller `email`-exclusion
   crash, `_ConsoleSafeStream` shim, accidental `cryptography` bundling, no
-  installer, macOS build-only. CPM has no pre-existing engine, so that constraint
+  installer, macOS build-only. awt has no pre-existing engine, so that constraint
   does not apply.
 - The brief's one anti-Rust argument (byte-preserving rewrites are "ceremony in a
   serializer that reformats") dissolves once the algorithm is named correctly: the
@@ -92,16 +92,16 @@ macOS-specific work (POSIX path forms, mount/device volume detection, iCloud Dri
 ```
 agent-workspace-tools/
   Cargo.toml            virtual workspace manifest
-  crates/cpm-core/      no clap, no tauri, no network. the whole engine.
-  crates/cpm-cli/       clap. bin: `cpm`
+  crates/awt-core/      no clap, no tauri, no network. the whole engine.
+  crates/awt-cli/       clap. bin: `awt`
   src-tauri/            DEFERRED. thin edge, tauri-specta
   src/                  DEFERRED. React 19 + shadcn, generated bindings.ts
 ```
 
 CI dependency-hygiene gate (copied from repo-sync-tool):
-`cargo tree -p cpm-core | grep -iE 'tauri|clap' && exit 1`.
+`cargo tree -p awt-core | grep -iE 'tauri|clap' && exit 1`.
 
-`cpm-core` is pure functions over an injectable `FileSystem` trait; tests run
+`awt-core` is pure functions over an injectable `FileSystem` trait; tests run
 against a `MemoryFileSystem`, never live `~/.claude`.
 
 ### Read layer vs write layer
@@ -142,7 +142,7 @@ Resolution, given the set of distinct `cwd`s a directory records:
 | one | resolved to it |
 | several, exactly one still on disk | resolved to the live one; the rest go to `stale` |
 | several, none still on disk | `unresolved`, with the dead paths kept in `stale` |
-| several, more than one still on disk | `ambiguous` - refuse rather than guess (`CpmError::Ambiguous`, exit 2) |
+| several, more than one still on disk | `ambiguous` - refuse rather than guess (`AwtError::Ambiguous`, exit 2) |
 
 Existence is tested against the filesystem, and NTFS matches case-insensitively, so
 `MemoryFileSystem` models that too (audit finding LEAD-07). A recorded `e:\projects\foo`
@@ -270,10 +270,10 @@ Exit codes: `0` success; `1` unexpected I/O error; `2` guard/refusal;
   `E:\tmp\claude-move-backup-20260709-090053` and current migrated files.
 - **`insta` snapshots** lock every `plan` render and `report.json`.
 - **No-network guarantee** is structural: the CI dependency gate
-  (`cargo tree -p cpm-core | grep -iE 'reqwest|ureq|hyper|curl'`) forbids any
-  network-capable crate from entering `cpm-core`, and `cargo audit` catches
+  (`cargo tree -p awt-core | grep -iE 'reqwest|ureq|hyper|curl'`) forbids any
+  network-capable crate from entering `awt-core`, and `cargo audit` catches
   RUSTSEC advisories. No runtime outbound-request test is required.
-- **Parity test** (post-GUI) asserts GUI plan model == `cpm plan --json`.
+- **Parity test** (post-GUI) asserts GUI plan model == `awt plan --json`.
 - **Three fixtures captured now** (irreproducible later): the markdown before/after
   move; a `claude.json` with the 3 variant groups + 6 stale `githubRepoPaths`; the
   `markdown-for-humans-e854827f52137cd9` plugin dir.
@@ -288,20 +288,20 @@ v1.0 (mover) = phases 1-9; `doctor` shippable at phase 4. v1.1 (features F13-F15
 | 1 | Workspace, `FileSystem` trait + Memory impl, fixtures, no-network + CI dep-gate | |
 | 2 | `encode_project_dir` (corrected) + reverse `ProjectIndex` | |
 | 3 | `Store` trait, `probe`/`detect`/`audit`, 6 adapters' read paths + `sweep.unknown` | |
-| 4 | `cpm doctor` + `cpm scan` - read-only, exit codes, report | shippable v0.1 |
+| 4 | `awt doctor` + `awt scan` - read-only, exit codes, report | shippable v0.1 |
 | 5 | Anchored rewrite engine + `buildPathRules`, count-checked, golden test | |
 | 6 | `plan` (diff + machine plan), collision + nested + worktree detection | |
 | 7 | `snapshot`/backup + manifest, transactional `apply`, folder-move-last | |
 | 8 | `verify` + auto-rollback, idempotency, hard-fail, lock detect | |
 | 9 | `rollback` from manifest, CLI complete, exit-code contract | v1.0 |
-| 13 | Session-keyed linkage + `cpm list` (terminal/json/html) | F13, v1.1 |
-| 14 | Archive engine + content-hash dedup + `cpm archive` bulk/hook/retention | F14, v1.1 |
-| 15 | `cpm associate --from --to` (re-associate and/or export) | F15, v1.1 |
+| 13 | Session-keyed linkage + `awt list` (terminal/json/html) | F13, v1.1 |
+| 14 | Archive engine + content-hash dedup + `awt archive` bulk/hook/retention | F14, v1.1 |
+| 15 | `awt associate --from --to` (re-associate and/or export) | F15, v1.1 |
 | 10 | Cross-volume copy + checksum-verify + delete | deferred |
 | 11 | Codex + Gemini adapters, opt-in behind flags | deferred |
 | 12 | Tauri + React GUI over the identical core | deferred |
 
-Phase 4 is the honesty checkpoint: `doctor` on the real machine must report exactly
+Phase 4 is the honesty checkpoint: `awt doctor` on the real machine must report exactly
 the residue found by hand (6 stale `githubRepoPaths`, 11 stale history values, the
 orphaned plugin dir). If it does, the read layer is trustworthy and phases 5-9 build
 writes on proven ground. Phases 13-14 depend only on the phase 1-4 read layer plus
@@ -316,17 +316,17 @@ Claude-only, same adapter boundary; determinism and no-network apply. (The "v1.1
 this section and in the Section 9 phase table predate the scope decision that folded F13-F15
 into v1.0.0; see ROADMAP Section 1. The spec filename keeps its original name.)
 
-- **F13 `cpm list` (inventory).** Report every project Claude has state for, with
+- **F13 `awt list` (inventory).** Report every project Claude has state for, with
   session counts, sizes, transcript ages (so the 30-day cliff is visible), linked
   SESSION-keyed stores, PATH-keyed declarations, and a health flag (OK/STALE/
   UNRESOLVED). Renders terminal / `--json` / `--html`. Needs only the read layer.
-- **F14 `cpm archive` (retention).** Copy transcripts and SESSION-keyed artifacts to
+- **F14 `awt archive` (retention).** Copy transcripts and SESSION-keyed artifacts to
   a user-defined archive folder before the 30-day cleanup deletes them; incremental,
   deduped by content SHA-256 (not mtime). `--install-hook` adds a `SessionEnd` hook
   so new sessions auto-archive. `--set-retention <days>` writes a large finite
   `cleanupPeriodDays` as a safety net. The tool is git-agnostic (user's folder, user's
   choice of git/sync); atomic writes; warns on cloud-sync roots.
-- **F15 `cpm associate --from A --to B` (re-associate/export).** Keep A's history with
+- **F15 `awt associate --from A --to B` (re-associate/export).** Keep A's history with
   B when A is being deprecated. `--reassociate` runs the mover's state migration
   minus the folder move; `--export` drops a portable copy into `B/<subdir>` (F14
   format). Both default on and independently disableable. Finds A's sessions via
@@ -340,7 +340,7 @@ Transcripts auto-delete at `cleanupPeriodDays` (default 30, on startup); measure
 2026-07-10, nothing on this machine survives past 30 days. `history.jsonl` never
 expires. **`cleanupPeriodDays: 0` is unsafe to rely on** (issue #23710: it may
 disable transcript writing; #62272: cleanup keys off mtime). So archive-out is the
-real durability mechanism; CPM sets only a large finite retention value and refuses
+real durability mechanism; awt sets only a large finite retention value and refuses
 `0` without an explicit override. See `claude-data-model.md` Section 5.
 
 ## 11. Non-goals (v1)
