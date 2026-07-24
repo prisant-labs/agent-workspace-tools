@@ -1,4 +1,4 @@
-# Local working notes - not tracked; use _agent-context/session-log/ for tracked session logs
+# Local working notes AND session logs (_local/_session-logs/) - never tracked
 _local/
 
 # Tool state directories
@@ -17,7 +17,7 @@ target/
 Thumbs.db
 desktop.ini
 
-# NOTE: _agent-context/ is deliberately tracked (session logs belong in version control).
+# NOTE: session logs live in _local/_session-logs/ and are deliberately NOT tracked.
 
 # agent worktrees (transient)
 .claude/worktrees/

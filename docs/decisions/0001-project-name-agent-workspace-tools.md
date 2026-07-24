@@ -113,7 +113,7 @@ The rename covered: the crate directories (`crates/cpm-core` -> `crates/awt-core
 `crates/cpm-cli` -> `crates/awt-cli`), Cargo package names, the `[[bin]]` name,
 every `cpm_core`/`cpm_cli` Rust identifier, every `cpm <subcommand>` invocation in
 tests and docs, the CI dependency-hygiene gates, and the "CPM" / "Claude Project Mover"
-branding. Historical records (`_agent-context/`, existing `CHANGELOG.md` entries, the
+branding. Historical records (session logs, existing `CHANGELOG.md` entries, the
 dated plan in `docs/superpowers/plans/`) were preserved.
 
 Original rationale (preserved for context):
