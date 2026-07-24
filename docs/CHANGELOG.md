@@ -3,6 +3,18 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-07-24 - session logs move to `_local/_session-logs/` (gitignored)
+
+New maintainer standard: session logs are local-only working notes, not repository artifacts.
+
+- Moved every session log from `_agent-context/session-log/` to `_local/_session-logs/` and removed
+  the now-empty `_agent-context/`. `_local/` is already gitignored, so logs are no longer tracked.
+- The four previously-committed logs are removed from the working tree. Note: they remain in git
+  history; removing them from history would require a rewrite (filter-repo/BFG + force-push), which
+  was deliberately NOT done.
+- Convention updated in `.gitignore`, `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, and ROADMAP
+  Section 6. `CLAUDE.md` explicitly overrides the `jp-wrap-session` skill's default log path.
+
 ## 2026-07-23 - v1.0 docs refresh: status/architecture sync + acceptance-run + CONTRIBUTING
 
 Documentation pass on branch `v1.0-docs-refresh`:

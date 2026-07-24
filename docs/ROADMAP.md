@@ -111,7 +111,7 @@ as its first effort.
 - Fixtures are sanitized once (plan Task 1.3 sanitization step) and never refreshed
   from live files without repeating that step.
 - Every doc change lands with a `docs/CHANGELOG.md` entry; session logs go to
-  `_agent-context/session-log/`.
+  `_local/_session-logs/` (gitignored, local-only - not part of the repo).
 
 ## 7. Current status (2026-07-23)
 

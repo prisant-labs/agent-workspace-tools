@@ -63,5 +63,5 @@ Every new document gets a row in [docs/index.md](docs/index.md) and a doc-impact
 
 If you drive changes with an AI agent, follow [AGENTS.md](AGENTS.md). The standing guardrail: an
 implementer subagent never commits - a controlling session reviews the diff, verifies the gates
-itself, and commits. See the session logs in `_agent-context/session-log/` for how past work was
-executed and reviewed.
+itself, and commits. The maintainer keeps session logs as local-only notes in
+`_local/_session-logs/` (gitignored), so they are not part of the repository.
