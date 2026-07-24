@@ -600,7 +600,7 @@ fn main() -> ExitCode {
     match run(&cli, &fs, &home) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("error: {e:?}");
+            eprintln!("error: {e}");
             ExitCode::from(exit::code_for(&e) as u8)
         }
     }
