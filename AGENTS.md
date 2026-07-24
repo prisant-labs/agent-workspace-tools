@@ -40,7 +40,7 @@ These rules are load-bearing. Violating any one invalidates correctness guarante
 - `awt-core` must never depend on `tauri` or `clap`. CI enforces this: `cargo tree -p awt-core | grep -iE 'tauri|clap' && exit 1`.
 - Tests run against `MemoryFileSystem`, never against live `~/.claude`. Golden fixtures live in `test/fixtures/` and are never refreshed from live files without the sanitization step in plan Task 1.3.
 - Every doc change gets a `docs/CHANGELOG.md` entry.
-- Session logs go in `_agent-context/session-log/` using the `jp-wrap-session` convention. They are tracked in git.
+- Session logs go in `_local/_session-logs/` using the `jp-wrap-session` convention. They are local-only working notes and are gitignored - never commit them.
 
 ---
 
