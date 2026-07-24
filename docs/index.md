@@ -19,7 +19,9 @@ This index lists every document in the repository, who it is for, and when to re
 | [docs/decisions/](decisions/) | Maintainers, AI agents | Architecture and naming decision records (MADR v4) |
 | [docs/internal/v2-gui-design-brief.md](internal/v2-gui-design-brief.md) | Designers, design agents | Generating v2 GUI concepts - self-contained, no repo access needed |
 | [AGENTS.md](../AGENTS.md) | AI agents | Operating manual: invariants, conventions, environment notes |
+| [CONTRIBUTING.md](../CONTRIBUTING.md) | Engineers | How to build, test, and contribute; conventions and the PR flow |
 | [docs/release-runbook.md](release-runbook.md) | Maintainers | v1.0 tag ceremony checklist: pre-tag gates, tag steps, signing posture |
+| [docs/acceptance-run.md](acceptance-run.md) | Maintainers | Step-by-step manual acceptance run against a COPY of ~/.claude (the pre-tag honesty gate) |
 | [docs/troubleshooting.md](troubleshooting.md) | Everyone | What an exit code means and what to do: the 0/1/2/3/4 contract, guard refusals, idempotency, and the report artifacts |
 | [docs/CHANGELOG.md](CHANGELOG.md) | Everyone | Doc-impact history - updated with every doc change |
 
