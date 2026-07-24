@@ -5,6 +5,8 @@ This index lists every document in the repository, who it is for, and when to re
 | Doc | Audience | Read when |
 |---|---|---|
 | [README.md](../README.md) | Non-engineers, everyone | Orientation - start here |
+| [docs/quickstart.md](quickstart.md) | Everyone | First run, safest path first: install through plan/apply/verify/rollback |
+| [CHANGELOG.md](../CHANGELOG.md) | Everyone | User-facing release changelog (keepachangelog) |
 | [docs/index.md](index.md) (this file) | Everyone | Finding a doc |
 | [docs/DESIGN.md](DESIGN.md) | Engineers, AI agents | Understanding the architecture, store model, safety rules, CLI surface, and phase plan |
 | [docs/ROADMAP.md](ROADMAP.md) | Maintainers | Understanding the full program plan for v1 and v2 |

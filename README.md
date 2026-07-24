@@ -2,7 +2,7 @@
 
 A deterministic, offline, Windows-native Rust CLI that relocates a project folder and migrates all Claude Code state keyed to its old absolute path.
 
-> **v1.0 feature-complete.** Install from source: `cargo install --path crates/cpm-cli`, or clone and `cargo build --release`. See [docs/reference/commands.md](docs/reference/commands.md) for the full command reference.
+> **v1.0 feature-complete; tag pending final sign-off and acceptance.** New here? Start with the [quickstart](docs/quickstart.md). Install from source: `cargo install --path crates/cpm-cli`, or clone and `cargo build --release`. Full command reference: [docs/reference/commands.md](docs/reference/commands.md); exit codes and recovery: [docs/troubleshooting.md](docs/troubleshooting.md).
 
 ## The problem
 
@@ -41,7 +41,9 @@ Full program plan: [docs/ROADMAP.md](docs/ROADMAP.md).
 | Doc | For whom | What |
 |---|---|---|
 | README (this file) | Everyone | Orientation: what CPM is, what it does, how to get started |
+| [docs/quickstart.md](docs/quickstart.md) | Everyone | First run, safest path first: install, list, doctor, plan/apply/verify/rollback |
 | [docs/reference/commands.md](docs/reference/commands.md) | Everyone | Per-subcommand reference: flags, behavior, exit codes |
+| [docs/troubleshooting.md](docs/troubleshooting.md) | Everyone | Exit codes, guard refusals, idempotency, and the report artifacts |
 | [docs/release-runbook.md](docs/release-runbook.md) | Maintainers | v1.0 tag ceremony checklist |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Maintainers | Program plan for v1 and v2 |
 | [docs/DESIGN.md](docs/DESIGN.md) | Engineers | Validated design: architecture, safety model, CLI surface, phase plan |
@@ -52,6 +54,7 @@ Full program plan: [docs/ROADMAP.md](docs/ROADMAP.md).
 | [docs/internal/release-plans/](docs/internal/release-plans/) | Maintainers | Release scaffolding (jp-release-plan convention) |
 | [docs/index.md](docs/index.md) | Everyone | Full documentation index |
 | [AGENTS.md](AGENTS.md) | AI agents | Operating manual: invariants, conventions, environment notes |
+| [CHANGELOG.md](CHANGELOG.md) | Everyone | User-facing release changelog (keepachangelog) |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | Everyone | Doc-impact history |
 
 ## For contributors
