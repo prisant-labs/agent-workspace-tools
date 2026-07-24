@@ -3,6 +3,17 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-07-23 - v1.0 hygiene: quickstart, root changelog, version bump, cleaner errors
+
+Release-prep hygiene on branch `v1.0-hygiene-display`:
+- Added root `CHANGELOG.md` (user-facing, keepachangelog form) and `docs/quickstart.md` (a
+  first-run walkthrough, safest path first). Both are indexed in `docs/index.md` and the README
+  doc map.
+- Bumped the workspace `Cargo.toml` version to 1.0.0; updated the README status banner (kept
+  honest as "tag pending", not "released", since the tag is still gated).
+- Added a `Display` impl for `CpmError` so guard errors surface their plain-language message
+  rather than `Variant("...")`.
+
 ## 2026-07-23 - S-01 AC-gap remediation + troubleshooting doc
 
 An AC-to-test traceability review of S-01 (mover CLI) found five acceptance criteria that
