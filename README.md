@@ -2,7 +2,9 @@
 
 A deterministic, offline, Windows-native Rust CLI that relocates a project folder and migrates all Claude Code state keyed to its old absolute path.
 
-> **v1.0 feature-complete; tag pending final sign-off and acceptance.** New here? Start with the [quickstart](docs/quickstart.md). Install from source: `cargo install --path crates/cpm-cli`, or clone and `cargo build --release`. Full command reference: [docs/reference/commands.md](docs/reference/commands.md); exit codes and recovery: [docs/troubleshooting.md](docs/troubleshooting.md).
+> **Status: pre-release, in active development.** v1.0 is feature-complete but **not yet tagged** - it has not completed its final acceptance run against real data, and the binary is being renamed from `cpm` to `awt` before the v1.0.0 tag, so commands and the binary name may still change. Treat this as work in progress. Because it edits Claude Code state under `~/.claude`, read the [quickstart](docs/quickstart.md) and **always run it against a copy of `~/.claude` first**.
+>
+> Install from source: `cargo install --path crates/cpm-cli`, or clone and `cargo build --release`. Reference: [commands](docs/reference/commands.md) and [troubleshooting](docs/troubleshooting.md).
 
 ## The problem
 
