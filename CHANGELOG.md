@@ -9,6 +9,10 @@ see `docs/CHANGELOG.md` (a doc-impact log, not a code changelog).
 
 ## [1.0.0] - unreleased
 
+### Changed
+
+- Renamed the binary and crates from `cpm` / `cpm-core` / `cpm-cli` to `awt` / `awt-core` / `awt-cli` (ADR-0001, branch `rename-cpm-to-awt`).
+
 The dating of this section is deferred to the tag; the v1.0.0 tag is gated on a maintainer
 acceptance run and spec sign-off (see `docs/release-runbook.md`).
 

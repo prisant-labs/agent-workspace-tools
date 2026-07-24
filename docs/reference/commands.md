@@ -1,6 +1,6 @@
-# CPM Command Reference
+# awt Command Reference
 
-Binary: `cpm`. All subcommands share a set of global flags and a common exit-code contract.
+Binary: `awt`. All subcommands share a set of global flags and a common exit-code contract.
 
 ---
 
@@ -35,7 +35,7 @@ These flags are accepted by every subcommand.
 
 ## Subcommands
 
-### `cpm doctor`
+### `awt doctor`
 
 Report path-keyed state across all stores that references folders that no longer exist on disk.
 
@@ -54,11 +54,11 @@ Report path-keyed state across all stores that references folders that no longer
 
 ---
 
-### `cpm scan`
+### `awt scan`
 
 List every piece of Claude state that references a specific project path.
 
-**Purpose:** scoped version of `doctor` for one project. Shows exactly what `apply` would need to rewrite.
+**Purpose:** scoped version of `awt doctor` for one project. Shows exactly what `apply` would need to rewrite.
 
 **Per-command flags:**
 
@@ -74,7 +74,7 @@ List every piece of Claude state that references a specific project path.
 
 ---
 
-### `cpm plan`
+### `awt plan`
 
 Dry-run: print every change that `apply` would make, without writing anything.
 
@@ -93,7 +93,7 @@ Global flags that affect planning: `--recursive`, `--on-collision`, `--scope`, `
 
 ---
 
-### `cpm apply`
+### `awt apply`
 
 Move the project folder from `--src` to `--dst` and rewrite all Claude state to the new path.
 
@@ -114,7 +114,7 @@ Global flags that affect apply: `--recursive`, `--on-collision`, `--scope`, `--f
 
 ---
 
-### `cpm verify`
+### `awt verify`
 
 Check that Claude state correctly references `--dst` after a completed move.
 
@@ -133,7 +133,7 @@ Check that Claude state correctly references `--dst` after a completed move.
 
 ---
 
-### `cpm rollback`
+### `awt rollback`
 
 Restore pre-move state from a backup manifest written by a previous `apply` run.
 
@@ -149,7 +149,7 @@ Restore pre-move state from a backup manifest written by a previous `apply` run.
 
 ---
 
-### `cpm list`
+### `awt list`
 
 Enumerate every project Claude has state for, with session counts, sizes, oldest and newest transcript ages, and a health status.
 
@@ -171,7 +171,7 @@ Health values: `ok`, `stale` (contains stale references), `unresolved` (transcri
 
 ---
 
-### `cpm archive`
+### `awt archive`
 
 Copy transcripts and session artifacts to a durable folder before Claude's 30-day auto-delete removes them. Archives are incremental and deduplicated by content hash.
 
@@ -183,8 +183,8 @@ Copy transcripts and session artifacts to a durable folder before Claude's 30-da
 |---|---|---|
 | `--archive-dir <PATH>` | yes (for archival and hook operations) | Destination directory for archived data |
 | `--session <PATH>` | no | Archive a single transcript; path must be a `.jsonl` file. Requires `--archive-dir` |
-| `--install-hook` | no | Register the `cpm archive` `SessionEnd` hook in `~/.claude/settings.json`. Requires `--archive-dir` |
-| `--uninstall-hook` | no | Remove the `cpm archive` `SessionEnd` hook from `~/.claude/settings.json` |
+| `--install-hook` | no | Register the `awt archive` `SessionEnd` hook in `~/.claude/settings.json`. Requires `--archive-dir` |
+| `--uninstall-hook` | no | Remove the `awt archive` `SessionEnd` hook from `~/.claude/settings.json` |
 | `--set-retention <DAYS>` | no | Set `cleanupPeriodDays` in `~/.claude/settings.json`. Minimum safe value is 1 (see issues #23710 and #62272 before setting to 0) |
 | `--force-zero` | no | Required to set `cleanupPeriodDays` to 0. Read the known issues before using |
 | `--hook-stdin` | no | Read `SessionEnd` hook JSON from stdin and archive the `transcript_path` field. Requires `--archive-dir`. Used by the installed hook; not normally called by hand |
@@ -200,11 +200,11 @@ Copy transcripts and session artifacts to a durable folder before Claude's 30-da
 
 ---
 
-### `cpm associate`
+### `awt associate`
 
 Re-link session history from one project path to another, and optionally export a portable copy of those sessions.
 
-**Purpose:** recover history when a project has been moved or renamed outside of `cpm apply`, or when the source folder no longer exists on disk.
+**Purpose:** recover history when a project has been moved or renamed outside of `awt apply`, or when the source folder no longer exists on disk.
 
 **Per-command flags:**
 

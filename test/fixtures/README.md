@@ -1,6 +1,6 @@
 # Test Fixtures
 
-This directory holds golden test fixtures for CPM (Claude Project Mover).
+This directory holds golden test fixtures for agent-workspace-tools (awt).
 
 ## Structure
 

@@ -1,4 +1,4 @@
-# CPM Documentation Index
+# awt Documentation Index
 
 This index lists every document in the repository, who it is for, and when to read it. Every new document added to the project must get a row in this table and an entry in `docs/CHANGELOG.md`.
 

@@ -28,9 +28,9 @@ implementation detail; this file is a navigation aid only.
 
 | Phase | Feature | AC Coverage |
 |-------|---------|-------------|
-| 13 | F13 inventory (`cpm list`): session-keyed linkage + terminal/json/html rendering | AC-28, AC-29, AC-30, AC-31, AC-32, AC-33 |
-| 14 | F14 archive engine: content-hash dedup, bulk + hook + retention (`cpm archive`) | AC-34, AC-35, AC-36, AC-37, AC-38, AC-39 |
-| 15 | F15 re-associate/export (`cpm associate --from --to`) | AC-40, AC-41, AC-42, AC-43, AC-44 |
+| 13 | F13 inventory (`awt list`): session-keyed linkage + terminal/json/html rendering | AC-28, AC-29, AC-30, AC-31, AC-32, AC-33 |
+| 14 | F14 archive engine: content-hash dedup, bulk + hook + retention (`awt archive`) | AC-34, AC-35, AC-36, AC-37, AC-38, AC-39 |
+| 15 | F15 re-associate/export (`awt associate --from --to`) | AC-40, AC-41, AC-42, AC-43, AC-44 |
 
 ## Completion Status
 
@@ -39,6 +39,6 @@ each was adversarially reviewed and its findings fixed.
 
 | Phase | Status |
 |-------|--------|
-| 13 | Complete (`cpm list` inventory: session linkage, health flags, 30-day-cliff ages, `c31b1c0`; fail-loud read hardening `d66c49b`) |
-| 14 | Complete (`cpm archive`: content-hash incremental + INDEX/manifest + SessionEnd retention hook, `be48c94`; cumulative/atomic manifest + working hook `809e94e`) |
-| 15 | Complete (`cpm associate`: re-associate and/or from-scoped export, `82a090f`; merge-into-existing-destination `c541dea`; remaining review fixes `43ef230`) |
+| 13 | Complete (`awt list` inventory: session linkage, health flags, 30-day-cliff ages, `c31b1c0`; fail-loud read hardening `d66c49b`) |
+| 14 | Complete (`awt archive`: content-hash incremental + INDEX/manifest + SessionEnd retention hook, `be48c94`; cumulative/atomic manifest + working hook `809e94e`) |
+| 15 | Complete (`awt associate`: re-associate and/or from-scoped export, `82a090f`; merge-into-existing-destination `c541dea`; remaining review fixes `43ef230`) |

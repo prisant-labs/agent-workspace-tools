@@ -24,10 +24,10 @@ cargo clippy --all-targets -- -D warnings
 
 CI additionally enforces (see `.github/workflows/ci.yml`):
 
-- **Dependency hygiene** - `cpm-core` must not depend on `tauri`, `clap`, `reqwest`, `ureq`,
+- **Dependency hygiene** - `awt-core` must not depend on `tauri`, `clap`, `reqwest`, `ureq`,
   `hyper`, or `curl`.
 - **No network** - no network-capable crate may appear anywhere in the tree. The migration path
-  makes zero network or LLM calls; `crates/cpm-core/tests/no_network_deps.rs` guards this.
+  makes zero network or LLM calls; `crates/awt-core/tests/no_network_deps.rs` guards this.
 - **`cargo audit`** - no unresolved advisories.
 
 ## Non-negotiable conventions
