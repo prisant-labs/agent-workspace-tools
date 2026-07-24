@@ -253,11 +253,12 @@ Apply is one ordered, backup-first, fully reversible transaction:
 
 Mover commands: `doctor` (no args), `scan --src`, `plan --src --dst`,
 `apply --src --dst`, `verify --src --dst`, `rollback --report`.
-Feature commands (v1.1, see Section 11): `list` (inventory), `archive`
+Feature commands (F13-F15, in v1.0; see Section 10): `list` (inventory), `archive`
 (retention), `associate --from --to` (re-associate/export).
 Global flags: `--home` (default `os.homedir()`), `--backup-root`, `--force`,
-`--scope=minimal|standard|full`, `--on-collision`, `--recursive`,
-`--attribute=fork|base|both`, `--json`, `--no-auto-rollback`.
+`--scope=minimal|standard|full`, `--on-collision`, `--recursive`, `--json`,
+`--no-auto-rollback`. (The `--attribute=fork|base|both` resolver for ambiguous history is
+deferred to v1.x, decision 7a; v1.0 fails closed on ambiguity - see `docs/troubleshooting.md`.)
 
 Exit codes: `0` success; `1` unexpected I/O error; `2` guard/refusal;
 `3` verification failed; `4` unrecognized format.
@@ -307,11 +308,13 @@ writes on proven ground. Phases 13-14 depend only on the phase 1-4 read layer pl
 phase 7 copy primitives, so they can land close to the doctor milestone; phase 15
 reuses the full phase 5-9 write path plus phase 14's archive writer.
 
-## 10. v1.1 features (F13-F15)
+## 10. Retention features (F13-F15, shipped in v1.0)
 
 Added 2026-07-10. Full spec: `docs/features/v1.1-inventory-retention-reassociate.md`.
 Reference: `docs/reference/claude-data-model.md`, `docs/reference/existing-solutions.md`.
-Claude-only in v1.1, same adapter boundary; determinism and no-network apply.
+Claude-only, same adapter boundary; determinism and no-network apply. (The "v1.1" labels in
+this section and in the Section 9 phase table predate the scope decision that folded F13-F15
+into v1.0.0; see ROADMAP Section 1. The spec filename keeps its original name.)
 
 - **F13 `cpm list` (inventory).** Report every project Claude has state for, with
   session counts, sizes, transcript ages (so the 30-day cliff is visible), linked
