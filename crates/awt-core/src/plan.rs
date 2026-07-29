@@ -344,10 +344,17 @@ mod tests {
         };
         let plan = build_plan(&fs, Path::new("/h"), &mv, &opts()).unwrap();
         let got = render_plan(&plan);
-        // Expected output captured from actual output on first run, then pasted back.
         // Uses assert_eq! instead of insta to avoid CRLF/acceptance tooling issues on Windows.
         // On Windows, Path::display() uses backslashes, so /h\.claude.json not /h/.claude.json.
-        let expected = "Move E:\\Projects\\A -> E:\\Projects\\C\n  json key   /h\\.claude.json \"E:\\Projects\\A\": -> \"E:\\Projects\\C\":\n  move tree  E:/Projects/A -> E:/Projects/C\n";
+        //
+        // The json key line shows the path DOUBLE-escaped (`E:\\Projects\\A`) because that is
+        // the literal byte sequence the rewrite anchors on, and claude.json stores Windows
+        // paths JSON-escaped. Until the AR-01 fix this golden expected the single-escaped form,
+        // which read more naturally and was precisely the problem: the rendered plan disagreed
+        // with the bytes the splice would actually search for, so the plan looked correct while
+        // apply could not possibly succeed. Rendering the true anchor keeps the dry run a
+        // faithful preview of the write. Do not "clean this up" back to single escaping.
+        let expected = "Move E:\\Projects\\A -> E:\\Projects\\C\n  json key   /h\\.claude.json \"E:\\\\Projects\\\\A\": -> \"E:\\\\Projects\\\\C\":\n  move tree  E:/Projects/A -> E:/Projects/C\n";
         assert_eq!(got, expected);
     }
 }
