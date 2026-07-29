@@ -3,6 +3,25 @@ use crate::model::{Change, Ctx, Hit, Move, Stale, Store, VerifyResult};
 use crate::paths::normalize_path;
 use std::path::{Path, PathBuf};
 
+/// Render `s` as a JSON string literal, surrounding quotes included, escaped exactly as a
+/// JSON writer emits it.
+///
+/// This is load-bearing, not cosmetic. Hits and their details are built from the PARSED
+/// document, where a Windows path is unescaped (`E:\a\b`), but every rewrite is a literal
+/// byte splice against the RAW file, where the same path is stored escaped (`E:\\a\\b`).
+/// Anchoring on the parsed form means anchoring on a byte sequence that does not occur, so
+/// the count check reports `expected 1, live 0` and the run fails closed. That was AR-01,
+/// the defect that failed the 2026-07-28 acceptance run: it made `apply` and `associate`
+/// impossible for any project carrying a `githubRepoPaths` entry.
+///
+/// Forward-slash paths need no escaping and pass through unchanged, which is why the
+/// majority-case `projects` keys kept working and hid the defect for so long.
+///
+/// Regression coverage: `crates/awt-core/tests/claude_json_escaping.rs`.
+fn json_string_literal(s: &str) -> String {
+    serde_json::Value::String(s.to_string()).to_string()
+}
+
 pub struct ClaudeJson;
 
 impl ClaudeJson {
@@ -137,8 +156,8 @@ impl Store for ClaudeJson {
             let to = crate::paths_dst_key(rest, &mv.src_abs, &mv.dst_abs);
             return Ok(vec![Change::RenameJsonKey {
                 path: p,
-                from: format!("\"{rest}\":"),
-                to: format!("\"{to}\":"),
+                from: format!("{}:", json_string_literal(rest)),
+                to: format!("{}:", json_string_literal(&to)),
                 expected: 1,
             }]);
         }
@@ -148,8 +167,8 @@ impl Store for ClaudeJson {
             let to = crate::paths_dst_key(&value, &mv.src_abs, &mv.dst_abs);
             return Ok(vec![Change::RewriteJsonArrayValue {
                 path: p,
-                from: format!("\"{value}\""),
-                to: format!("\"{to}\""),
+                from: json_string_literal(&value),
+                to: json_string_literal(&to),
                 expected: 1,
             }]);
         }
