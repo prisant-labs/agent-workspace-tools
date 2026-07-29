@@ -137,10 +137,28 @@ impl Store for ClaudeProjects {
             .join(".claude")
             .join("projects")
             .join(encode_project_dir(&mv.dst_abs));
+        // AR-02: a project whose transcripts have expired has no directory to relocate, so
+        // demanding that the destination directory exist would fail a migration that is in
+        // fact complete. Tell "nothing to move" apart from "the move did not happen" by
+        // also looking at the source: if neither side is a directory there were never any
+        // transcripts, and their continued absence is the correct postcondition. If the
+        // source is still there while the destination is not, the move genuinely failed and
+        // this check still catches it.
+        let old_dir = ctx
+            .home
+            .join(".claude")
+            .join("projects")
+            .join(encode_project_dir(&mv.src_abs));
+        let new_exists = ctx.fs.is_dir(&new_dir);
+        let had_transcripts = new_exists || ctx.fs.is_dir(&old_dir);
         let mut out = vec![VerifyResult {
             check: "new projects dir exists".into(),
-            ok: ctx.fs.is_dir(&new_dir),
-            detail: new_dir.to_string_lossy().into_owned(),
+            ok: new_exists || !had_transcripts,
+            detail: if had_transcripts {
+                new_dir.to_string_lossy().into_owned()
+            } else {
+                format!("{} (no transcripts for this project)", new_dir.display())
+            },
         }];
         let old_cwd = format!(r#""cwd":"{}""#, mv.src_abs.replace('\\', "\\\\"));
         let mut stale = 0usize;
