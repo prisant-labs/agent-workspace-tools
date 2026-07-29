@@ -1,0 +1,45 @@
+name: Feature request
+description: Suggest a capability or a change in behavior
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, it is worth checking `docs/ROADMAP.md` - several obvious asks are already
+        parked as deliberate v1.x candidates (cross-volume move, Codex and Gemini adapters,
+        an `--attribute` resolver for ambiguous history) rather than unconsidered.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: Describe the situation, not the solution. What state are you in, and what goes wrong?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like awt to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: How are you handling it today?
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Does the proposal hold these invariants?
+      description: |
+        Non-negotiable properties of this tool. A proposal that breaks one is not necessarily
+        rejected, but it needs to argue for the trade explicitly.
+      options:
+        - label: No network and no LLM calls in the migration path
+        - label: Deterministic - identical inputs produce identical outputs
+        - label: Backup before any write, verify after, recoverable by rollback
+        - label: Refuses rather than guesses when the state is ambiguous

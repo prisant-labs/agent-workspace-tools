@@ -1,0 +1,105 @@
+name: Bug report
+description: Something went wrong running awt
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. This tool edits Claude Code state, so a few specifics make a
+        report far more actionable than a description alone: the exact command, the exit code,
+        and the version.
+
+        **Please do not paste raw transcript content.** Transcripts contain your conversations.
+        Redact paths and excerpt the minimum needed.
+
+        If this is a security issue, do not file it here - use the Security tab
+        ("Report a vulnerability") instead. See SECURITY.md.
+
+  - type: input
+    id: version
+    attributes:
+      label: awt version
+      description: Output of `awt --version`
+      placeholder: awt 1.0.0
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS version
+      placeholder: Windows 11 Pro 10.0.26100
+    validations:
+      required: true
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Command you ran
+      description: Redact paths as needed, but keep the flags exactly as used.
+      render: shell
+      placeholder: awt apply --src "E:\Projects\a" --dst "E:\Projects\b" --backup-root "E:\bk"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: exit_code
+    attributes:
+      label: Exit code
+      description: See docs/troubleshooting.md for what each one means.
+      options:
+        - "0 - success, but the result was wrong"
+        - "1 - I/O error"
+        - "2 - guard refusal, nothing written"
+        - "3 - verification failed"
+        - "4 - unrecognized store format"
+        - "panic / crash / no exit code"
+        - "not sure"
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: The terminal output. If you can re-run with `--json`, that output is ideal.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: dropdown
+    id: target
+    attributes:
+      label: Was this against your live Claude home or a copy?
+      options:
+        - "A copy (--home pointed elsewhere)"
+        - "My live ~/.claude"
+    validations:
+      required: true
+
+  - type: textarea
+    id: reports
+    attributes:
+      label: report.json / rollback-report.json
+      description: |
+        If `apply` or `rollback` ran, each writes a machine-readable record beside the backup.
+        Attach or paste it if you can - it records every action and its count. Redact paths as
+        needed.
+      render: json
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: state
+    attributes:
+      label: State of your data
+      options:
+        - label: My Claude state is currently fine (the tool refused, or rollback restored it)
+        - label: My Claude state is currently broken and I need help recovering it
