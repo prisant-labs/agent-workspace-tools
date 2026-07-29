@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/prisant-labs/agent-workspace-tools/security/advisories/new
+    about: Report privately via a security advisory, not a public issue. See SECURITY.md.
+  - name: Recover broken Claude state
+    url: https://github.com/prisant-labs/agent-workspace-tools/blob/main/docs/troubleshooting.md
+    about: Exit codes, guard refusals, and where the backup snapshot lives.
+  - name: How do I do X?
+    url: https://github.com/prisant-labs/agent-workspace-tools/blob/main/docs/recipes.md
+    about: Task-oriented walkthroughs, plus the FAQ.

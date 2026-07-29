@@ -1,5 +1,21 @@
 name: ci
 on: [push, pull_request]
+
+# A push to a branch that also has an open PR triggers this workflow twice. Cancel the
+# older run of the same ref so only the newest commit is checked.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # Incremental artifacts are large and never reused across CI runs, so building them
+  # only inflates the cache. A clean build per run is what CI wants anyway.
+  CARGO_INCREMENTAL: 0
+  # Pinned so the audit tool itself is a reproducible input, and so the cache key below
+  # changes when the version does.
+  CARGO_AUDIT_VERSION: "0.22.2"
+
 jobs:
   build:
     runs-on: windows-latest
@@ -7,20 +23,63 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with: { components: clippy, rustfmt }
+
+      - name: cache cargo registry and build output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
       - run: cargo fmt --all -- --check
-      - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo test --workspace
-      - name: dependency-hygiene gate
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+
+      # awt-core is the engine and must stay embeddable: the v2 Tauri GUI links it
+      # directly, so a clap or tauri dependency here would make the boundary a lie.
+      - name: dependency-hygiene gate (awt-core stays UI-agnostic)
         shell: bash
         run: |
           if cargo tree -p awt-core | grep -iE 'tauri|clap'; then
             echo "awt-core must not depend on tauri or clap"; exit 1
           fi
-      - name: no-network gate
+
+      # AC-26: zero network or LLM calls in the migration path. Checked across the whole
+      # workspace, not just awt-core, because a network crate reaching the shipped binary
+      # through awt-cli would break the same guarantee.
+      # crates/awt-core/tests/no_network_deps.rs enforces the same rule over Cargo.lock;
+      # this step fails faster and names the offending crate's dependency path.
+      - name: no-network gate (whole workspace)
         shell: bash
         run: |
-          if cargo tree -p awt-core | grep -iE 'reqwest|ureq|hyper|curl'; then
-            echo "awt-core must not depend on any network-capable crate"; exit 1
-          fi
+          for pkg in awt-core awt-cli; do
+            if cargo tree -p "$pkg" | grep -iE 'reqwest|ureq|hyper|curl|isahc|surf|attohttpc'; then
+              echo "$pkg must not depend on any network-capable crate"; exit 1
+            fi
+          done
+
+      # Cache only the cargo-audit executable, not all of ~/.cargo/bin: that directory also
+      # holds the rustup shims, and restoring stale shims over the toolchain action's
+      # install is a good way to break the build in a confusing manner.
+      - name: cache cargo-audit binary
+        id: audit-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-audit.exe
+          key: ${{ runner.os }}-cargo-audit-${{ env.CARGO_AUDIT_VERSION }}
+
+      - name: install cargo-audit
+        if: steps.audit-cache.outputs.cache-hit != 'true'
+        run: cargo install cargo-audit --version ${{ env.CARGO_AUDIT_VERSION }} --locked
+
       - name: advisory audit (RUSTSEC)
-        run: cargo install cargo-audit --locked && cargo audit
+        run: cargo audit
+
+      # The acceptance run and the quickstart both hand users a release binary. Proving it
+      # links is cheap here and avoids discovering a release-only break at tag time.
+      - name: release build
+        run: cargo build --release --locked
