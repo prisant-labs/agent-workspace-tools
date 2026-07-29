@@ -18,10 +18,16 @@ No LLM, no network, backup-before-write, verify-after, single-command rollback.
 ![Network](https://img.shields.io/badge/network-zero-brightgreen?style=flat-square)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
-> ⚠️ **Pre-release, in active development.** v1.0 is feature-complete but **not yet tagged** - it has
-> not finished its final acceptance run against real data, and commands may still change. Because
-> `awt` edits Claude Code state under `~/.claude`, read the [quickstart](docs/quickstart.md) and
-> **always run it against a copy of `~/.claude` first**.
+> ⚠️ **Pre-release, in active development.** v1.0 is feature-complete but **not yet tagged**, and
+> commands may still change. The first manual acceptance run against real data (2026-07-28) found
+> a release-blocking defect in the `claude.json` rewrite; it is now fixed and covered by
+> regression tests, and the tag awaits a clean full re-run. Two lower-severity findings remain
+> open. See the
+> [acceptance run report](docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-28.md).
+>
+> Because `awt` edits Claude Code state under `~/.claude`, read the
+> [quickstart](docs/quickstart.md) and the [FAQ](docs/faq.md), and **always run it against a copy
+> of `~/.claude` first** - `scripts/new-scratch-home.ps1` makes one.
 
 ---
 
@@ -53,13 +59,18 @@ cargo build --release   # -> target/release/awt
 
 Then, safest path first - practice against a **copy** of your Claude home:
 
-```bash
-awt list  --home "C:\Temp\claude-copy"                       # see every project Claude has state for
+```powershell
+.\scripts\new-scratch-home.ps1 -Destination "C:\Temp\claude-copy"      # copies BOTH halves of the home
+
+awt list   --home "C:\Temp\claude-copy"                      # see every project Claude has state for
 awt doctor --home "C:\Temp\claude-copy"                      # find stale path references
-awt plan  --home "C:\Temp\claude-copy" --src "E:\old" --dst "E:\new"   # dry run, writes nothing
-awt apply --home "C:\Temp\claude-copy" --src "E:\old" --dst "E:\new" --backup-root "C:\Temp\bk"
+awt plan   --home "C:\Temp\claude-copy" --src "E:\old" --dst "E:\new"  # dry run, writes nothing
+awt apply  --home "C:\Temp\claude-copy" --src "E:\old" --dst "E:\new" --backup-root "C:\Temp\bk"
 awt verify --home "C:\Temp\claude-copy" --src "E:\old" --dst "E:\new"
 ```
+
+`--home` redirects the Claude state only. `apply` still performs a real folder move of `--src`,
+so use a throwaway folder while practicing.
 
 > 📖 Full first-run walkthrough: [`docs/quickstart.md`](docs/quickstart.md). Exit codes and recovery: [`docs/troubleshooting.md`](docs/troubleshooting.md).
 
@@ -110,7 +121,7 @@ Every `apply` and `rollback` also writes an always-on machine-readable record (`
 | Release | Contents | Status |
 |---|---|---|
 | v0.1.0 | `awt doctor` and `awt scan` - read-only | Internal milestone (not tagged) |
-| **v1.0.0** | Full CLI: mover (`plan`/`apply`/`verify`/`rollback`) plus `list`, `archive`, `associate` | **Feature-complete; all 24 mover acceptance criteria verified.** Tag pending the maintainer spec sign-off and the manual acceptance run. |
+| **v1.0.0** | Full CLI: mover (`plan`/`apply`/`verify`/`rollback`) plus `list`, `archive`, `associate` | **Feature-complete, tag pending.** Acceptance run 2026-07-28 passed 11 of 13 steps; the blocker it found (AR-01) is fixed and regression-tested. Awaiting a clean full re-run plus maintainer spec sign-off. |
 | v1.x (parked) | Cross-volume move; Codex and Gemini adapters | Behind the existing adapter boundary; promotable when scheduled |
 | v2.0.0 | Tauri 2 + React GUI over the identical core | Deferred; security and native-parity baselines first |
 
@@ -124,8 +135,11 @@ Full program plan: [`docs/ROADMAP.md`](docs/ROADMAP.md). How the system works (a
 | Doc | For whom | Read when |
 |---|---|---|
 | [`docs/quickstart.md`](docs/quickstart.md) | Everyone | Your first run, safest path first |
+| [`docs/faq.md`](docs/faq.md) | Everyone | Is it safe, what does it change, what if something breaks |
+| [`docs/recipes.md`](docs/recipes.md) | Everyone | "I have situation X, what do I run?" |
 | [`docs/reference/commands.md`](docs/reference/commands.md) | Everyone | Per-command reference: flags, behavior, exit codes |
 | [`docs/troubleshooting.md`](docs/troubleshooting.md) | Everyone | What an exit code means and how to recover |
+| [`docs/glossary.md`](docs/glossary.md) | Everyone | Decoding the vocabulary used across these docs |
 | [`docs/DESIGN.md`](docs/DESIGN.md) | Engineers | Architecture: store model, safety rules, CLI surface |
 | [`docs/reference/claude-data-model.md`](docs/reference/claude-data-model.md) | Engineers | How Claude Code stores project state |
 | [`docs/acceptance-run.md`](docs/acceptance-run.md) | Maintainers | The manual acceptance run before a tag |

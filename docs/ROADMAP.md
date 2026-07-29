@@ -113,9 +113,10 @@ as its first effort.
 - Every doc change lands with a `docs/CHANGELOG.md` entry; session logs go to
   `_local/_session-logs/` (gitignored, local-only - not part of the repo).
 
-## 7. Current status (2026-07-23)
+## 7. Current status (2026-07-28)
 
-**v1.0 is feature-complete on `main`, pushed.** All engine phases (1-9) plus the retention
+**v1.0 is feature-complete but NOT releasable:** the first manual acceptance run found a
+release-blocking defect (AR-01, below). All engine phases (1-9) plus the retention
 features (13-15) are implemented, committed, and pushed; `main` is level with origin. 110
 tests pass, clippy and fmt clean.
 
@@ -134,8 +135,9 @@ tests pass, clippy and fmt clean.
 
 **Sweep scope resolved.** The sweep skips vendored and archival regions (`plugins/`,
 `file-history/`, `backups/`) where an old path is correct by design, cutting `doctor` from
-~345s to ~8s; sweep results live in `DoctorReport.report_only`, structurally out of the
-rewrite path.
+~345s to ~8s warm; sweep results live in `DoctorReport.report_only`, structurally out of the
+rewrite path. Re-measured 2026-07-28 on a 3.30 GB / 55,413-file home: 5.9s warm, but 98s on a
+first run over an uncached tree. Quote the warm figure only with that caveat attached.
 
 **Adversarial review pass.** Per-feature Codex adversarial reviews were run; they surfaced
 and drove fixes for fail-silent read errors in `list`/`ProjectIndex` (now fail loud on a real
@@ -153,11 +155,38 @@ release-hygiene pass then added `docs/quickstart.md`, `docs/troubleshooting.md`,
 errors surface their plain-language message. Evidence:
 `docs/internal/release-plans/plan_v1.0.0/S-01_mover-cli/ac-traceability.md`.
 
-**Remaining before the v1.0 tag (all non-code):** (1) the maintainer S-01 spec sign-off, now
-evidence-backed by the traceability doc; (2) the manual acceptance run against a COPY of
-`~/.claude`, per `docs/acceptance-run.md`; and (3) the `cpm` -> `awt` binary rename was
-executed 2026-07-24 (ADR-0001, branch `rename-cpm-to-awt`). The signing / SmartScreen posture
-is CI-3 (the binary channel), not a tag blocker - v1.0 may ship source-first.
+**The acceptance run happened on 2026-07-28 and FAILED.** Full report:
+`docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-28.md`. Eleven of thirteen steps
+passed, including the complete plan/apply/verify/rollback cycle with byte-identical revert proof,
+and `archive` over the full live corpus. Two defects block the tag:
+
+- **AR-01 (release blocker) - FIXED 2026-07-28. `claude.json` `githubRepoPaths` rewrite failed on JSON escaping.**
+  The planner anchors on the parsed, unescaped path (`E:\a\b`) while the file stores it escaped
+  (`E:\\a\\b`), so the count check finds 0 where it planned 1. `apply` and `associate` both fail
+  closed with exit 3 for any project that has a `githubRepoPaths` entry - the normal case for a
+  cloned repo on Windows. Three coverage gaps hid it: the golden end-to-end fixture has an empty
+  `githubRepoPaths`, the `claude-json-variants` fixture that contains the triggering shape is
+  referenced by no test at all, and `plan`-level assertions see the unescaped value and pass.
+- **AR-02: `associate` refuses a project whose transcripts have expired.** It resolves targets
+  through the transcript-keyed reverse index, so a project with `history.jsonl` and `claude.json`
+  state but no surviving transcripts is reported as having no state. Since transcripts expire at
+  30 days and `history.jsonl` never does, this refuses precisely the cases the command exists for.
+- **AR-03: `--json` is silently ignored by `plan` and `verify`.** Implemented for `doctor`,
+  `list`, and `scan`; accepted and ignored elsewhere. **This one blocks v2, not v1:** the GUI
+  parity gate in Section 1 is `GUI plan model == awt plan --json`, and that contract cannot be
+  written against the current binary. Implementing it is unblocked work that can proceed in
+  parallel with the v1.0 fix.
+
+The safety design was vindicated by both failures: every refusal was fail-closed, auto-rollback
+fired, and every restored file was proven byte-identical. Nothing was lost.
+
+**Remaining before the v1.0 tag:** (1) ~~fix AR-01~~ done 2026-07-28, with four raw-byte
+regression tests and the orphaned `claude-json-variants` fixture wired up; (2) re-run the
+acceptance run end to end and get a clean pass; (3) the maintainer S-01 spec sign-off,
+evidence-backed by the traceability doc. AR-02 and AR-03 should be fixed or explicitly deferred
+to v1.x with a documented limitation. The `cpm` ->
+`awt` rename landed 2026-07-24 (ADR-0001). The signing / SmartScreen posture is CI-3 (the binary
+channel), not a tag blocker - v1.0 may ship source-first.
 
 **Next major work: v2.0.0** - the Tauri + React GUI ("Taura") over the identical `awt-core`;
 conceptual mockups exist. Open maintainer decisions remain tracked in the release plan's
