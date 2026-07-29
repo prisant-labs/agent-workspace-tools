@@ -1,10 +1,20 @@
 name: ci
-on: [push, pull_request]
 
-# A push to a branch that also has an open PR triggers this workflow twice. Cancel the
-# older run of the same ref so only the newest commit is checked.
+# `on: [push, pull_request]` builds every commit on a PR branch TWICE, because the push
+# and the pull_request events fire independently. A concurrency group does not fix that:
+# the two events carry different github.ref values (refs/heads/<branch> versus
+# refs/pull/<n>/merge), so they land in different groups and neither cancels the other.
+# Restricting push to main is what actually halves it: branch commits are built once via
+# their PR, and main is built once on merge.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Still worth having, for the case it does address: pushing twice in quick succession to
+# the same PR branch abandons the older, now-irrelevant run.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 env:

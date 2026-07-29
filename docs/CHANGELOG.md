@@ -64,10 +64,15 @@ bytes. Both are now also checklist items in the new PR template.
   acceptance run has not happened. Status table corrected. Quick start uses the scratch-home
   script and warns that `--home` does not redirect the folder move.
 - **`docs/index.md`** - rows added for every new document, per the orphan rule.
-- **`.github/workflows/ci.yml`** - concurrency group added (push plus pull_request was running
-  every commit twice), the no-network gate widened from `awt-core` alone to every workspace
-  package, `cargo-audit` pinned and cached instead of recompiled each run, `--locked` added
-  throughout, and a release build step added.
+- **`.github/workflows/ci.yml`** - `push` restricted to `main` so a PR branch commit is built
+  once rather than twice. A concurrency group alone does **not** fix that duplication, which was
+  confirmed empirically on this branch: the push and `pull_request` events carry different
+  `github.ref` values (`refs/heads/<branch>` versus `refs/pull/<n>/merge`), so they land in
+  separate groups and neither cancels the other. The concurrency group is kept for the case it
+  genuinely covers, abandoning a superseded run when the same branch is pushed twice quickly.
+  Also: the no-network gate widened from `awt-core` alone to every workspace package,
+  `cargo-audit` pinned and cached instead of recompiled each run, `--locked` added throughout,
+  and a release build step added.
 
 ## 2026-07-24 - session logs move to `_local/_session-logs/` (gitignored)
 
