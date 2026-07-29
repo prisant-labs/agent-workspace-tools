@@ -32,35 +32,44 @@ Workspace suite 114 tests green.
 
 Nothing left for you here except reviewing the diff.
 
-### 1.2 Decide on AR-02 (associate refuses transcript-less projects) **[HUMAN]**
+### 1.2 Fix AR-02 (associate refuses transcript-less projects) - **DONE 2026-07-28**
 
-`associate` refuses a project whose transcripts have expired but whose `history.jsonl` and
-`claude.json` state survive - which is the main case the command exists for. Your call:
+Decision was "fix now". `associate` resolves its target through `doctor::scan` across every store
+instead of the transcript-keyed index, and the export step no-ops when there are no transcripts
+rather than aborting. A second layer was fixed with it: `verify` no longer demands a destination
+transcript directory for a project that never had one.
 
-- **Fix it now**, alongside AR-01, or
-- **Defer to v1.x** and document the limitation in `docs/reference/commands.md` and the FAQ.
+Proven against the case that motivated it - this repo's own pre-rename residue in your
+`~/.claude` re-associated cleanly: 3 changes applied, exit 0, all 4 references relocated.
 
-Deferring is defensible; shipping it silently is not. Note this bites you personally: your own
-`~/.claude` still carries `E:\Projects\prisant-labs\claude-project-mover` residue from this
-repo's rename, and AR-02 is why `associate` cannot currently clean it up.
+### 1.3 Fix AR-03 (`--json` ignored by `plan` and `verify`) - **DONE 2026-07-28**
 
-### 1.3 Decide on AR-03 (`--json` ignored by `plan` and `verify`) **[HUMAN]**
+Decision was "fix now", and implemented rather than rejected because the v2 parity contract needs
+the output to exist. `Plan::to_json()` emits the full plan model with a `kind` discriminant per
+change, literal find/replace rules for byte-level drill-down, and a `totals` object.
+`verify --json` emits the check list plus `failed` and `ok`. Exit codes are unchanged by format.
 
-`--json` is documented as a global flag but is only implemented for `doctor`, `list`, and `scan`.
-`plan` and `verify` accept it, exit 0, and print human text anyway. Either implement it or reject
-the flag where unsupported; silently ignoring it is the one indefensible option.
+**This unblocks v2.** `GUI plan model == awt plan --json` can now be written against the shipped
+binary, which was the blocking dependency for starting GUI work.
 
-This is also a **v2 prerequisite**: the roadmap's GUI parity gate is
-`GUI plan model == awt plan --json`, and that contract cannot be written today. Implementing it is
-unblocked work that can proceed while the v1.0 tag is stuck.
+### 1.4 Fix AR-04 (duplicate `githubRepoPaths` values) - **DONE 2026-07-28**
 
-### 1.4 Re-run the acceptance run **[DELEGABLE, but you own the verdict]**
+Found while re-verifying AR-01, and a release blocker in its own right. Two slugs holding the same
+path value each planned an edit expecting one match, while each edit counts across the whole file
+and saw two. Identical splices are now coalesced with the correct total.
 
-After AR-01 is fixed, repeat [`docs/acceptance-run.md`](../acceptance-run.md) end to end. The
-scratch home from the 2026-07-28 run is retained at
-`E:\Projects\_temp\awt-acceptance-2026-07-28` so the same data can be reused.
+Worth knowing because it generalises: fixing AR-01 changed the error from `live 0` to `live 2`,
+which looked like progress and was in fact a second defect surfacing from underneath the first.
 
-### 1.5 Sign off S-01 **[HUMAN - nobody else can do this]**
+### 1.5 Re-run the acceptance run **[DELEGABLE, but you own the verdict]**
+
+All four findings are fixed, so this is now the last technical gate. Repeat
+[`docs/acceptance-run.md`](../acceptance-run.md) end to end - each fix was verified against the
+step that failed, but the full sequence has not been run since. The scratch home from the
+2026-07-28 run is retained at `E:\Projects\_temp\awt-acceptance-2026-07-28` so the same data
+can be reused.
+
+### 1.6 Sign off S-01 **[HUMAN - nobody else can do this]**
 
 [`plan_v1.0.0/S-01_mover-cli/spec.md`](release-plans/plan_v1.0.0/S-01_mover-cli/spec.md) carries
 `status: draft` and `requires-human-review: true`. It was carved from the gitignored umbrella spec

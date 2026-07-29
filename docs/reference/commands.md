@@ -11,7 +11,7 @@ These flags are accepted by every subcommand.
 | Flag | Default | Description |
 |---|---|---|
 | `--home <PATH>` | `USERPROFILE` / `HOME` env var | Home directory that holds `.claude/` and `.claude.json` |
-| `--json` | false | Emit machine-readable JSON to stdout instead of human text. **v1.0: implemented for `doctor`, `list`, `scan`, `apply`, and `rollback` only.** `plan` and `verify` accept the flag and ignore it, printing human text (AR-03). |
+| `--json` | false | Emit machine-readable JSON to stdout instead of human text. Supported by every subcommand. For `plan` this is the plan model the v2 GUI renders (ROADMAP AC-25 parity); each change carries a `kind` discriminant and a `totals` object gives `changes` and `edits`. Exit codes are unaffected by the format: a failed `verify --json` still exits 3. |
 | `--backup-root <PATH>` | System temp dir | Root directory where backup snapshots are written |
 | `--force` | false | Allow overwriting a destination that already exists |
 | `--recursive` | false | Also move nested projects found under `--src` |

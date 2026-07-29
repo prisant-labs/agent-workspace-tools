@@ -4,8 +4,9 @@ type: acceptance-run
 release: v1.0.0
 commit: 86841ff (plus uncommitted CLI help-text fixes)
 result: FAIL
-blockers: [AR-01]
-findings: [AR-01, AR-02, AR-03]
+blockers: [AR-01, AR-04]
+findings: [AR-01, AR-02, AR-03, AR-04]
+all-findings-fixed: true
 ---
 
 # Manual acceptance run - 2026-07-28
@@ -16,13 +17,19 @@ maintainer's live Claude home. **Result: FAIL.** Three defects found:
 | ID | Severity | Status | Summary |
 |---|---|---|---|
 | AR-01 | **Release blocker** | **FIXED 2026-07-28** | `claude.json` `githubRepoPaths` rewrite fails on JSON escaping; `apply` and `associate` cannot complete for any project with such an entry |
-| AR-02 | High | Open | `associate` refuses a project whose transcripts have expired, which is the case it exists for |
-| AR-03 | Medium for v1, blocking for v2 | Open | `--json` is accepted and silently ignored by `plan` and `verify`; the v2 parity gate depends on `awt plan --json` |
+| AR-02 | High | **FIXED 2026-07-28** | `associate` refuses a project whose transcripts have expired, which is the case it exists for |
+| AR-03 | Medium for v1, blocking for v2 | **FIXED 2026-07-28** | `--json` is accepted and silently ignored by `plan` and `verify`; the v2 parity gate depends on `awt plan --json` |
+| AR-04 | **Release blocker** | **FIXED 2026-07-28** | Two `githubRepoPaths` slugs holding the same path value each plan `expected: 1`, but each counts the whole file and sees 2. Found only after AR-01 was fixed - the two were stacked |
 
-This document is the record of the run as it happened. AR-01 has since been fixed; the
-resolution is recorded in [AR-01's own section](#resolution-fixed-2026-07-28). **A full re-run of
-the sequence is still required before the tag** - only the two steps that failed were re-verified
-after the fix, not the whole sequence.
+This document is the record of the run as it happened, with a resolution note under each finding.
+**A full re-run of the sequence is still required before the tag**: only the steps that failed
+were re-verified after each fix, not the whole sequence.
+
+A note on how AR-04 was found, because it generalises. Fixing AR-01 changed the failure from
+`expected 1, live 0` to `expected 1, live 2` - the anchor now matched, which revealed a second,
+independent defect underneath it that the first had been masking. Two defects in the same code
+path can present as one symptom, so "the error message changed" is progress, not success, and a
+re-run against real data after each fix is what distinguishes them.
 
 The safety machinery behaved correctly throughout: every failure failed closed, auto-rollback
 fired, and every restored file was proven byte-identical. No data was lost or corrupted at any
@@ -212,9 +219,31 @@ never expires while transcripts are auto-deleted after 30 days, so the longer a 
 dead, the more certain `associate` is to refuse it - and re-associating a long-dead project is the
 main reason the command exists.
 
-Suggested fix: resolve `associate` targets from the union of all store adapters, as `scan` does,
-and let the export step degrade to a no-op with a warning when there are no transcripts, rather
-than aborting the run.
+### Resolution (FIXED 2026-07-28)
+
+Implemented as suggested. `associate` now resolves its target through `doctor::scan`, which
+queries every store adapter, instead of the transcript-keyed reverse index. The export step
+checks for transcripts first and degrades to a no-op when there are none, rather than aborting a
+run whose re-association half is viable. A project with genuinely no state anywhere is still
+refused, and there is a test asserting that the widened check did not simply turn the guard off.
+
+A second layer surfaced during the fix: `verify` unconditionally asserted "new projects dir
+exists", which can never hold for a project that has no transcripts, so the run then failed at
+exit 3 instead of exit 4. The check now distinguishes "nothing to move" from "the move did not
+happen" by also looking at the source directory - if neither side exists there were never
+transcripts and their absence is the correct postcondition, but if the source survives while the
+destination is missing, the move genuinely failed and the check still catches it.
+
+Verified on real data, re-associating this repo's own pre-rename residue:
+
+```
+awt associate --from E:\Projects\prisant-labs\claude-project-mover --to <dst>
+  associate complete: 3 changes applied; exit 0     (was exit 4, then exit 3)
+awt scan --src <old>   0 hits
+awt scan --src <new>   4 hits: projects key, 2 githubRepoPaths entries, 12 history lines
+```
+
+Tests: `crates/awt-core/tests/associate_and_duplicates.rs`.
 
 ---
 
@@ -247,6 +276,81 @@ tag is blocked.
 Either implement `--json` for `plan` and `verify`, or reject the flag with exit 2 where it is
 unsupported. Silently accepting a flag and ignoring it is the one option that is not defensible,
 and it is the current behavior.
+
+### Resolution (FIXED 2026-07-28)
+
+Implemented rather than rejected, because the parity contract needs it to exist.
+
+`Plan::to_json()` is new in `crates/awt-core/src/plan.rs`. Every change carries a `kind`
+discriminant (`rename_dir`, `merge_dir`, `move_tree`, `rewrite_file`, `rename_json_key`,
+`rewrite_json_array_value`) so a consumer can switch on it without parsing prose, and
+`rewrite_file` exposes its literal find/replace `rules` so a GUI can offer a byte-level
+drill-down. A `totals` object carries both `changes` (plan entries, what a progress bar steps
+through) and `edits` (byte replacements, the number a human reasons about) because they are
+different numbers and both are wanted.
+
+`verify --json` emits the check list as data plus `failed` and `ok`. The exit-code contract is
+independent of the output format: a failed verification is still exit 3 when reporting JSON, and
+there is a test asserting exactly that.
+
+Verified on real data:
+
+```
+awt plan --json ...    parses; 6 changes; kinds: rename_dir, rewrite_file, rewrite_file,
+                       rename_json_key, rewrite_json_array_value, move_tree; totals.edits 101
+awt verify --json ...  parses; ok=false, failed=2, 6 checks; exit 3
+awt verify --json ...  parses; ok=true,  failed=0;            exit 0
+```
+
+**The v2 parity gate is now writable.** `GUI plan model == awt plan --json` can be expressed
+against the shipped binary, which was the blocking dependency for starting GUI work.
+
+---
+
+## AR-04: duplicate path values across `githubRepoPaths` slugs
+
+**Severity: release blocker.** Found while re-verifying the AR-01 fix, not during the run itself.
+
+### Symptom
+
+```
+awt associate --from E:\Projects\prisant-labs\claude-project-mover --to <dst>
+error: verification failed: apply failed
+  (VerifyFailed("...\.claude.json: expected 1, live 2")); exit 3
+```
+
+### Root cause
+
+`.claude.json` can hold the same path under more than one `githubRepoPaths` slug. On real data
+this repo's own pre-rename residue did exactly that:
+
+```
+prisant-labs/claude-project-mover   -> ["E:\\Projects\\prisant-labs\\claude-project-mover"]
+prisant-labs/agent-workspace-tools  -> ["E:\\Projects\\...\\agent-workspace-tools",
+                                        "E:\\Projects\\prisant-labs\\claude-project-mover"]
+```
+
+`detect` correctly emits one hit per occurrence, and `plan` turns each hit into its own change
+with `expected: 1`. But a change is applied by counting occurrences of its literal across the
+**whole file**, so two changes sharing a literal each observe two live occurrences, and the first
+one refuses. Every additional slug pointing at the same folder makes the refusal more certain.
+
+### Why it was invisible until AR-01 was fixed
+
+Before the escaping fix the anchor matched nothing at all, so this code path always failed at
+`expected 1, live 0` and never got far enough to reveal a count of 2. The two defects were
+stacked in the same expression, and fixing the outer one is what exposed the inner one.
+
+### Resolution (FIXED 2026-07-28)
+
+`coalesce_text_splices()` in `crates/awt-core/src/plan.rs` merges changes that share
+`(path, from, to)`, summing their expected counts so the count check agrees with the file. Changes
+with different literals never merge, so a genuine mismatch - the literal also appearing somewhere
+no hit claimed - still refuses, which is the intended fail-closed behavior. The merged change
+keeps the position of the first occurrence, because apply ordering is load-bearing elsewhere.
+
+Tests: `crates/awt-core/tests/associate_and_duplicates.rs`, asserting both that the plan
+coalesces to a single `expected: 2` change and that apply then rewrites both slugs.
 
 ## Observations (not defects)
 

@@ -77,11 +77,11 @@ things: re-associates the history to the new path, and exports a portable copy o
 into `<new-path>\.claude-sessions`. Split them with `--no-export` (re-associate only) or
 `--no-reassociate` (export only), and change the export location with `--export-subdir`.
 
-> **v1.0 limitation.** `associate` currently refuses a project whose transcripts have already
-> expired, even when `history.jsonl` and `claude.json` state remain, reporting "no Claude state
-> found" (exit 4). Since transcripts expire at 30 days and history does not, this hits exactly
-> the long-dead projects the command is for. Tracked as AR-02 in
-> `docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-28.md`.
+`associate` works even when the project's transcripts have already expired. Transcripts are
+auto-deleted after 30 days while `history.jsonl` never expires, so a long-dead project typically
+has `claude.json` and history state and nothing else - which is the normal case here, not an edge
+case. When there are no transcripts left to copy, the export step is simply a no-op and the
+re-association still runs.
 
 ---
 
