@@ -29,6 +29,103 @@ pub struct Plan {
     pub home: std::path::PathBuf,
 }
 
+impl Plan {
+    /// Serialize the plan to a JSON object. Pure function: no IO.
+    ///
+    /// This is the machine-readable contract behind `awt plan --json`, and it is what the
+    /// v2 GUI is required to render: ROADMAP AC-25 states the parity rule as
+    /// `GUI plan model == awt plan --json`, so both front ends consume this identical
+    /// object rather than each computing its own view. Until this existed the parity test
+    /// could not be written at all (AR-03).
+    ///
+    /// Every entry carries a `kind` discriminant so a consumer can switch on it without
+    /// parsing prose, and `rules` exposes the literal find/replace pairs so a UI can offer
+    /// a byte-level drill-down.
+    ///
+    /// Shape:
+    /// ```json
+    /// {
+    ///   "src": "...", "dst": "...", "home": "...",
+    ///   "changes": [{"kind": "rewrite_file", "path": "...", "expected": 37, "rules": [...]}],
+    ///   "warnings": [], "nested": [],
+    ///   "totals": {"changes": 5, "edits": 2082}
+    /// }
+    /// ```
+    pub fn to_json(&self) -> serde_json::Value {
+        let pathstr = |p: &std::path::Path| p.to_string_lossy().into_owned();
+
+        let changes: Vec<serde_json::Value> = self
+            .changes
+            .iter()
+            .map(|c| match c {
+                Change::RenameDir { from, to } => serde_json::json!({
+                    "kind": "rename_dir", "from": pathstr(from), "to": pathstr(to),
+                }),
+                Change::MergeDir { from, to } => serde_json::json!({
+                    "kind": "merge_dir", "from": pathstr(from), "to": pathstr(to),
+                }),
+                Change::MoveTree { from, to } => serde_json::json!({
+                    "kind": "move_tree", "from": pathstr(from), "to": pathstr(to),
+                }),
+                Change::RewriteFile {
+                    path,
+                    rules,
+                    expected,
+                } => serde_json::json!({
+                    "kind": "rewrite_file",
+                    "path": pathstr(path),
+                    "expected": expected,
+                    "rules": rules.iter().map(|r| serde_json::json!({
+                        "find": r.find, "replace": r.replace,
+                    })).collect::<Vec<_>>(),
+                }),
+                Change::RenameJsonKey {
+                    path,
+                    from,
+                    to,
+                    expected,
+                } => serde_json::json!({
+                    "kind": "rename_json_key",
+                    "path": pathstr(path), "from": from, "to": to, "expected": expected,
+                }),
+                Change::RewriteJsonArrayValue {
+                    path,
+                    from,
+                    to,
+                    expected,
+                } => serde_json::json!({
+                    "kind": "rewrite_json_array_value",
+                    "path": pathstr(path), "from": from, "to": to, "expected": expected,
+                }),
+            })
+            .collect();
+
+        // `edits` counts planned byte replacements, which is the number a human reasons
+        // about ("2,082 changes"); `changes` counts plan entries, which is the number a
+        // progress bar steps through. They are different and both are wanted.
+        let edits: usize = self
+            .changes
+            .iter()
+            .map(|c| match c {
+                Change::RewriteFile { expected, .. }
+                | Change::RenameJsonKey { expected, .. }
+                | Change::RewriteJsonArrayValue { expected, .. } => *expected,
+                _ => 0,
+            })
+            .sum();
+
+        serde_json::json!({
+            "src": self.mv.src_abs,
+            "dst": self.mv.dst_abs,
+            "home": pathstr(&self.home),
+            "changes": changes,
+            "warnings": self.warnings,
+            "nested": self.nested,
+            "totals": { "changes": self.changes.len(), "edits": edits },
+        })
+    }
+}
+
 pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) -> Result<Plan> {
     // Guard: cross-volume moves are not supported in v1.0 (spec AC-2, deferred to v1.x).
     // Checked first so the refusal is immediate and unambiguous.
@@ -128,6 +225,16 @@ pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) 
         ));
     }
 
+    // AR-04: the same literal can be reached by more than one hit. `.claude.json` may hold
+    // one path under two `githubRepoPaths` slugs, and each hit plans its own change. But a
+    // change's count check scans the WHOLE file, so N separate changes of `expected: 1`
+    // each observe N live occurrences and the first one refuses with "expected 1, live N".
+    // Coalescing identical splices into a single change with the true total is what makes
+    // the count check agree with the file. Found on real data where
+    // prisant-labs/agent-workspace-tools and prisant-labs/claude-project-mover both pointed
+    // at the same folder.
+    let mut changes = coalesce_text_splices(changes);
+
     // Folder move is the LAST change (see apply ordering). Skipped for associate mode.
     if opts.move_folder {
         changes.push(Change::MoveTree {
@@ -142,6 +249,60 @@ pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) 
         nested,
         home: home.to_path_buf(),
     })
+}
+
+/// Merge text-splice changes that target the same file with the same `from` and `to`
+/// literal, summing their expected counts.
+///
+/// These changes are applied by counting occurrences of `from` across the entire file and
+/// refusing when the live count differs from `expected`. Two changes that share a literal
+/// therefore each see the other's occurrence, so leaving them separate guarantees a
+/// spurious refusal. Order is otherwise preserved: the merged change keeps the position of
+/// the first occurrence, because apply ordering is load-bearing elsewhere.
+///
+/// Changes with different literals never merge, so a genuine count mismatch (the literal
+/// also appearing somewhere no hit claimed) still refuses, which is the intended behavior.
+fn coalesce_text_splices(changes: Vec<Change>) -> Vec<Change> {
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+
+    // The u8 discriminant keeps a key rename and an array-value rewrite distinct even if
+    // they somehow share a literal, since they are different operations on apply.
+    let mut seen: HashMap<(u8, PathBuf, String, String), usize> = HashMap::new();
+    let mut out: Vec<Change> = Vec::with_capacity(changes.len());
+
+    for change in changes {
+        let key = match &change {
+            Change::RenameJsonKey { path, from, to, .. } => {
+                Some((0u8, path.clone(), from.clone(), to.clone()))
+            }
+            Change::RewriteJsonArrayValue { path, from, to, .. } => {
+                Some((1u8, path.clone(), from.clone(), to.clone()))
+            }
+            _ => None,
+        };
+        let Some(key) = key else {
+            out.push(change);
+            continue;
+        };
+        let count = match &change {
+            Change::RenameJsonKey { expected, .. }
+            | Change::RewriteJsonArrayValue { expected, .. } => *expected,
+            _ => 0,
+        };
+        match seen.get(&key) {
+            Some(&i) => match &mut out[i] {
+                Change::RenameJsonKey { expected, .. }
+                | Change::RewriteJsonArrayValue { expected, .. } => *expected += count,
+                _ => unreachable!("index recorded for a non-splice change"),
+            },
+            None => {
+                seen.insert(key, out.len());
+                out.push(change);
+            }
+        }
+    }
+    out
 }
 
 fn dest_key_exists(ctx: &Ctx, mv: &Move) -> Result<bool> {

@@ -32,14 +32,35 @@ pub fn associate(
             "nothing to do: enable --reassociate or --export".into(),
         ));
     }
+
+    // AR-02: resolve the target across EVERY store, not just the transcript-keyed reverse
+    // index. `history.jsonl` never expires while transcripts are auto-deleted after 30
+    // days, so a long-dead project routinely has `claude.json` and history state with no
+    // surviving transcripts - which is precisely the case this command exists to rescue.
+    // Resolving through transcripts alone meant the longer a project had been dead, the
+    // more certain `associate` was to refuse it.
+    if crate::doctor::scan(fs, home, from)?.hits.is_empty() {
+        return Err(AwtError::UnrecognizedFormat(format!(
+            "no Claude state found for project '{from}'; run 'awt list' to see known projects"
+        )));
+    }
+
     if opts.export {
-        let sub = format!("{}/{}", to.replace('\\', "/"), opts.export_subdir);
-        let aopts = ArchiveOpts {
-            archive_dir: PathBuf::from(sub),
-            render: false,
-            run_token: opts.run_id.clone(),
-        };
-        archive_project(fs, home, from, &aopts)?;
+        // Export copies transcripts. When they have expired there is nothing to copy, so
+        // this degrades to a no-op rather than aborting a run whose re-association half is
+        // perfectly viable.
+        let has_transcripts = crate::index::ProjectIndex::build(fs, home)?
+            .by_cwd
+            .contains_key(&normalize_path(from));
+        if has_transcripts {
+            let sub = format!("{}/{}", to.replace('\\', "/"), opts.export_subdir);
+            let aopts = ArchiveOpts {
+                archive_dir: PathBuf::from(sub),
+                render: false,
+                run_token: opts.run_id.clone(),
+            };
+            archive_project(fs, home, from, &aopts)?;
+        }
     }
     if opts.reassociate {
         let mv = Move {
