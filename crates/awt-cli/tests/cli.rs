@@ -327,3 +327,161 @@ fn apply_default_writes_report_json_to_backup_dir() {
     );
     assert!(v["backup_dir"].is_string(), "backup_dir must be a string");
 }
+
+/// AR-03: `--json` is a global flag documented as emitting machine-readable output, but
+/// `plan` and `verify` accepted it, exited 0, and printed human text anyway. A script
+/// piping the result into a parser got prose with no signal that it asked for something
+/// unsupported.
+///
+/// This also matters beyond v1: the v2 GUI parity gate in docs/ROADMAP.md is
+/// `GUI plan model == awt plan --json`, and that contract cannot be written against a
+/// binary whose `plan --json` returns prose.
+#[test]
+fn plan_json_flag_emits_parseable_json() {
+    let tmp = tempfile::tempdir().unwrap();
+    let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap();
+    let claude = tmp.path().join(".claude");
+    std::fs::create_dir_all(&claude).unwrap();
+    copy_tree(&base.join("test/fixtures/reference-move/before"), &claude);
+
+    let out = Command::new(env!("CARGO_BIN_EXE_awt"))
+        .args([
+            "plan",
+            "--json",
+            "--home",
+            tmp.path().to_str().unwrap(),
+            "--src",
+            r"E:\Projects\Github Repos\markdown-for-humans",
+            "--dst",
+            r"E:\awt-plan-nonexistent-dst",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let v: serde_json::Value = serde_json::from_str(&stdout)
+        .unwrap_or_else(|e| panic!("plan --json did not emit JSON ({e}); got:\n{stdout}"));
+
+    assert_eq!(v["src"], r"E:\Projects\Github Repos\markdown-for-humans");
+    assert_eq!(v["dst"], r"E:\awt-plan-nonexistent-dst");
+
+    let changes = v["changes"].as_array().expect("changes must be an array");
+    assert!(!changes.is_empty(), "vacuous plan: {stdout}");
+    // Every change must be self-describing, so a consumer can switch on kind.
+    for c in changes {
+        assert!(
+            c["kind"].is_string(),
+            "every change needs a kind discriminant: {c}"
+        );
+    }
+    assert!(
+        changes.iter().any(|c| c["kind"] == "rewrite_file"),
+        "expected at least one rewrite_file change: {stdout}"
+    );
+    // Totals let a UI render a summary without walking the whole array.
+    assert!(v["totals"]["changes"].as_u64().unwrap() > 0);
+    assert!(v["totals"]["edits"].as_u64().unwrap() > 0);
+    assert!(v["warnings"].is_array());
+    assert!(v["nested"].is_array());
+}
+
+/// `plan --json` must stay a dry run: emitting JSON is not a licence to write.
+#[test]
+fn plan_json_still_writes_nothing() {
+    let tmp = tempfile::tempdir().unwrap();
+    let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap();
+    let claude = tmp.path().join(".claude");
+    std::fs::create_dir_all(&claude).unwrap();
+    copy_tree(&base.join("test/fixtures/reference-move/before"), &claude);
+
+    let projects = claude.join("projects/E--Projects-Github-Repos-markdown-for-humans");
+    let before: Vec<(std::path::PathBuf, Vec<u8>)> = std::fs::read_dir(&projects)
+        .unwrap()
+        .map(|e| {
+            let p = e.unwrap().path();
+            let b = std::fs::read(&p).unwrap();
+            (p, b)
+        })
+        .collect();
+    assert!(!before.is_empty(), "fixture seeding failed");
+
+    Command::new(env!("CARGO_BIN_EXE_awt"))
+        .args([
+            "plan",
+            "--json",
+            "--home",
+            tmp.path().to_str().unwrap(),
+            "--src",
+            r"E:\Projects\Github Repos\markdown-for-humans",
+            "--dst",
+            r"E:\awt-plan-nonexistent-dst",
+        ])
+        .output()
+        .unwrap();
+
+    for (p, b) in &before {
+        assert_eq!(
+            &std::fs::read(p).unwrap(),
+            b,
+            "plan --json must not modify {}",
+            p.display()
+        );
+    }
+}
+
+/// `verify --json` must emit the check list as data, and must keep its exit-code contract:
+/// a failing verification still exits 3 even when the output is JSON.
+#[test]
+fn verify_json_flag_emits_parseable_json_and_keeps_exit_code() {
+    let tmp = tempfile::tempdir().unwrap();
+    seed_home(tmp.path(), r"E:\A");
+
+    // Verify a move that never happened: checks fail, exit code must be 3.
+    let out = Command::new(env!("CARGO_BIN_EXE_awt"))
+        .args([
+            "verify",
+            "--json",
+            "--home",
+            tmp.path().to_str().unwrap(),
+            "--src",
+            r"E:\A",
+            "--dst",
+            r"E:\B",
+        ])
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let v: serde_json::Value = serde_json::from_str(&stdout)
+        .unwrap_or_else(|e| panic!("verify --json did not emit JSON ({e}); got:\n{stdout}"));
+
+    let checks = v["checks"].as_array().expect("checks must be an array");
+    assert!(!checks.is_empty(), "vacuous verify: {stdout}");
+    for c in checks {
+        assert!(c["check"].is_string(), "check needs a name: {c}");
+        assert!(c["ok"].is_boolean(), "check needs a boolean ok: {c}");
+    }
+    assert_eq!(
+        v["ok"], false,
+        "this move never happened, so ok must be false"
+    );
+    assert!(v["failed"].as_u64().unwrap() > 0);
+    assert_eq!(
+        out.status.code(),
+        Some(3),
+        "verify must still exit 3 on failure when emitting JSON"
+    );
+}

@@ -325,7 +325,11 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
                 dst_abs: dst.clone(),
             };
             let plan = build_plan(fs, home, &mv, &plan_opts(cli))?;
-            print!("{}", render_plan(&plan));
+            if cli.json {
+                println!("{}", serde_json::to_string_pretty(&plan.to_json()).unwrap());
+            } else {
+                print!("{}", render_plan(&plan));
+            }
             Ok(())
         }
         Cmd::Apply { src, dst } => {
@@ -365,14 +369,33 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
             };
             let results = verify(fs, home, &mv, None)?;
             let failed = results.iter().filter(|r| !r.ok).count();
-            for r in &results {
-                println!(
-                    "  [{}] {}: {}",
-                    if r.ok { "ok" } else { "FAIL" },
-                    r.check,
-                    r.detail
-                );
+            if cli.json {
+                let checks: Vec<_> = results
+                    .iter()
+                    .map(
+                        |r| serde_json::json!({ "check": r.check, "ok": r.ok, "detail": r.detail }),
+                    )
+                    .collect();
+                let doc = serde_json::json!({
+                    "src": src,
+                    "dst": dst,
+                    "checks": checks,
+                    "failed": failed,
+                    "ok": failed == 0,
+                });
+                println!("{}", serde_json::to_string_pretty(&doc).unwrap());
+            } else {
+                for r in &results {
+                    println!(
+                        "  [{}] {}: {}",
+                        if r.ok { "ok" } else { "FAIL" },
+                        r.check,
+                        r.detail
+                    );
+                }
             }
+            // The exit-code contract is independent of the output format: a failed
+            // verification is exit 3 whether it was reported as prose or as JSON.
             if failed > 0 {
                 return Err(AwtError::VerifyFailed(format!("{failed} failed")));
             }
