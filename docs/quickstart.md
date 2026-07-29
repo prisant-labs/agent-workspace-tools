@@ -84,7 +84,7 @@ Same-volume moves only in v1.0. Both paths must be on the same drive.
 Point `rollback` at the manifest the apply wrote:
 
 ```
-awt rollback "E:\awt-backups\awt-<run-id>\manifest.json"
+awt rollback --report "E:\awt-backups\awt-<run-id>\manifest.json"
 ```
 
 `rollback` restores every file to its pre-migration bytes, moves the folder back, then proves the

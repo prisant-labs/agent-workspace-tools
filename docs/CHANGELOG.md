@@ -3,6 +3,72 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-07-28 - first acceptance run (FAILED), AR-01 fixed, user-doc suite, CI hardening
+
+The manual acceptance run was executed for the first time and **failed**, finding a
+release-blocking defect (AR-01), which was then fixed in the same session. Documentation was
+reconciled against reality in the same pass, and the user-facing doc set was filled out.
+
+Two conventions in `AGENTS.md` and `CONTRIBUTING.md` were added as a direct consequence of how
+AR-01 hid: every fixture must be referenced by a test, and rewrite tests must assert on raw file
+bytes. Both are now also checklist items in the new PR template.
+
+### New documents
+
+- **`docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-28.md`** - CREATED. Full
+  result of the run: 11 of 13 steps passed; AR-01 (release blocker: `claude.json`
+  `githubRepoPaths` rewrite fails on JSON escaping) and AR-02 (`associate` refuses
+  transcript-less projects). Includes root-cause analysis, the three test-coverage gaps that hid
+  AR-01, reproduction steps, and non-defect observations.
+- **`docs/internal/maintainer-todo.md`** - CREATED. The single canonical human to-do list,
+  aggregating gates that were previously split across the release plan, the runbook, and the
+  roadmap. Marks each item HUMAN or DELEGABLE.
+- **`docs/faq.md`** - CREATED. Safety and trust, what a move actually changes, retention and the
+  30-day cliff, recovery, platform and scope.
+- **`docs/recipes.md`** - CREATED. Task-oriented walkthroughs including the already-moved-by-hand
+  case, archive-hook setup, and scripting against the exit-code contract.
+- **`docs/glossary.md`** - CREATED. The project's vocabulary, from `cwd` and reverse index through
+  anchored rewrite, report-only, and the honesty checkpoint.
+- **`SECURITY.md`** - CREATED. Private reporting via GitHub advisories, in-scope and out-of-scope
+  lists, and the no-network / source-first distribution posture.
+- **`scripts/README.md`** and **`scripts/new-scratch-home.ps1`** - CREATED. The scratch-home
+  helper used by the acceptance run, plus its documentation.
+- **`.github/ISSUE_TEMPLATE/{bug_report,feature_request,config}.yml`**,
+  **`.github/PULL_REQUEST_TEMPLATE.md`** - CREATED. The bug form requires version, exit code, and
+  output; the PR template requires raw-byte assertions and fixture wiring.
+
+### Impact on existing documents
+
+- **`docs/quickstart.md`**, **`docs/troubleshooting.md`** - FIXED. Both documented
+  `awt rollback <path>` as a positional argument; the CLI requires `--report <path>`. Every
+  copy-pasted rollback command in the docs was broken.
+- **`crates/awt-cli/src/main.rs`** - the `--html` help text claimed the HTML inventory was written
+  *instead of* the table when the code writes it *in addition to* the table. Fixed in the code,
+  since `docs/reference/commands.md` was correct. `--src`, `--dst`, and `--report` had no help
+  text at all and now do.
+- **`docs/ROADMAP.md`** - Section 7 rewritten: v1.0 is feature-complete but NOT releasable. The
+  "remaining work is all non-code" claim is now false and was removed. The `doctor` timing claim
+  gained its missing caveat (5.9s warm, 98s cold on a 3.3 GB home).
+- **`docs/internal/release-plans/plan_v1.0.0/plan_v1.0.0.md`** - hygiene gates re-evaluated for
+  the first time since 2026-07-11. Gate (d) had read FAIL only because the table predated
+  implementation; it is PASS. New gate (f) for the acceptance run, which reads FAIL. Doc checklist
+  reconciled row by row. D4 and D5 resolved as superseded by events; D6 opened for the
+  `history.jsonl` drive-letter corruption.
+- **`AGENTS.md`** - the honesty-checkpoint baseline is restated as a procedure rather than fixed
+  counts, which had drifted from 6/11/1 to 20/48/5/2 by store. Two new conventions added: every
+  fixture must be referenced by a test, and rewrite tests must assert on raw bytes.
+- **`docs/decisions/0001-project-name-agent-workspace-tools.md`** - the rename consequence is
+  updated from future tense to landed (2026-07-24), and Confirmation records the one residue that
+  survives in the maintainer's live `~/.claude`, which AR-02 currently prevents cleaning up.
+- **`README.md`** - the pre-release callout now names the AR-01 blocker rather than saying the
+  acceptance run has not happened. Status table corrected. Quick start uses the scratch-home
+  script and warns that `--home` does not redirect the folder move.
+- **`docs/index.md`** - rows added for every new document, per the orphan rule.
+- **`.github/workflows/ci.yml`** - concurrency group added (push plus pull_request was running
+  every commit twice), the no-network gate widened from `awt-core` alone to every workspace
+  package, `cargo-audit` pinned and cached instead of recompiled each run, `--locked` added
+  throughout, and a release build step added.
+
 ## 2026-07-24 - session logs move to `_local/_session-logs/` (gitignored)
 
 New maintainer standard: session logs are local-only working notes, not repository artifacts.

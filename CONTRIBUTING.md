@@ -41,6 +41,14 @@ CI additionally enforces (see `.github/workflows/ci.yml`):
   behavior must preserve these.
 - **Fixtures are sanitized once** and never refreshed from live files without repeating the
   sanitization step (see the TDD plan Task 1.3 and `docs/DESIGN.md` Section 8).
+- **Every fixture must be referenced by at least one test.** An orphaned fixture reads as
+  coverage that does not exist. `test/fixtures/claude-json-variants/` sat unreferenced while
+  containing the exact shape that would have caught AR-01, the defect that failed the first
+  acceptance run. Grep for the directory name before assuming it is wired up.
+- **Test a rewrite by asserting on raw file bytes**, not on the parsed value or on `plan` output.
+  The engine writes by literal byte splice, so a parsed-value assertion can pass while the write
+  is impossible. That is precisely how AR-01 survived to release-candidate stage: the path is
+  unescaped when parsed (`E:\a\b`) and escaped on disk (`E:\\a\\b`).
 - **Test-driven** - write a failing test first, then the implementation. Every acceptance
   criterion should trace to a test (see the S-01 traceability doc for the pattern).
 

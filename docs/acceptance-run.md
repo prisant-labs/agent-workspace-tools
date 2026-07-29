@@ -24,20 +24,45 @@ Confirm CI is green on the commit you intend to tag (release-runbook Section 1).
 
 ## 1. Make a scratch copy
 
-Copy both the directory and the sibling JSON file to a scratch location on the SAME volume you
-will test moves on (moves are same-volume in v1.0):
+Use the helper script, which copies both halves of the home, refuses to copy into itself, and
+refuses to silently overwrite an existing scratch copy:
 
+```powershell
+.\scripts\new-scratch-home.ps1 -Destination "E:\Projects\_temp\awt-acceptance-<date>"
 ```
-# PowerShell
-Copy-Item -Recurse "$env:USERPROFILE\.claude"      "C:\Temp\claude-acceptance\.claude"
-Copy-Item          "$env:USERPROFILE\.claude.json" "C:\Temp\claude-acceptance\.claude.json"
-```
+
+Expect 2-4 minutes for a 3 GB home. See [`scripts/README.md`](../scripts/README.md) for
+parameters.
+
+Copying `.claude\` alone is **not** sufficient: `.claude.json` is the other half of the home and
+holds every `projects{}` key and `githubRepoPaths` entry. A scratch home missing it looks fine
+and silently omits two of the six stores, so the run passes for the wrong reason.
+
+The scratch home may live on any volume. It is `--src` and `--dst` that must share one, because
+v1.0 moves are same-volume renames.
 
 For every command below, `--home "C:\Temp\claude-acceptance"` points the tool at the copy. If you
 ever see a command in this run without `--home`, stop - that is a mistake.
 
-Pick a real project that has Claude state (something `awt list` shows with sessions). Call its
-current path `<test-src>` and choose a non-existent same-volume destination `<test-dst>`.
+### Choosing `<test-src>`: the one thing `--home` does not protect
+
+**`--home` redirects the Claude state only. `apply` still performs a real folder move of
+`<test-src>` on your actual filesystem.** Rollback moves it back, but a project you care about
+should not be the thing under test.
+
+Pick a **disposable** folder that `awt list` shows with sessions - a scratch or probe directory,
+not live work. Then choose a non-existent same-volume destination as `<test-dst>`.
+
+If the disposable candidates only have transcripts (no `claude.json` key, no `history.jsonl`
+lines, no `githubRepoPaths` entry), the write test covers one store out of six. Close that gap by
+adding realistic entries **to the scratch `.claude.json`**, which is a copy and safe to edit:
+
+- a `projects` key using forward slashes, e.g. `"E:/tmp/probe": { ... }`
+- a `githubRepoPaths` entry, which must be an **array** of backslash paths, e.g.
+  `"owner/probe": ["E:\\tmp\\probe"]`
+
+Both conventions matter: real files mix them, and the mixture is what AR-01 was hiding in. A run
+that exercises only the forward-slash `projects` key will pass and prove very little.
 
 ## 2. Read-only checks (no writes yet)
 
