@@ -28,15 +28,25 @@ see `docs/CHANGELOG.md` (a doc-impact log, not a code changelog).
   always safe - nothing was written and auto-rollback restored byte-identical state - but the
   operation could not succeed. Found by the first manual acceptance run (AR-01).
 
-### Known issues
+- **`apply` and `associate` could not complete when two `githubRepoPaths` slugs held the same
+  path value.** Each occurrence planned its own edit expecting one match, while each edit counts
+  across the whole file and saw two, so the count check refused with `expected 1, live 2`.
+  Duplicate edits are now coalesced into one with the correct total (AR-04).
+- **`associate` refused a project whose transcripts had expired**, even when `history.jsonl` and
+  `claude.json` state remained, reporting "no Claude state found". Since transcripts expire after
+  30 days and history never does, this refused exactly the long-dead projects the command exists
+  to rescue. It now resolves the target across every store (AR-02).
+- **`--json` was silently ignored by `plan` and `verify`.** Both accepted the flag, exited 0, and
+  printed human text anyway. Both now emit JSON; exit codes are unchanged by the format, so a
+  failed `verify --json` still exits 3 (AR-03).
 
-- **`associate` refuses a project whose transcripts have expired** even when `history.jsonl` and
-  `claude.json` state remain, reporting "no Claude state found" (exit 4). Since transcripts expire
-  after 30 days and history does not, this affects exactly the long-dead projects the command
-  exists to rescue (AR-02).
-- **`--json` is silently ignored by `plan` and `verify`.** The flag is accepted and exits 0, but
-  those two commands print human text regardless. It is implemented for `doctor`, `list`, `scan`,
-  `apply`, and `rollback` (AR-03).
+### Added
+
+- **`awt plan --json`** emits the full plan model: every change carries a `kind` discriminant,
+  `rewrite_file` exposes its literal find/replace rules, and a `totals` object gives both
+  `changes` (plan entries) and `edits` (byte replacements). This is the object the v2 GUI is
+  required to render under the AC-25 parity rule.
+- **`awt verify --json`** emits the check list as data, plus `failed` and `ok`.
 
 The dating of this section is deferred to the tag; the v1.0.0 tag is gated on a maintainer
 acceptance run and spec sign-off (see `docs/release-runbook.md`).
