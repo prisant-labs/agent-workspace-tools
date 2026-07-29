@@ -83,4 +83,5 @@ bytes to undo it" live in the same place.
 
 `apply` takes a full sha256 snapshot of every file it will modify before the first write,
 under `<backup-root>/awt-<run-id>/` (the backup root defaults to the system temp dir; set it
-with `--backup-root`). To undo an apply, run `awt rollback <backup-root>/awt-<run-id>/manifest.json`.
+with `--backup-root`). To undo an apply, run
+`awt rollback --report <backup-root>/awt-<run-id>/manifest.json`.

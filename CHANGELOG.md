@@ -13,6 +13,31 @@ see `docs/CHANGELOG.md` (a doc-impact log, not a code changelog).
 
 - Renamed the binary and crates from `cpm` / `cpm-core` / `cpm-cli` to `awt` / `awt-core` / `awt-cli` (ADR-0001, branch `rename-cpm-to-awt`).
 
+### Fixed
+
+- `awt list --html` help text said the HTML inventory was written *instead of* the table. It is
+  written *in addition to* the table; the help text was wrong, not the behavior.
+- `--src`, `--dst`, and `--report` had no help text in `--help` output. They are now described.
+- The documented `rollback` invocation was wrong in the quickstart and troubleshooting guides:
+  `rollback` takes `--report <manifest>`, not a positional path. Any command copied from those
+  docs would have failed.
+
+- **`apply` and `associate` could not complete for a project with a `githubRepoPaths` entry** in
+  `~/.claude.json`. The rewrite was planned against the parsed (unescaped) path while the file
+  stores it JSON-escaped, so the count check refused with `expected 1, live 0`. The failure was
+  always safe - nothing was written and auto-rollback restored byte-identical state - but the
+  operation could not succeed. Found by the first manual acceptance run (AR-01).
+
+### Known issues
+
+- **`associate` refuses a project whose transcripts have expired** even when `history.jsonl` and
+  `claude.json` state remain, reporting "no Claude state found" (exit 4). Since transcripts expire
+  after 30 days and history does not, this affects exactly the long-dead projects the command
+  exists to rescue (AR-02).
+- **`--json` is silently ignored by `plan` and `verify`.** The flag is accepted and exits 0, but
+  those two commands print human text regardless. It is implemented for `doctor`, `list`, `scan`,
+  `apply`, and `rollback` (AR-03).
+
 The dating of this section is deferred to the tag; the v1.0.0 tag is gated on a maintainer
 acceptance run and spec sign-off (see `docs/release-runbook.md`).
 

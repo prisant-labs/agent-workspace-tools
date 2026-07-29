@@ -39,6 +39,8 @@ These rules are load-bearing. Violating any one invalidates correctness guarante
   ```
 - `awt-core` must never depend on `tauri` or `clap`. CI enforces this: `cargo tree -p awt-core | grep -iE 'tauri|clap' && exit 1`.
 - Tests run against `MemoryFileSystem`, never against live `~/.claude`. Golden fixtures live in `test/fixtures/` and are never refreshed from live files without the sanitization step in plan Task 1.3.
+- **Every fixture must be referenced by at least one test.** An unreferenced fixture is worse than no fixture: it reads as coverage that does not exist. `test/fixtures/claude-json-variants/` sat orphaned and contained the exact shape that would have caught AR-01, the defect that failed the first acceptance run. Grep for a fixture's directory name before assuming it is wired up.
+- **Assert on raw bytes when testing a rewrite, not on the parsed value or the plan.** The engine writes by literal byte splice, so a test that checks parsed JSON or `plan` output can pass while the actual write is impossible. This is exactly how AR-01 survived to release-candidate stage.
 - Every doc change gets a `docs/CHANGELOG.md` entry.
 - Session logs go in `_local/_session-logs/` using the `jp-wrap-session` convention. They are local-only working notes and are gitignored - never commit them.
 
@@ -65,7 +67,9 @@ Shell commands can hang in some harnesses on this machine. For file operations, 
 
 Implement the TDD plan task by task using `superpowers:subagent-driven-development` (fresh subagent per task, parent reviews between tasks). Each step is red-green: write the failing test first, run it, implement, run again, commit.
 
-Phase 4 is the honesty checkpoint. `awt doctor` on the real machine must report exactly the residue found by hand: 6 stale `githubRepoPaths`, 11 stale `history.jsonl` values, and the `markdown-for-humans-e854827f52137cd9` plugin dir. All write-phase work (phases 5-9) is gated on passing this checkpoint.
+Phase 4 is the honesty checkpoint. `awt doctor` on the real machine must report exactly the residue found by hand - no more, no less. All write-phase work (phases 5-9) is gated on passing this checkpoint.
+
+The checkpoint is a **procedure, not a fixed number**: re-derive the residue by hand at the time you run it, then compare. The original 2026-07-11 baseline (6 stale `githubRepoPaths`, 11 stale `history.jsonl` values, the `markdown-for-humans-e854827f52137cd9` plugin dir) is a historical record, not a target; by 2026-07-28 ordinary project churn plus this repo's own rename had moved the real counts to 20 / 48 / 5 / 2 by store. A hardcoded expected count in a doc goes stale silently and then reads as a failure when it is only drift.
 
 ---
 

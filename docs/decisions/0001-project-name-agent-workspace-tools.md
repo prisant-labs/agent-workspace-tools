@@ -59,10 +59,11 @@ state. "Tools" is also the shorter, more conventional choice for a CLI suite.
 - Good: "workspace" accurately frames the subject as the agent's view of all your
   projects and their state.
 - Bad: dropping `claude` also invalidates the `cpm` acronym (claude project mover),
-  so the binary and the `cpm-core` / `cpm-cli` crate names no longer fit. They are
-  renamed to `awt` / `awt-core` / `awt-cli` in a deferred code pass (see More
-  Information); until it lands the repo carries a temporary, tracked inconsistency
-  (repo `agent-workspace-tools`, binary `cpm`).
+  so the binary and the `cpm-core` / `cpm-cli` crate names no longer fit. They were
+  renamed to `awt` / `awt-core` / `awt-cli` in a deferred code pass, which landed
+  2026-07-24 (see More Information). The temporary inconsistency this consequence
+  predicted (repo `agent-workspace-tools`, binary `cpm`) existed from 2026-07-17 to
+  2026-07-24 and is now closed.
 - Neutral: past session logs, `docs/CHANGELOG.md` entries, git history, and the
   archival regions under `~/.claude` (file-history, backups) are historical records
   and are preserved, not rewritten - the same "a match is not staleness" rule the
@@ -74,6 +75,16 @@ The rename is confirmed complete when: the GitHub repo is `agent-workspace-tools
 the git remote points at it, live in-repo references are updated, the local folder
 is renamed, and the Claude Code transcript directory plus project memory are
 repointed so no live reference to the old path survives outside historical records.
+
+**Confirmed 2026-07-24** for the repo, remote, in-repo references, and local folder
+(commit `c1d8969`, CI green). One residue remains outside the repo, in the
+maintainer's own `~/.claude`: `E:\Projects\prisant-labs\claude-project-mover` still
+appears as a `projects` key, in two `githubRepoPaths` entries, and across 12
+`history.jsonl` lines. Repairing it is the job of `awt associate`, which cannot
+currently do it - see AR-02 in
+`docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-28.md`. The project's
+own rename is therefore a live test case for its own tooling, and the residue stays
+until AR-02 is fixed.
 
 ## Pros and Cons of the Options
 
