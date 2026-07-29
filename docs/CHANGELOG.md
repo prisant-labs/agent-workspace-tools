@@ -3,6 +3,31 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-07-28 (later) - AR-02, AR-03, and AR-04 fixed; all acceptance findings closed
+
+Follow-up to the acceptance run below. The maintainer's call on the two open findings was "fix
+now", and a fourth defect surfaced during the work.
+
+- **AR-04 is new**, found while re-verifying AR-01 rather than during the run. Two
+  `githubRepoPaths` slugs can hold the same path value; each planned its own edit expecting one
+  match, while each edit counts across the whole file and saw two. It was invisible until AR-01
+  was fixed, because the anchor previously matched nothing at all - the two defects were stacked
+  in one expression. Recorded as its own section in the acceptance-run report, including why a
+  changed error message (`live 0` becoming `live 2`) is progress rather than success.
+- **`docs/reference/commands.md`** - the `--json` caveat is removed; the flag now works on every
+  subcommand, and the entry documents the plan model as the v2 parity contract.
+- **`docs/recipes.md`** - the AR-02 limitation callout is replaced with the positive behavior:
+  `associate` handles expired transcripts, which is the normal case rather than an edge case.
+- **`docs/ROADMAP.md`**, **`plan_v1.0.0.md`**, **`docs/internal/maintainer-todo.md`** - all four
+  findings marked fixed. The only technical gate left is a clean end-to-end acceptance re-run;
+  the only human gate is the S-01 sign-off.
+- **Root `CHANGELOG.md`** - AR-02, AR-03, AR-04 moved from Known issues to Fixed, and an Added
+  section records `plan --json` and `verify --json`.
+
+Note for v2 planning: implementing `awt plan --json` means the GUI parity gate
+(`GUI plan model == awt plan --json`) is now expressible against the shipped binary. It was
+previously unwritable, and it gated the start of GUI work.
+
 ## 2026-07-28 - first acceptance run (FAILED), AR-01 fixed, user-doc suite, CI hardening
 
 The manual acceptance run was executed for the first time and **failed**, finding a

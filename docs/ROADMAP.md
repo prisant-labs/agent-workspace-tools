@@ -167,11 +167,11 @@ and `archive` over the full live corpus. Two defects block the tag:
   cloned repo on Windows. Three coverage gaps hid it: the golden end-to-end fixture has an empty
   `githubRepoPaths`, the `claude-json-variants` fixture that contains the triggering shape is
   referenced by no test at all, and `plan`-level assertions see the unescaped value and pass.
-- **AR-02: `associate` refuses a project whose transcripts have expired.** It resolves targets
+- **AR-02 - FIXED 2026-07-28. `associate` refused a project whose transcripts had expired.** It resolves targets
   through the transcript-keyed reverse index, so a project with `history.jsonl` and `claude.json`
   state but no surviving transcripts is reported as having no state. Since transcripts expire at
   30 days and `history.jsonl` never does, this refuses precisely the cases the command exists for.
-- **AR-03: `--json` is silently ignored by `plan` and `verify`.** Implemented for `doctor`,
+- **AR-03 - FIXED 2026-07-28. `--json` was silently ignored by `plan` and `verify`.** Implemented for `doctor`,
   `list`, and `scan`; accepted and ignored elsewhere. **This one blocks v2, not v1:** the GUI
   parity gate in Section 1 is `GUI plan model == awt plan --json`, and that contract cannot be
   written against the current binary. Implementing it is unblocked work that can proceed in
@@ -180,11 +180,13 @@ and `archive` over the full live corpus. Two defects block the tag:
 The safety design was vindicated by both failures: every refusal was fail-closed, auto-rollback
 fired, and every restored file was proven byte-identical. Nothing was lost.
 
-**Remaining before the v1.0 tag:** (1) ~~fix AR-01~~ done 2026-07-28, with four raw-byte
-regression tests and the orphaned `claude-json-variants` fixture wired up; (2) re-run the
-acceptance run end to end and get a clean pass; (3) the maintainer S-01 spec sign-off,
-evidence-backed by the traceability doc. AR-02 and AR-03 should be fixed or explicitly deferred
-to v1.x with a documented limitation. The `cpm` ->
+A fourth defect, **AR-04**, surfaced only after AR-01 was fixed: two `githubRepoPaths` slugs can
+hold the same path value, and each occurrence planned its own edit expecting one match while each
+edit counts across the whole file and saw two. The two were stacked in one expression, which is
+why the acceptance run saw a single symptom. All four are now fixed and regression-tested.
+
+**Remaining before the v1.0 tag:** (1) re-run the acceptance run end to end and get a clean pass;
+(2) the maintainer S-01 spec sign-off, evidence-backed by the traceability doc. The `cpm` ->
 `awt` rename landed 2026-07-24 (ADR-0001). The signing / SmartScreen posture is CI-3 (the binary
 channel), not a tag blocker - v1.0 may ship source-first.
 

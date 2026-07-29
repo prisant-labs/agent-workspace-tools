@@ -20,9 +20,8 @@ No LLM, no network, backup-before-write, verify-after, single-command rollback.
 
 > ⚠️ **Pre-release, in active development.** v1.0 is feature-complete but **not yet tagged**, and
 > commands may still change. The first manual acceptance run against real data (2026-07-28) found
-> a release-blocking defect in the `claude.json` rewrite; it is now fixed and covered by
-> regression tests, and the tag awaits a clean full re-run. Two lower-severity findings remain
-> open. See the
+> four defects, two of them release-blocking. All four are now fixed and covered by regression
+> tests; the tag awaits a clean end-to-end re-run and the maintainer spec sign-off. See the
 > [acceptance run report](docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-28.md).
 >
 > Because `awt` edits Claude Code state under `~/.claude`, read the
@@ -121,7 +120,7 @@ Every `apply` and `rollback` also writes an always-on machine-readable record (`
 | Release | Contents | Status |
 |---|---|---|
 | v0.1.0 | `awt doctor` and `awt scan` - read-only | Internal milestone (not tagged) |
-| **v1.0.0** | Full CLI: mover (`plan`/`apply`/`verify`/`rollback`) plus `list`, `archive`, `associate` | **Feature-complete, tag pending.** Acceptance run 2026-07-28 passed 11 of 13 steps; the blocker it found (AR-01) is fixed and regression-tested. Awaiting a clean full re-run plus maintainer spec sign-off. |
+| **v1.0.0** | Full CLI: mover (`plan`/`apply`/`verify`/`rollback`) plus `list`, `archive`, `associate` | **Feature-complete, tag pending.** Acceptance run 2026-07-28 found four defects (two blocking); all fixed and regression-tested. Awaiting a clean end-to-end re-run plus maintainer spec sign-off. |
 | v1.x (parked) | Cross-volume move; Codex and Gemini adapters | Behind the existing adapter boundary; promotable when scheduled |
 | v2.0.0 | Tauri 2 + React GUI over the identical core | Deferred; security and native-parity baselines first |
 
