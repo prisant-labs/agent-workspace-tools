@@ -56,38 +56,46 @@ enum Cmd {
     Doctor,
     /// Enumerate every project Claude has state for, with session counts and health
     List {
-        /// Write an HTML inventory to this path instead of printing a table
+        /// Also write a self-contained HTML inventory to this path (the table is still printed)
         #[arg(long)]
         html: Option<PathBuf>,
     },
     /// List all state that references a project's absolute path
     Scan {
+        /// Absolute path of the project to scan
         #[arg(long)]
         src: String,
     },
     /// Dry-run: print the changes that apply would make
     Plan {
+        /// Absolute path of the project in its current location
         #[arg(long)]
         src: String,
+        /// Absolute path of the intended new location
         #[arg(long)]
         dst: String,
     },
     /// Move src to dst and rewrite all Claude state
     Apply {
+        /// Absolute path of the project in its current location
         #[arg(long)]
         src: String,
+        /// Absolute path of the intended new location
         #[arg(long)]
         dst: String,
     },
     /// Check that Claude state correctly references dst after a move
     Verify {
+        /// Original (old) absolute path
         #[arg(long)]
         src: String,
+        /// New absolute path
         #[arg(long)]
         dst: String,
     },
     /// Restore pre-move state from a backup manifest
     Rollback {
+        /// Path to the manifest.json written by a previous apply run
         #[arg(long)]
         report: PathBuf,
     },
