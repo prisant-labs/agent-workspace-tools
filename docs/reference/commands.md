@@ -48,7 +48,9 @@ Report path-keyed state across all stores that references folders that no longer
 - `Report only (never rewritten)` - findings in regions no adapter owns (e.g., plugin vendor dirs, backups). Surfaced for visibility; never touched.
 - `Unresolvable project dirs` - transcript directories whose sessions never recorded a `cwd`; nothing to resolve them against.
 
-**Output (`--json`):** `{ "stale": [...], "report_only": [...], "unresolved": [...] }` where each entry carries `store`, `reference`, and `location` fields.
+- `Warnings` - shapes an adapter recognized and deliberately declined to act on, printed only when there are any. Distinct from stale (a dead reference) and from report-only (a region no adapter owns): these sit inside an owned region and were skipped on purpose. Currently: a `githubRepoPaths` value that is not an array, which will never be examined or rewritten.
+
+**Output (`--json`):** `{ "stale": [...], "report_only": [...], "unresolved": [...], "warnings": [...] }` where each stale/report-only entry carries `store`, `reference`, and `location` fields.
 
 **Exit codes used:** 0 (clean or stale found), 1 (I/O error).
 
@@ -197,6 +199,55 @@ Copy transcripts and session artifacts to a durable folder before Claude's 30-da
 **Cloud-sync warning:** if `--archive-dir` resolves to a path under a known sync root (`OneDrive`, `Dropbox`), a warning is printed to stderr. The archive proceeds; the warning is advisory.
 
 **Exit codes used:** 0, 1, 2 (locked - missing required companion flag), 4 (hook stdin contained invalid JSON or missing `transcript_path`).
+
+---
+
+### `awt repair`
+
+Repair Claude state that is **damaged** rather than merely stale. Dry run by default.
+
+**Purpose:** a stale reference points at a folder that is gone, and the correct response is to
+leave it alone. A damaged reference is different: it is corrupted in a way that can be mechanically
+undone. `repair` handles the second case, and only where the answer is unambiguous.
+
+**Per-command flags:**
+
+| Flag | Required | Description |
+|---|---|---|
+| `--drive-letter` | yes (one repair must be selected) | Repair `history.jsonl` `project` values whose drive letter was replaced by a colon, e.g. `::\Projects\X` where `E:\Projects\X` belongs |
+| `--apply` | no | Perform the repair. Without it the command writes nothing |
+
+Passing no repair flag is an error (exit 2 - nothing to do). Each repair is a separately named and
+separately guarded transformation; there is deliberately no "repair everything you can find" mode,
+because that is unbounded inference rather than a bounded fix.
+
+**The guard.** A value is repaired **only** when exactly one existing drive makes the corrected
+path resolve on disk. Zero candidates is reported as unrepairable and left untouched. Two or more
+is refused as ambiguous and left untouched. The output names both declined sets with the reason,
+so what was skipped is as visible as what was done.
+
+**Output (text):**
+
+```
+Repairable: 34 value(s), 2303 history line(s)
+  ::\Projects\alpha -> E:\Projects\alpha  (15 line(s), drive E is the only match)
+  ...
+Not repairable (12): no existing drive makes these resolve, so there is nothing to repair to.
+Refused as ambiguous (0): more than one drive would resolve. Choosing would be guessing.
+
+Dry run: nothing was written. Re-run with --apply to repair.
+```
+
+**Output (`--json`):** `{ "path", "repairs": [...], "unrepairable": [...], "ambiguous": [...],
+"totals": { "repairable_values", "repairable_lines", "unrepairable_values", "ambiguous_values" } }`.
+Each declined entry carries a `reason`.
+
+**Safety:** `--apply` snapshots `history.jsonl` before the first write, count-checks every
+replacement, and is recoverable with `awt rollback --report <manifest>` like any other write. Only
+`history.jsonl` is written. Repair is idempotent: running it again finds nothing to do and exits 0.
+
+**Exit codes used:** 0 (including a dry run that found nothing), 1 (I/O), 2 (no repair selected),
+3 (verification failed after write).
 
 ---
 

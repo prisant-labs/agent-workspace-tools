@@ -354,7 +354,7 @@ coalesces to a single `expected: 2` change and that apply then rewrites both slu
 
 ## Observations (not defects)
 
-**Pre-existing corruption in the live `history.jsonl`.** 45 distinct `project` values have had
+**Pre-existing corruption in the live `history.jsonl`.** 46 distinct `project` values have had
 the drive letter replaced by a colon: `::\Projects\...` instead of `E:\Projects\...`, and
 `::\Backup - Data\:choesGPT\...` instead of `E:\Backup - Data\EchoesGPT\...`. Confirmed present in
 the live file (not introduced by the copy: SHA-256 matches). `awt doctor` correctly reports these

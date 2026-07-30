@@ -79,6 +79,20 @@ bytes to undo it" live in the same place.
   verifiable revert). If any file does not match, the rollback fails with exit 3. Pass
   `--json` to print it to stdout.
 
+## `awt repair` reports things it will not repair
+
+That is the command working correctly, not failing. `repair --drive-letter` fixes a damaged
+`history.jsonl` entry only when exactly one existing drive makes the corrected path resolve. Two
+other outcomes are reported rather than acted on:
+
+- **Not repairable** - no existing drive makes the path resolve, so there is nothing to repair
+  *to*. The folder is gone as well as the reference being damaged.
+- **Refused as ambiguous** - more than one drive would resolve, so choosing one would be guessing.
+  The competing candidates are named.
+
+Both are listed with their line counts so you can see exactly what was skipped and why. The exit
+code is still 0: declining to repair is a correct outcome, not an error.
+
 ## Where the backup lives
 
 `apply` takes a full sha256 snapshot of every file it will modify before the first write,

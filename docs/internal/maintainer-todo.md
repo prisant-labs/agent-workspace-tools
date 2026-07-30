@@ -88,12 +88,13 @@ This is deliberately the one gate an agent cannot clear. Do not let anyone flip 
 
 | ID | Question | Where |
 |---|---|---|
-| D6 (history drive-letter repair) | 45 `history.jsonl` entries in your live home have `::\Projects\...` where `E:\Projects\...` belongs. Leave them, build `awt repair --drive-letter` in v1.x, or fix by hand? Recommendation: leave for v1.0, consider for v1.x. | [plan_v1.0.0.md](release-plans/plan_v1.0.0/plan_v1.0.0.md) D6 |
-| githubRepoPaths type strictness | A `githubRepoPaths` value of the wrong JSON type is currently ignored silently rather than raising exit 4. Deliberate or accidental? | AR-01 report, Observations |
-| Dependabot | `.github/dependabot.yml` was **not** added, to avoid imposing PR noise on you. Want it? | n/a |
+| ~~D6 (history drive-letter repair)~~ | **RESOLVED 2026-07-30**: option B approved and shipped as `awt repair --drive-letter` in v1.1.0. Recovers 2,303 of 3,121 damaged lines. | [plan_v1.1.0.md](release-plans/plan_v1.1.0/plan_v1.1.0.md) |
+| ~~githubRepoPaths type strictness~~ | **RESOLVED 2026-07-30**: warn, do not fail. `doctor` and `plan` now name the malformed entry; it is still never rewritten. | `crates/awt-core/tests/claude_json_type_warnings.rs` |
+| ~~Dependabot~~ | **RESOLVED 2026-07-30**: added, monthly, cargo + github-actions, minor/patch grouped into one PR. Security updates still arrive individually. | `.github/dependabot.yml` |
 
-D1-D5 are resolved. D4 (retro-tag v0.1.0) and D5 (manual archive copy) were closed on 2026-07-28
-as superseded by events.
+All three decisions in this section are now resolved. D1-D6 in the v1.0.0 plan are closed; D7
+(what caused the corruption) is newly open in the v1.1.0 plan and is the only decision still
+waiting on you.
 
 ---
 

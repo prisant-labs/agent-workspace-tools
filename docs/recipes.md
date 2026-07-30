@@ -121,6 +121,38 @@ precisely so it cannot happen by accident.
 
 ---
 
+## Recover history entries with a corrupted drive letter
+
+If `awt doctor` reports stale `history.jsonl` values that look like `::\Projects\something` -
+a colon where the drive letter belongs - that history is not merely stale, it is **damaged**.
+Claude Code cannot match those lines to any project, so those prompts are unreachable.
+
+See what could be recovered. This writes nothing:
+
+```powershell
+awt repair --drive-letter
+```
+
+It proposes a repair only where exactly one existing drive makes the corrected path resolve.
+Anything that resolves nowhere, or on more than one drive, is listed as declined with the reason
+rather than guessed at. Read that list before proceeding.
+
+When it looks right:
+
+```powershell
+awt repair --drive-letter --apply --backup-root "E:\awt-backups"
+```
+
+Snapshots the file first, count-checks every replacement, and is undoable with
+`awt rollback --report <manifest>` like any other write. Only `history.jsonl` is touched, and
+running it again finds nothing to do.
+
+> **Stale is not damaged.** A stale reference points at a folder that is genuinely gone, and the
+> right response is to leave it alone - `repair` will not touch it. This command exists for the
+> narrower case where the reference itself is corrupted and the correction is unambiguous.
+
+---
+
 ## Audit your whole install
 
 ```powershell
