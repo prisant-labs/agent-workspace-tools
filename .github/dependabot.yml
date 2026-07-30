@@ -1,0 +1,28 @@
+version: 2
+
+# Monthly, deliberately. `cargo audit` already fails CI on a real RUSTSEC advisory, which is the
+# case that actually matters, so this exists for routine currency rather than as the security
+# tripwire. The dependency surface is small (serde_json, clap, sha2, walkdir, tempfile), so a
+# monthly cadence keeps the repo current without turning it into a PR queue.
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+    groups:
+      # One PR per month for routine bumps rather than one per crate. A security fix still
+      # arrives on its own, because grouped PRs exclude security updates.
+      cargo-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "ci"
