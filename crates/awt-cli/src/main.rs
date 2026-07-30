@@ -99,6 +99,15 @@ enum Cmd {
         #[arg(long)]
         report: PathBuf,
     },
+    /// Repair damaged Claude state. Dry run by default; pass --apply to write
+    Repair {
+        /// Repair history entries whose drive letter was corrupted (values starting with "::")
+        #[arg(long)]
+        drive_letter: bool,
+        /// Perform the repair. Without this the command writes nothing
+        #[arg(long)]
+        apply: bool,
+    },
     /// Re-associate session history from one project path to another, and/or export a portable copy
     Associate {
         /// Source project absolute path (may no longer exist on disk)
@@ -164,6 +173,7 @@ fn print_doctor(rep: &awt_core::doctor::DoctorReport, json: bool) {
                 "report_only": rep.report_only.iter().map(render).collect::<Vec<_>>(),
                 "unresolved": rep.unresolved.iter()
                     .map(|p| p.to_string_lossy()).collect::<Vec<_>>(),
+                "warnings": rep.warnings,
             })
         );
         return;
@@ -184,6 +194,16 @@ fn print_doctor(rep: &awt_core::doctor::DoctorReport, json: bool) {
     println!("Unresolvable project dirs: {}", rep.unresolved.len());
     for p in &rep.unresolved {
         println!("  {}", p.display());
+    }
+    // Shapes an adapter recognized and deliberately declined to act on. Distinct from stale
+    // (a reference that is dead) and from report-only (a region no adapter owns): these are
+    // inside an owned region and were skipped on purpose. Printed only when non-empty so the
+    // channel keeps its signal.
+    if !rep.warnings.is_empty() {
+        println!("Warnings: {}", rep.warnings.len());
+        for w in &rep.warnings {
+            println!("  {w}");
+        }
     }
 }
 
@@ -398,6 +418,66 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
             // verification is exit 3 whether it was reported as prose or as JSON.
             if failed > 0 {
                 return Err(AwtError::VerifyFailed(format!("{failed} failed")));
+            }
+            Ok(())
+        }
+        Cmd::Repair {
+            drive_letter,
+            apply,
+        } => {
+            // Each repair is a separately named and separately guarded transformation (D8), so
+            // one has to be selected. Defaulting to "repair everything you can find" is exactly
+            // the unbounded inference this tool exists not to do.
+            if !*drive_letter {
+                return Err(AwtError::Locked(
+                    "nothing to do: select a repair, e.g. --drive-letter".into(),
+                ));
+            }
+            let plan = awt_core::repair::build_repair_plan(fs, home)?;
+            if !*apply {
+                if cli.json {
+                    println!("{}", serde_json::to_string_pretty(&plan.to_json()).unwrap());
+                } else {
+                    print!("{}", awt_core::repair::render_repair(&plan));
+                    if !plan.repairs.is_empty() {
+                        println!("\nDry run: nothing was written. Re-run with --apply to repair.");
+                    }
+                }
+                return Ok(());
+            }
+            let backup_root = cli.backup_root.clone().unwrap_or_else(std::env::temp_dir);
+            let run_id = pick_run_id();
+            let r = awt_core::repair::apply_repair(&plan, fs, &backup_root, &run_id)?;
+            if r.backup_dir.is_empty() {
+                // Idempotent no-op: a repaired file has nothing left to repair.
+                if cli.json {
+                    println!("{}", serde_json::to_string_pretty(&plan.to_json()).unwrap());
+                } else {
+                    print!("{}", awt_core::repair::render_repair(&plan));
+                }
+                return Ok(());
+            }
+            let doc = r.to_json();
+            let doc_str = serde_json::to_string_pretty(&doc).unwrap();
+            let report_path = backup_root.join(&r.backup_dir).join("report.json");
+            fs.write(&report_path, doc_str.as_bytes())?;
+            if cli.json {
+                println!("{}", doc_str);
+            } else {
+                println!(
+                    "repaired {} history line(s) across {} value(s); backup {}",
+                    plan.total_lines(),
+                    plan.repairs.len(),
+                    r.backup_dir
+                );
+                println!("report: {}", report_path.display());
+                if !plan.unrepairable.is_empty() || !plan.ambiguous.is_empty() {
+                    println!(
+                        "declined: {} unrepairable, {} ambiguous (re-run without --apply for detail)",
+                        plan.unrepairable.len(),
+                        plan.ambiguous.len()
+                    );
+                }
             }
             Ok(())
         }
