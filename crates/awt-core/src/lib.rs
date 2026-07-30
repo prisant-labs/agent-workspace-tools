@@ -11,6 +11,7 @@ pub mod locks;
 pub mod model;
 pub mod paths;
 pub mod plan;
+pub mod repair;
 pub mod report;
 pub mod rewrite;
 pub mod rollback;

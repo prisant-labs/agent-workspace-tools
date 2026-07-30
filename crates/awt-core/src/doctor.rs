@@ -18,6 +18,10 @@ pub struct DoctorReport {
     /// `stale`) is structurally incapable of touching a region no adapter understands.
     pub report_only: Vec<Stale>,
     pub unresolved: Vec<PathBuf>,
+    /// Shapes an adapter recognized but declined to act on. Not errors, and not stale
+    /// references either: a third category for "I saw this and deliberately did nothing",
+    /// which would otherwise be indistinguishable from not having looked.
+    pub warnings: Vec<String>,
 }
 
 pub struct ScanReport {
@@ -39,11 +43,13 @@ pub fn doctor(fs: &dyn FileSystem, home: &Path) -> Result<DoctorReport> {
     let ctx = ctx_for(fs, home, &index);
 
     let mut stale = Vec::new();
+    let mut warnings = Vec::new();
     for store in registry() {
         // probe first: an unrecognized shape must abort the whole run rather than
         // produce a half-report that reads as authoritative.
         store.probe(&ctx)?;
         stale.extend(store.audit(&ctx)?);
+        warnings.extend(store.warn(&ctx)?);
     }
 
     // Every adapter has now named what it knows to be dead. Only now can the sweep run:
@@ -62,6 +68,7 @@ pub fn doctor(fs: &dyn FileSystem, home: &Path) -> Result<DoctorReport> {
         stale,
         report_only,
         unresolved: index.unresolved.clone(),
+        warnings,
     })
 }
 
