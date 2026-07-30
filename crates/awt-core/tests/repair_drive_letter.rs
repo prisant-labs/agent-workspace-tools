@@ -256,6 +256,39 @@ fn repair_leaves_other_stores_untouched() {
     );
 }
 
+/// AC-53a (C56-04): a history.jsonl that is not valid UTF-8 must be REFUSED, not lossily read.
+///
+/// The AGENTS.md hard invariant: store files must be valid UTF-8; hard-fail otherwise; never
+/// lossy-rewrite. The first shipped version of this module used from_utf8_lossy on the theory
+/// that "the file is damaged by premise". That reasoning conflated two different damage classes:
+/// the drive-letter corruption this module repairs is a character substitution WITHIN valid
+/// UTF-8, while invalid UTF-8 is an unknown corruption this module knows nothing about. Planning
+/// against lossily-decoded text means the expected counts describe a file that does not exist.
+#[test]
+fn invalid_utf8_is_refused_and_nothing_is_written() {
+    let fs = MemoryFileSystem::new();
+    let mut body: Vec<u8> =
+        br#"{"display":"a","project":"::\\Projects\\alpha","sessionId":"1"}"#.to_vec();
+    body.push(b'\n');
+    body.extend_from_slice(&[0xFF, 0xFE, 0x41]); // invalid UTF-8 tail
+    fs.write(Path::new("/h/.claude/history.jsonl"), &body)
+        .unwrap();
+    fs.write(Path::new("E:/Projects/alpha/.keep"), b"x")
+        .unwrap();
+
+    let err = build_repair_plan(&fs, Path::new(HOME))
+        .expect_err("invalid UTF-8 must refuse, not plan against lossily-decoded text");
+    assert!(
+        matches!(err, awt_core::error::AwtError::UnrecognizedFormat(_)),
+        "expected UnrecognizedFormat, got {err:?}"
+    );
+    assert_eq!(
+        fs.read(Path::new("/h/.claude/history.jsonl")).unwrap(),
+        body,
+        "the refused file must be byte-identical"
+    );
+}
+
 #[test]
 fn json_output_reports_declined_sets() {
     let fs = seed();
