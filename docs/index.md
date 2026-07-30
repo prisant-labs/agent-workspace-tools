@@ -22,7 +22,8 @@ This index lists every document in the repository, who it is for, and when to re
 | [docs/internal/maintainer-todo.md](internal/maintainer-todo.md) | Maintainer | **The single human to-do list.** What is left before the tag, and which items only a human can clear |
 | [docs/internal/release-plans/](internal/release-plans/) | Maintainers | Release scaffolding and acceptance criteria aggregation |
 | [docs/internal/release-plans/plan_v1.1.0/](internal/release-plans/plan_v1.1.0/) | Maintainers | v1.1.0 (repair): plan, the S-03 spec, and its implementation plan |
-| [docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-28.md](internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-28.md) | Maintainers | Result of the first manual acceptance run: FAIL, with the AR-01 blocker analysis |
+| [docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-30.md](internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-30.md) | Maintainers | **The passing acceptance run.** Clean end-to-end, satisfies gate (f) |
+| [docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-28.md](internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-28.md) | Maintainers | The first run: FAIL, with the AR-01..AR-04 analysis and their resolutions |
 | [scripts/README.md](../scripts/README.md) | Everyone | What each helper script does, its parameters, and why it exists |
 | [docs/decisions/](decisions/) | Maintainers, AI agents | Architecture and naming decision records (MADR v4) |
 | [docs/internal/v2-gui-design-brief.md](internal/v2-gui-design-brief.md) | Designers, design agents | Generating v2 GUI concepts - self-contained, no repo access needed |

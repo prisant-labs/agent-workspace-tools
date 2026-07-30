@@ -61,13 +61,18 @@ and saw two. Identical splices are now coalesced with the correct total.
 Worth knowing because it generalises: fixing AR-01 changed the error from `live 0` to `live 2`,
 which looked like progress and was in fact a second defect surfacing from underneath the first.
 
-### 1.5 Re-run the acceptance run **[DELEGABLE, but you own the verdict]**
+### 1.5 Re-run the acceptance run - **DONE 2026-07-30, PASS**
 
-All four findings are fixed, so this is now the last technical gate. Repeat
-[`docs/acceptance-run.md`](../acceptance-run.md) end to end - each fix was verified against the
-step that failed, but the full sequence has not been run since. The scratch home from the
-2026-07-28 run is retained at `E:\Projects\_temp\awt-acceptance-2026-07-28` so the same data
-can be reused.
+Full 15-step run against a **fresh** scratch copy at `e50eba2`. No new defects; every exit code
+matched the documented contract; all four earlier findings re-confirmed fixed on real data.
+Hygiene gate (f) now passes. Report:
+[`acceptance-run-2026-07-30.md`](release-plans/plan_v1.0.0/acceptance-run-2026-07-30.md).
+
+**No technical gate remains for the v1.0.0 tag.** The only thing between you and shipping is 1.6.
+
+The scratch home for this run is retained at `E:\Projects\_temp\awt-acceptance-2026-07-30` (plus
+`-backups` and `-archive`) in case you want to inspect it. Delete them at tag time; the cleanup
+command is in the report.
 
 ### 1.6 Sign off S-01 **[HUMAN - nobody else can do this]**
 
