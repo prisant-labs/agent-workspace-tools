@@ -196,6 +196,10 @@ pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) 
 
     for store in registry() {
         store.probe(&ctx)?;
+        // Surface declined shapes to the person about to WRITE, not just to whoever runs
+        // doctor. A silently skipped githubRepoPaths entry means a path that will still point
+        // at the old location after the move completes and verifies clean.
+        warnings.extend(store.warn(&ctx)?);
         for hit in store.detect(&ctx, mv)? {
             // Collision guard for claude.json destination key
             if store.id() == "claude.json" {

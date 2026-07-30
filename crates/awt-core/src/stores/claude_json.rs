@@ -150,6 +150,42 @@ impl Store for ClaudeJson {
         Ok(stale)
     }
 
+    /// `githubRepoPaths` values are expected to be arrays of path strings. Anything else is
+    /// skipped by `detect` and `audit`, which means a path recorded under a malformed entry is
+    /// never rewritten by a move. That is the safe behavior, but doing it without a word is not:
+    /// a silently skipped entry looks exactly like a tool that failed to notice.
+    fn warn(&self, ctx: &Ctx) -> Result<Vec<String>> {
+        let p = Self::path(ctx);
+        if !ctx.fs.exists(&p) {
+            return Ok(vec![]);
+        }
+        let bytes = ctx.fs.read(&p)?;
+        // A parse failure is probe's business (exit 4), not a warning. Stay quiet here.
+        let Ok(v) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+            return Ok(vec![]);
+        };
+        let mut out = Vec::new();
+        if let Some(grp) = v.get("githubRepoPaths").and_then(|x| x.as_object()) {
+            for (slug, val) in grp {
+                if val.as_array().is_none() {
+                    out.push(format!(
+                        "claude.json githubRepoPaths[{slug}] is {}, expected an array of paths; \
+                         it will not be examined or rewritten",
+                        match val {
+                            serde_json::Value::String(_) => "a string",
+                            serde_json::Value::Number(_) => "a number",
+                            serde_json::Value::Bool(_) => "a boolean",
+                            serde_json::Value::Null => "null",
+                            serde_json::Value::Object(_) => "an object",
+                            serde_json::Value::Array(_) => unreachable!(),
+                        }
+                    ));
+                }
+            }
+        }
+        Ok(out)
+    }
+
     fn plan(&self, _ctx: &Ctx, mv: &Move, hit: &Hit) -> Result<Vec<Change>> {
         let p = hit.target.clone();
         if let Some(rest) = hit.detail.strip_prefix("projects key ") {

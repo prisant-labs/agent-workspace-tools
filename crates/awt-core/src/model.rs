@@ -115,4 +115,17 @@ pub trait Store {
     fn audit(&self, ctx: &Ctx) -> Result<Vec<Stale>>;
     fn plan(&self, ctx: &Ctx, mv: &Move, hit: &Hit) -> Result<Vec<Change>>;
     fn verify(&self, ctx: &Ctx, mv: &Move) -> Result<Vec<VerifyResult>>;
+
+    /// Shapes this adapter recognizes but deliberately declines to act on, reported so the
+    /// decline is visible rather than silent.
+    ///
+    /// This is the middle ground between `probe` (an unrecognized shape aborts the run, exit 4)
+    /// and simply skipping a value. Aborting is right when continuing would risk a bad write;
+    /// it is too aggressive for a field whose worst case is a missed rewrite. Skipping silently
+    /// is what the code did by accident, and a silent skip is indistinguishable from a bug.
+    ///
+    /// Defaulted to empty: only adapters with a genuinely optional sub-shape need it.
+    fn warn(&self, _ctx: &Ctx) -> Result<Vec<String>> {
+        Ok(Vec::new())
+    }
 }
