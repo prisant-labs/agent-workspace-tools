@@ -7,6 +7,35 @@ All notable, user-facing changes to this project are documented here. The format
 This is the user-facing changelog. For how the planning and design documents changed over time,
 see `docs/CHANGELOG.md` (a doc-impact log, not a code changelog).
 
+## [1.1.0] - unreleased
+
+Repair: fixing state that is *damaged* rather than merely stale. Does not gate the v1.0.0 tag.
+
+### Added
+
+- **`awt repair --drive-letter`** recovers `history.jsonl` entries whose drive letter was replaced
+  by a colon (`::\Projects\X` where `E:\Projects\X` belongs). Dry run by default; `--apply` writes.
+
+  A value is repaired **only** when exactly one existing drive makes the corrected path resolve.
+  Zero candidates is reported as unrepairable; two or more is refused as ambiguous. Both declined
+  sets are printed with their reason, so what was skipped is as visible as what was done. On the
+  machine where this was found, that rule recovers 2,303 of 3,121 damaged lines and has no
+  ambiguous case at all.
+
+  Snapshots before writing, count-checks every replacement, undoable with `awt rollback`, writes
+  only `history.jsonl`, and is idempotent. There is deliberately no "repair everything" mode: each
+  transformation is separately named and separately guarded.
+
+- **`doctor` now reports warnings**: shapes an adapter recognized and deliberately declined to act
+  on. Distinct from stale references and from report-only findings. Included in `--json` output.
+
+### Changed
+
+- A `githubRepoPaths` value that is not an array is no longer skipped **silently**. `doctor` and
+  `plan` both name it and say it will not be examined or rewritten. Behavior is otherwise
+  unchanged: it is still never rewritten, and it still does not fail the run. Silence was the
+  previous behavior only by accident, and it is indistinguishable from a tool that failed to look.
+
 ## [1.0.0] - unreleased
 
 ### Changed

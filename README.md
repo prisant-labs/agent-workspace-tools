@@ -88,6 +88,7 @@ so use a throwaway folder while practicing.
 | `awt list` | Inventory every project Claude has state for - session counts, sizes, and transcript ages (so the 30-day cliff is visible) |
 | `awt archive` | Copy transcripts and session artifacts to a durable folder before auto-delete removes them; incremental, content-hash deduplicated |
 | `awt associate` | Re-link a deprecated project's history to a replacement path, even when the old folder is gone |
+| `awt repair` | Fix state that is damaged rather than stale - currently history entries with a corrupted drive letter. Dry run by default; repairs only where the answer is unambiguous |
 
 Every `apply` and `rollback` also writes an always-on machine-readable record (`report.json` /
 `rollback-report.json`) beside the backup. Add `--json` to any command for machine-readable output.

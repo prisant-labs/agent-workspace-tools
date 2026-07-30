@@ -12,6 +12,7 @@ lives in `docs/superpowers/plans/2026-07-10-claude-project-mover.md`.
 |---|---|---|
 | v0.1.0 (milestone tag) | Read-only CLI: `doctor` + `scan` (TDD plan phases 1-4) | The honesty checkpoint: `awt doctor` on the real machine reports exactly the residue verified by hand (6 stale githubRepoPaths, ~11 stale history values, the orphaned plugin dir). No write code ships before this passes. |
 | v1.0.0 | The complete Windows-native CLI: mover (`plan`/`apply`/`verify`/`rollback`, phases 5-9) plus F13 `awt list`, F14 `awt archive`, F15 `awt associate` (phases 13-15) | Release plan hygiene gates + doc checklist at `docs/internal/release-plans/plan_v1.0.0/` |
+| v1.1.0 | Repair: `awt repair --drive-letter` (S-03, AC-45..AC-53), plus the `doctor` warnings channel | Plan at `docs/internal/release-plans/plan_v1.1.0/`. Ships after v1.0.0; does not gate that tag |
 | v1.x (parked candidates) | P10 cross-volume move (AC-2); P11 Codex/Gemini adapters (AC-27) | Promotion into a release plan when scheduled; both sit behind the existing adapter boundary and copy primitives, no re-architecture needed |
 | v2.0.0 | Tauri 2 + React GUI over the identical `awt-core` for every v1 capability (old phase 12; AC-25 parity) | GUI security baseline and native-parity requirements written into DESIGN.md BEFORE build starts; parity test `GUI plan model == awt plan --json`; signing + updater pipeline |
 
@@ -186,7 +187,16 @@ edit counts across the whole file and saw two. The two were stacked in one expre
 why the acceptance run saw a single symptom. All four are now fixed and regression-tested.
 
 **Remaining before the v1.0 tag:** (1) re-run the acceptance run end to end and get a clean pass;
-(2) the maintainer S-01 spec sign-off, evidence-backed by the traceability doc. The `cpm` ->
+(2) the maintainer S-01 spec sign-off, evidence-backed by the traceability doc.
+
+**v1.1.0 is open and implemented (2026-07-30).** The three decisions left open after the
+acceptance run were all resolved as recommended. `awt repair --drive-letter` recovers history
+entries whose drive letter was corrupted, repairing only where exactly one drive resolves and
+naming everything it declines (2,303 of 3,121 damaged lines on the machine where this was found).
+`doctor` gained a warnings channel for shapes an adapter recognizes and deliberately skips, the
+first being a wrong-typed `githubRepoPaths` value, which was previously silent. Dependabot was
+added, monthly. Plan: `docs/internal/release-plans/plan_v1.1.0/`. None of this gates the v1.0.0
+tag. The `cpm` ->
 `awt` rename landed 2026-07-24 (ADR-0001). The signing / SmartScreen posture is CI-3 (the binary
 channel), not a tag blocker - v1.0 may ship source-first.
 

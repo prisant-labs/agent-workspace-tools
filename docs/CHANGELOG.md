@@ -3,6 +3,41 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-07-30 - v1.1.0 opened: repair, type warnings, dependabot
+
+The maintainer resolved the three decisions left open after the acceptance run. All three were
+approved as recommended and implemented in the same pass.
+
+### New documents
+
+- **`docs/internal/release-plans/plan_v1.1.0/`** - CREATED, with `plan_v1.1.0.md`, the S-03 spec
+  (`awt repair --drive-letter`, AC-45..AC-53), and its implementation plan. Theme: repair state
+  that is *damaged* rather than merely stale. Explicitly does not gate the v1.0.0 tag. Records
+  D7 (what caused the corruption - open) and D8 (repair stays narrow - resolved).
+
+### Impact on existing documents
+
+- **`docs/reference/commands.md`** - an `awt repair` section, and the `doctor` entry now documents
+  the warnings channel.
+- **`docs/recipes.md`** - a recipe for the damaged-history case, with the stale-versus-damaged
+  distinction called out.
+- **`docs/faq.md`** - two entries: stale versus damaged, and what the warnings section means.
+- **`docs/troubleshooting.md`** - why `repair` reporting things it will not repair is correct
+  behavior and still exit 0.
+- **`docs/internal/maintainer-todo.md`** - all three open decisions closed. D7 is now the only
+  decision waiting on the maintainer.
+- **Root `CHANGELOG.md`** - a `[1.1.0] - unreleased` section above the 1.0.0 one.
+
+### A correction worth recording
+
+The earlier figures for the corruption (45 distinct values, 33 repairable) were measured with a
+PowerShell `Sort-Object -Unique`, which is **case-insensitive** and collapsed
+`::\projects\...\pm-skills` and `::\Projects\...\pm-skills` into one entry. The tool counts 46 and
+34, which is correct: the rewrite is a case-sensitive byte splice, so each case variant is a
+distinct literal needing its own rule. The recoverable line count, 2,303, was unaffected. The
+figures are corrected in the spec, the v1.1.0 plan, the acceptance-run report, and the module and
+test documentation.
+
 ## 2026-07-28 (later) - AR-02, AR-03, and AR-04 fixed; all acceptance findings closed
 
 Follow-up to the acceptance run below. The maintainer's call on the two open findings was "fix
