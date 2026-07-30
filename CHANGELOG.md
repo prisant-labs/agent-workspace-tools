@@ -7,83 +7,22 @@ All notable, user-facing changes to this project are documented here. The format
 This is the user-facing changelog. For how the planning and design documents changed over time,
 see `docs/CHANGELOG.md` (a doc-impact log, not a code changelog).
 
-## [1.1.0] - unreleased
-
-Repair: fixing state that is *damaged* rather than merely stale. Does not gate the v1.0.0 tag.
-
-### Added
-
-- **`awt repair --drive-letter`** recovers `history.jsonl` entries whose drive letter was replaced
-  by a colon (`::\Projects\X` where `E:\Projects\X` belongs). Dry run by default; `--apply` writes.
-
-  A value is repaired **only** when exactly one existing drive makes the corrected path resolve.
-  Zero candidates is reported as unrepairable; two or more is refused as ambiguous. Both declined
-  sets are printed with their reason, so what was skipped is as visible as what was done. On the
-  machine where this was found, that rule recovers 2,303 of 3,121 damaged lines and has no
-  ambiguous case at all.
-
-  Snapshots before writing, count-checks every replacement, undoable with `awt rollback`, writes
-  only `history.jsonl`, and is idempotent. There is deliberately no "repair everything" mode: each
-  transformation is separately named and separately guarded.
-
-- **`doctor` now reports warnings**: shapes an adapter recognized and deliberately declined to act
-  on. Distinct from stale references and from report-only findings. Included in `--json` output.
-
-### Changed
-
-- A `githubRepoPaths` value that is not an array is no longer skipped **silently**. `doctor` and
-  `plan` both name it and say it will not be examined or rewritten. Behavior is otherwise
-  unchanged: it is still never rewritten, and it still does not fail the run. Silence was the
-  previous behavior only by accident, and it is indistinguishable from a tool that failed to look.
-
 ## [1.0.0] - unreleased
 
-### Changed
+The complete Claude-state-aware project mover plus retention and repair tooling. Deterministic
+and offline: zero LLM or network calls in the migration path, enforced by a dependency-guard
+test.
 
-- Renamed the binary and crates from `cpm` / `cpm-core` / `cpm-cli` to `awt` / `awt-core` / `awt-cli` (ADR-0001, branch `rename-cpm-to-awt`).
+The repair capability below was briefly drafted as a separate v1.1.0; the maintainer folded it
+into v1.0.0 on 2026-07-30 (decision D9 in the release plan) because v1 is defined as everything
+the CLI does and no v1.0.0 tag existed yet to freeze against.
 
-### Fixed
-
-- `awt list --html` help text said the HTML inventory was written *instead of* the table. It is
-  written *in addition to* the table; the help text was wrong, not the behavior.
-- `--src`, `--dst`, and `--report` had no help text in `--help` output. They are now described.
-- The documented `rollback` invocation was wrong in the quickstart and troubleshooting guides:
-  `rollback` takes `--report <manifest>`, not a positional path. Any command copied from those
-  docs would have failed.
-
-- **`apply` and `associate` could not complete for a project with a `githubRepoPaths` entry** in
-  `~/.claude.json`. The rewrite was planned against the parsed (unescaped) path while the file
-  stores it JSON-escaped, so the count check refused with `expected 1, live 0`. The failure was
-  always safe - nothing was written and auto-rollback restored byte-identical state - but the
-  operation could not succeed. Found by the first manual acceptance run (AR-01).
-
-- **`apply` and `associate` could not complete when two `githubRepoPaths` slugs held the same
-  path value.** Each occurrence planned its own edit expecting one match, while each edit counts
-  across the whole file and saw two, so the count check refused with `expected 1, live 2`.
-  Duplicate edits are now coalesced into one with the correct total (AR-04).
-- **`associate` refused a project whose transcripts had expired**, even when `history.jsonl` and
-  `claude.json` state remained, reporting "no Claude state found". Since transcripts expire after
-  30 days and history never does, this refused exactly the long-dead projects the command exists
-  to rescue. It now resolves the target across every store (AR-02).
-- **`--json` was silently ignored by `plan` and `verify`.** Both accepted the flag, exited 0, and
-  printed human text anyway. Both now emit JSON; exit codes are unchanged by the format, so a
-  failed `verify --json` still exits 3 (AR-03).
+The dating of this section is deferred to the tag. The tag is gated on the v1 safety closeout
+(S-04), the maintainer spec sign-off (S-01), and a clean adversarial acceptance run - see
+`docs/release-runbook.md` and the release plan.
 
 ### Added
 
-- **`awt plan --json`** emits the full plan model: every change carries a `kind` discriminant,
-  `rewrite_file` exposes its literal find/replace rules, and a `totals` object gives both
-  `changes` (plan entries) and `edits` (byte replacements). This is the object the v2 GUI is
-  required to render under the AC-25 parity rule.
-- **`awt verify --json`** emits the check list as data, plus `failed` and `ok`.
-
-The dating of this section is deferred to the tag; the v1.0.0 tag is gated on a maintainer
-acceptance run and spec sign-off (see `docs/release-runbook.md`).
-
-The full Claude-state-aware project mover plus retention tooling. Deterministic and offline:
-zero LLM or network calls in the migration path, enforced by a dependency-guard test.
-
-### Added
 - **Mover CLI** - `plan`, `apply`, `verify`, `rollback`: relocate a project folder and migrate
   all Claude Code state keyed to its old absolute path (transcripts, `~/.claude.json`,
   `history.jsonl`, plugin state). Every run takes a sha256 backup snapshot before writing,
@@ -95,16 +34,83 @@ zero LLM or network calls in the migration path, enforced by a dependency-guard 
   `archive` (content-hash incremental copy of transcripts before the auto-delete removes them),
   and `associate` (re-link a deprecated project's history to a replacement path, reversibly,
   even when the old folder is gone).
+- **Repair tooling** - `repair --drive-letter` recovers `history.jsonl` entries whose drive
+  letter was replaced by a colon (`::\Projects\X` where `E:\Projects\X` belongs). Dry run by
+  default; `--apply` writes. A value is repaired **only** when exactly one existing drive makes
+  the corrected path resolve; zero candidates is reported as unrepairable, two or more is
+  refused as ambiguous, and both declined sets are printed with their reason. Snapshots before
+  writing, count-checks every replacement, undoable with `awt rollback`, writes only
+  `history.jsonl`, idempotent. A `history.jsonl` that is not valid UTF-8 is refused outright
+  (exit 4): that is a different corruption class than a drive-letter substitution, and repairing
+  through a lossy decode would violate the never-lossy-rewrite invariant. There is deliberately
+  no "repair everything" mode: each transformation is separately named and separately guarded.
+- **`doctor` warnings channel** - shapes an adapter recognized and deliberately declined to act
+  on. Distinct from stale references and from report-only findings. Included in `--json` output.
 - **Fail-closed safety guards**, each with a plain-language situation/why/next-step message:
   destination-exists, git-worktree source, cross-volume move, live-lock, and ambiguous-history
   detection.
-- **Machine-readable records** - `apply` writes a `report.json` on every run (and to stdout with
-  `--json`); `rollback` performs a verifiable revert, re-hashing every restored file against the
-  pre-migration snapshot and writing a `rollback-report.json`.
+- **Machine-readable output everywhere** - `apply` writes a `report.json` on every run;
+  `rollback` performs a verifiable revert, re-hashing every restored file against the
+  pre-migration snapshot and writing a `rollback-report.json`; `plan --json` emits the full plan
+  model (every change carries a `kind` discriminant, `rewrite_file` exposes its literal
+  find/replace rules, and `totals` gives both plan entries and byte edits - the object the v2
+  GUI is required to render under the AC-25 parity rule); `verify --json` emits the check list
+  as data plus `failed` and `ok`.
 - **Script-friendly exit codes** - 0 success, 1 io, 2 guard refusal (nothing written), 3
-  verification failed, 4 unrecognized store format.
+  verification failed, 4 unrecognized store format. Exit codes are unaffected by `--json`.
+
+### Changed
+
+- Renamed the binary and crates from `cpm` / `cpm-core` / `cpm-cli` to `awt` / `awt-core` /
+  `awt-cli` (ADR-0001, branch `rename-cpm-to-awt`).
+- A `githubRepoPaths` value that is not an array is no longer skipped **silently**. `doctor` and
+  `plan` both name it and say it will not be examined or rewritten. Behavior is otherwise
+  unchanged: it is still never rewritten, and it still does not fail the run. Silence was the
+  previous behavior only by accident, and it is indistinguishable from a tool that failed to
+  look.
+
+### Fixed
+
+- `awt list --html` help text said the HTML inventory was written *instead of* the table. It is
+  written *in addition to* the table; the help text was wrong, not the behavior.
+- `--src`, `--dst`, and `--report` had no help text in `--help` output. They are now described.
+- The documented `rollback` invocation was wrong in the quickstart and troubleshooting guides:
+  `rollback` takes `--report <manifest>`, not a positional path. Any command copied from those
+  docs would have failed.
+- **`apply` and `associate` could not complete for a project with a `githubRepoPaths` entry** in
+  `~/.claude.json`. The rewrite was planned against the parsed (unescaped) path while the file
+  stores it JSON-escaped, so the count check refused with `expected 1, live 0`. The failure was
+  always safe - nothing was written and auto-rollback restored byte-identical state - but the
+  operation could not succeed. Found by the first manual acceptance run (AR-01).
+- **`apply` and `associate` could not complete when two `githubRepoPaths` slugs held the same
+  path value.** Each occurrence planned its own edit expecting one match, while each edit counts
+  across the whole file and saw two, so the count check refused with `expected 1, live 2`.
+  Duplicate edits are now coalesced into one with the correct total (AR-04).
+- **`associate` refused a project whose transcripts had expired**, even when `history.jsonl` and
+  `claude.json` state remained, reporting "no Claude state found". Since transcripts expire after
+  30 days and history never does, this refused exactly the long-dead projects the command exists
+  to rescue. It now resolves the target across every store (AR-02).
+- **`--json` was silently ignored by `plan` and `verify`.** Both accepted the flag, exited 0, and
+  printed human text anyway. Both now emit JSON; exit codes are unchanged by the format, so a
+  failed `verify --json` still exits 3 (AR-03).
+- **`repair` read a damaged `history.jsonl` with a lossy UTF-8 decode**, violating the
+  never-lossy-rewrite invariant; planning against lossily-decoded text computes counts for a
+  file that does not exist on disk. It now refuses invalid UTF-8 with exit 4 (AC-53a).
+
+### Known issues
+
+- **A v1 safety closeout (S-04) is in progress and blocks the tag.** An external adversarial
+  code audit (2026-07-30) found data-loss and false-success paths that the happy-path acceptance
+  run did not exercise, the most serious being: rollback of a directory rename backs up only
+  top-level transcripts and can delete unbacked sidecar files; `apply` silently skips a missing
+  source folder and reports the move as applied; and a malformed settings file is replaced with
+  a nearly-empty one on the next settings write. The closeout effort tracks each finding as an
+  acceptance criterion with a raw-byte or tree-level regression test. Until it completes, treat
+  `apply` as safe only under the conditions the acceptance run exercised, and prefer running
+  against a copy of `~/.claude`.
 
 ### Notes
+
 - Windows-first. Same-volume moves only in 1.0; cross-volume copy-verify-delete is a v1.x item.
 - Re-running `apply` on an already-migrated project is idempotent by refusal (exit 2); see
   `docs/troubleshooting.md`.
@@ -112,5 +118,6 @@ zero LLM or network calls in the migration path, enforced by a dependency-guard 
 ## [0.1.0] - internal milestone (not tagged)
 
 ### Added
+
 - Read-only `doctor` and `scan` (the Phase 4 read-only milestone). Kept available as a
   pre-release marker; never cut as a public tag.

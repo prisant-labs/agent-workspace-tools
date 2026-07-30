@@ -99,17 +99,21 @@ cannot fix, which is exactly the boundary D8 draws.
 
 ## Verdict
 
-Hygiene gate (f) **PASSES**. No technical gate remains for the v1.0.0 tag.
+Hygiene gate (f) **PASSES**: the documented acceptance sequence completes cleanly on real data.
 
-The only outstanding item is the S-01 spec sign-off (gate (a)), which is a human review that no
-agent can perform.
+**Update, later on 2026-07-30 - partial retraction.** This report originally concluded that no
+technical gate remained for the v1.0.0 tag. That conclusion was wrong, and it is retracted here
+rather than silently rewritten. An adversarial code audit the same day found data-loss and
+false-success paths that this sequence never exercises: rollback of unbacked sidecar files, a
+missing source folder reported as a successful move, settings fail-open overwrite, and more.
+Those findings were independently verified against source and are now the S-04 safety closeout
+([S-04_safety-closeout/spec.md](S-04_safety-closeout/spec.md)), hygiene gate (g), blocking the
+tag alongside the S-01 sign-off. The lesson, recorded so it is not relearned: a passing run
+proves the exercised path, and this sequence exercises the happy path. The next acceptance
+revision adds an adversarial matrix (S-04 phase 17.11).
 
 ## Cleanup
 
-The scratch home, backups, and archive were retained so this run can be re-inspected. Delete with:
-
-```
-Remove-Item -Recurse -Force "E:\Projects\_temp\awt-acceptance-2026-07-30",
-  "E:\Projects\_temp\awt-acceptance-2026-07-30-backups",
-  "E:\Projects\_temp\awt-acceptance-2026-07-30-archive"
-```
+The scratch home, backups, and archive were deleted on 2026-07-30 after this report merged.
+The S-04 adversarial run (phase 17.11) will create a fresh copy with
+`scripts/new-scratch-home.ps1`.
