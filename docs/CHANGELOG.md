@@ -3,6 +3,28 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-07-30 (later) - acceptance run PASSED; no technical gate remains for v1.0.0
+
+- **`docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-30.md`** - CREATED. The clean
+  end-to-end run at `e50eba2`: 15 of 15 steps passed, no new defects, every exit code matched the
+  contract, and all four findings from the 2026-07-28 run re-confirmed fixed on real data.
+  Deliberately run against a **fresh** scratch copy rather than the previous one, which had been
+  mutated by the fix-verification work and so could no longer answer "does this work on untouched
+  real data".
+- **`plan_v1.0.0.md`** - hygiene gate (f) flips to PASS. The tag row now reads blocked *only* by
+  gate (a), the S-01 sign-off.
+- **`docs/ROADMAP.md`**, **`docs/internal/maintainer-todo.md`** - updated to say the same thing in
+  one sentence: the only thing left is a human reading a spec.
+- **`docs/index.md`** - a row for the passing run, and the earlier one relabelled so the pair reads
+  as a sequence rather than two competing reports.
+
+Two observations recorded in the report rather than fixed: warm `doctor` measured 14.1s against
+5.9s on 2026-07-28 on a slightly larger tree, which is more than the file-count delta explains and
+is probably OS cache state after a 3.4 GB copy - worth re-measuring on a quiet machine before
+treating the ~8s figure in ROADMAP as authoritative. And the declined-shape warning channel
+reported zero on real data, which is the correct outcome and the reason that behavior rests on
+unit tests rather than on this run.
+
 ## 2026-07-30 - v1.1.0 opened: repair, type warnings, dependabot
 
 The maintainer resolved the three decisions left open after the acceptance run. All three were

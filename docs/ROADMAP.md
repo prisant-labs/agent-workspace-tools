@@ -186,8 +186,14 @@ hold the same path value, and each occurrence planned its own edit expecting one
 edit counts across the whole file and saw two. The two were stacked in one expression, which is
 why the acceptance run saw a single symptom. All four are now fixed and regression-tested.
 
-**Remaining before the v1.0 tag:** (1) re-run the acceptance run end to end and get a clean pass;
-(2) the maintainer S-01 spec sign-off, evidence-backed by the traceability doc.
+**The acceptance run passed clean on 2026-07-30** at `e50eba2`, against a fresh scratch copy
+(56,761 files, 3.39 GB). All 15 steps passed, no new defects, every exit code matched the
+documented contract, and all four earlier findings were re-confirmed fixed on real data. Hygiene
+gate (f) passes. Report:
+`docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-30.md`.
+
+**Remaining before the v1.0 tag:** the maintainer S-01 spec sign-off, evidence-backed by the
+traceability doc. That is the only gate left, and it is deliberately one no agent can clear.
 
 **v1.1.0 is open and implemented (2026-07-30).** The three decisions left open after the
 acceptance run were all resolved as recommended. `awt repair --drive-letter` recovers history
