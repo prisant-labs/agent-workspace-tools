@@ -19,10 +19,11 @@ No LLM, no network, backup-before-write, verify-after, single-command rollback.
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
 > ⚠️ **Pre-release, in active development.** v1.0 is feature-complete but **not yet tagged**, and
-> commands may still change. The first manual acceptance run against real data (2026-07-28) found
-> four defects, two of them release-blocking. All four are now fixed and covered by regression
-> tests; the tag awaits a clean end-to-end re-run and the maintainer spec sign-off. See the
-> [acceptance run report](docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-28.md).
+> commands may still change. A real-data acceptance run passed on 2026-07-30, but an adversarial
+> code audit the same day found data-loss paths the happy-path run does not exercise - most
+> seriously, rollback can delete files it never backed up. A
+> [safety closeout](docs/internal/release-plans/plan_v1.0.0/S-04_safety-closeout/spec.md) tracks
+> every finding as a tested acceptance criterion and blocks the tag until done.
 >
 > Because `awt` edits Claude Code state under `~/.claude`, read the
 > [quickstart](docs/quickstart.md) and the [FAQ](docs/faq.md), and **always run it against a copy
@@ -121,7 +122,7 @@ Every `apply` and `rollback` also writes an always-on machine-readable record (`
 | Release | Contents | Status |
 |---|---|---|
 | v0.1.0 | `awt doctor` and `awt scan` - read-only | Internal milestone (not tagged) |
-| **v1.0.0** | Full CLI: mover (`plan`/`apply`/`verify`/`rollback`) plus `list`, `archive`, `associate` | **Feature-complete, tag pending.** Acceptance run 2026-07-28 found four defects (two blocking); all fixed and regression-tested. Awaiting a clean end-to-end re-run plus maintainer spec sign-off. |
+| **v1.0.0** | Full CLI: mover (`plan`/`apply`/`verify`/`rollback`) plus `list`, `archive`, `associate`, `repair` | **Feature-complete; safety closeout in progress.** Happy-path acceptance passed 2026-07-30; an adversarial audit then found data-loss paths it never exercised. Tag blocked on the closeout, an adversarial re-run, and the spec sign-off. |
 | v1.x (parked) | Cross-volume move; Codex and Gemini adapters | Behind the existing adapter boundary; promotable when scheduled |
 | v2.0.0 | Tauri 2 + React GUI over the identical core | Deferred; security and native-parity baselines first |
 

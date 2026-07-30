@@ -3,6 +3,55 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-07-30 (evening) - adversarial audit, S-04 safety closeout, v1.1.0 folded into v1.0.0, retractions
+
+An external adversarial code audit (read-only, report kept local per repo convention) found
+data-loss and false-success paths that the passing acceptance run never exercises. Every
+blocking finding was independently verified against source before being accepted. The verdict
+below this entry - "no technical gate remains" - is **retracted**, visibly rather than by
+rewriting history.
+
+### New documents
+
+- **`plan_v1.0.0/S-04_safety-closeout/`** - CREATED: spec (AC-54..AC-65) and implementation
+  plan. The Criticals: rollback of a directory rename backs up only top-level `*.jsonl` then
+  recursively deletes the renamed directory, destroying unbacked sidecars (AC-54); a missing
+  source folder is silently skipped and reported as a successful move (AC-55); a malformed
+  `settings.json` is replaced with a nearly-empty object on the next settings write (AC-56).
+  Highs include plan-derived verification, inert advertised flags, I/O-failure-as-absence,
+  plugin hash from caller spelling, lexical path confinement, and the real-transcript fixtures.
+  New hygiene gate (g) blocks the tag until closed.
+- **`plan_v1.0.0/S-01_mover-cli/review-guide.md`** - CREATED: the sign-off reading aid. Each AC
+  in plain language with its evidence and standing (Proven / Test-thin / Contested), what the
+  criteria deliberately do not cover, and the mechanics of signing. Takes no position on the
+  verdict.
+
+### Fold: v1.1.0 into v1.0.0 (D9, maintainer decision)
+
+- `S-03_history-drive-letter-repair/` moved under `plan_v1.0.0/`; `plan_v1.1.0/` retired. Its
+  D7 (corruption cause - now with a precise tripwire: more distinct `::` values than the 12
+  known leftovers means the cause is live) and D8 (repair stays narrow) moved into the v1.0.0
+  plan; D9 records the fold itself; D10 (fixture publication response) opened as a maintainer
+  decision. Root `CHANGELOG.md` sections merged under `[1.0.0]`; ROADMAP version map, index,
+  and governance updated.
+
+### Code landed with this entry
+
+- **AC-53a**: `repair` refuses a `history.jsonl` that is not valid UTF-8 (exit 4) instead of
+  planning against a lossy decode - my own module from a day earlier violating the AGENTS.md
+  never-lossy-rewrite invariant. Red-first test; S-03 spec amended; commands.md updated.
+
+### Impact on existing documents
+
+- **`acceptance-run-2026-07-30.md`** - verdict carries a dated partial retraction: gate (f)
+  stands as happy-path evidence; the no-gate-remains conclusion does not.
+- **`docs/internal/maintainer-todo.md`** - rewritten around the closeout, with the state
+  correction pinned at the top. v2 sequencing recorded as closeout -> frozen core contract ->
+  shell.
+- **`docs/ROADMAP.md`** - section 7 rewritten; the doctor timing claim replaced with measured
+  ranges (warm 5.9-14.1s, cold 98-135s, cache-dominated) instead of a single quotable number.
+- **`README.md`** - pre-release callout now names the closeout and the rollback risk.
+
 ## 2026-07-30 (later) - acceptance run PASSED; no technical gate remains for v1.0.0
 
 - **`docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-30.md`** - CREATED. The clean
