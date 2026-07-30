@@ -74,6 +74,30 @@ Those are the "report only" findings. They live in vendored and archival regions
 records of a past state. Rewriting them would corrupt history rather than repair it. They are
 surfaced so you can see them, and structurally excluded from the rewrite path.
 
+### What is the difference between "stale" and "damaged"?
+
+**Stale** means the reference is correct but its target is gone: the path is well-formed, the
+folder simply no longer exists. That is usually not a problem to fix, and the tool leaves it alone.
+
+**Damaged** means the reference itself is corrupted - it does not name any path that could ever
+have existed. The case found in the wild: `history.jsonl` entries reading `::\Projects\X` where
+`E:\Projects\X` belongs, because every capital `E` had been replaced by a colon.
+
+`awt doctor` reports both as stale, because from its point of view both fail to resolve.
+`awt repair --drive-letter` handles the damaged subset, and only where exactly one existing drive
+makes the corrected path resolve. Anything ambiguous is declined and named, never guessed.
+
+### Why does `doctor` show a "Warnings" section?
+
+Warnings are shapes an adapter recognized and deliberately declined to act on. They are a third
+category, separate from stale references and from report-only findings: a warned item sits inside
+a region the tool owns, and it was skipped on purpose.
+
+Today there is one: a `githubRepoPaths` value in `~/.claude.json` that is not an array of paths.
+The tool will not examine or rewrite it, so a move will leave that entry pointing at the old
+location. That was previously silent, which made it indistinguishable from the tool failing to
+notice. Warning does not mean the run failed; the exit code is unaffected.
+
 ### What is an "unresolvable project dir"?
 
 A transcript directory whose sessions never recorded a `cwd`. Because the path encoding is lossy
