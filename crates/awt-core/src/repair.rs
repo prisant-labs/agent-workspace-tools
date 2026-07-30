@@ -178,9 +178,22 @@ pub fn build_repair_plan(fs: &dyn FileSystem, home: &Path) -> Result<RepairPlan>
         return Ok(plan);
     }
     let bytes = fs.read(&path)?;
-    // Lossy is right here: the file is damaged by premise, and refusing to read it because of a
-    // stray byte would block the very repair that is being asked for. Nothing is re-serialized.
-    let text = String::from_utf8_lossy(&bytes).into_owned();
+    // Strict UTF-8, per the hard invariant: store files must be valid UTF-8, hard-fail
+    // otherwise, never lossy-rewrite. The first version of this module used from_utf8_lossy on
+    // the theory that "the file is damaged by premise" - which conflated two damage classes.
+    // The corruption this module repairs is a character substitution WITHIN valid UTF-8;
+    // invalid UTF-8 is a different, unknown corruption this module has no theory for. Planning
+    // against lossily-decoded text would compute expected counts for a file that does not
+    // exist on disk, and could smuggle U+FFFD replacement characters into the rewrite.
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|e| {
+            crate::error::AwtError::UnrecognizedFormat(format!(
+                "{}: {e}. history.jsonl is not valid UTF-8, which is a different corruption \
+                 than a drive-letter substitution; repair refuses rather than guessing",
+                path.display()
+            ))
+        })?
+        .to_owned();
     let drives = present_drives(fs);
 
     for m in scan_malformed(&text) {
