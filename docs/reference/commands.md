@@ -247,7 +247,8 @@ replacement, and is recoverable with `awt rollback --report <manifest>` like any
 `history.jsonl` is written. Repair is idempotent: running it again finds nothing to do and exits 0.
 
 **Exit codes used:** 0 (including a dry run that found nothing), 1 (I/O), 2 (no repair selected),
-3 (verification failed after write).
+3 (verification failed after write), 4 (`history.jsonl` is not valid UTF-8 - a different
+corruption class than the drive-letter substitution, refused rather than lossily decoded).
 
 ---
 

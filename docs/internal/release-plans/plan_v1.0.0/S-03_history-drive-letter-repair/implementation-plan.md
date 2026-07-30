@@ -6,7 +6,7 @@ status: complete
 created: 2026-07-30
 updated: 2026-07-30
 linked-spec: ./spec.md
-target-release: v1.1.0
+target-release: v1.0.0
 ac-coverage: complete
 ---
 
@@ -72,6 +72,7 @@ Last updated 2026-07-30. All phases complete; 14 new tests, workspace suite gree
 | `repair_leaves_other_stores_untouched` | AC-52 |
 | `json_output_reports_declined_sets` | AC-53 |
 | `cli_repair_dry_run_then_apply` (integration) | AC-47, AC-48 |
+| `invalid_utf8_is_refused_and_nothing_is_written` | AC-53a |
 
 ## Notes
 

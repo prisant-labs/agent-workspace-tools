@@ -5,11 +5,11 @@ type: spec
 status: committed
 created: 2026-07-30
 updated: 2026-07-30
-target-release: v1.1.0
-linked-release: ../plan_v1.1.0.md
+target-release: v1.0.0
+linked-release: ../plan_v1.0.0.md
 linked-plan: ./implementation-plan.md
-ac-count: 9
-ac-range: AC-45..AC-53
+ac-count: 10
+ac-range: AC-45..AC-53a
 requires-human-review: false
 origin: "Acceptance run 2026-07-28 (observation: history.jsonl drive-letter corruption); decision D6, maintainer-approved 2026-07-30"
 ---
@@ -89,13 +89,14 @@ that exists as a directory on disk.
 | AC-51 | Repair is idempotent: re-running `--apply` on a repaired file proposes no changes and exits 0 |
 | AC-52 | Only `history.jsonl` is written. `claude.json`, transcripts, and plugin state are untouched, and unrelated lines in `history.jsonl` are byte-identical |
 | AC-53 | `--json` emits the proposed and applied repairs as machine-readable data, including the unrepairable and ambiguous sets, so a caller can see what was declined and why |
+| AC-53a | A `history.jsonl` that is not valid UTF-8 is refused (exit 4) before any plan is produced, and the file is untouched. Invalid UTF-8 is a different corruption class than a drive-letter substitution; planning against a lossy decode would compute counts for a file that does not exist and violate the never-lossy-rewrite invariant. Added 2026-07-30 with the safety closeout |
 
 ## Exit codes
 
 Consistent with the existing contract: `0` success (including a dry run that found nothing),
-`1` I/O error, `3` verification failed after write. There is no new exit code; a value that cannot
-be repaired is reported, not an error, because declining to repair is correct behavior rather than
-a failure.
+`1` I/O error, `3` verification failed after write, and `4` unrecognized format - specifically a
+`history.jsonl` that is not valid UTF-8 (AC-53a). A value that cannot be repaired is reported,
+not an error, because declining to repair is correct behavior rather than a failure.
 
 ## Non-goals
 

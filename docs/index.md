@@ -21,8 +21,9 @@ This index lists every document in the repository, who it is for, and when to re
 | [docs/reference/existing-solutions.md](reference/existing-solutions.md) | Evaluators, engineers | Prior art survey |
 | [docs/internal/maintainer-todo.md](internal/maintainer-todo.md) | Maintainer | **The single human to-do list.** What is left before the tag, and which items only a human can clear |
 | [docs/internal/release-plans/](internal/release-plans/) | Maintainers | Release scaffolding and acceptance criteria aggregation |
-| [docs/internal/release-plans/plan_v1.1.0/](internal/release-plans/plan_v1.1.0/) | Maintainers | v1.1.0 (repair): plan, the S-03 spec, and its implementation plan |
-| [docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-30.md](internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-30.md) | Maintainers | **The passing acceptance run.** Clean end-to-end, satisfies gate (f) |
+| [docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-30.md](internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-30.md) | Maintainers | The passing happy-path acceptance run (gate f); its no-gate-remains verdict was later retracted, see the update note inside |
+| [docs/internal/release-plans/plan_v1.0.0/S-04_safety-closeout/spec.md](internal/release-plans/plan_v1.0.0/S-04_safety-closeout/spec.md) | Maintainers | **The v1 safety closeout (gate g)**: verified data-loss and false-success findings as acceptance criteria, each blocking the tag |
+| [docs/internal/release-plans/plan_v1.0.0/S-01_mover-cli/review-guide.md](internal/release-plans/plan_v1.0.0/S-01_mover-cli/review-guide.md) | Maintainer | The S-01 sign-off reading aid: every acceptance criterion in plain language, its evidence, and what currently contests it |
 | [docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-28.md](internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-28.md) | Maintainers | The first run: FAIL, with the AR-01..AR-04 analysis and their resolutions |
 | [scripts/README.md](../scripts/README.md) | Everyone | What each helper script does, its parameters, and why it exists |
 | [docs/decisions/](decisions/) | Maintainers, AI agents | Architecture and naming decision records (MADR v4) |

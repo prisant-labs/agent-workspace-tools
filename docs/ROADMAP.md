@@ -11,8 +11,7 @@ lives in `docs/superpowers/plans/2026-07-10-claude-project-mover.md`.
 | Version | Contents | Gate to ship |
 |---|---|---|
 | v0.1.0 (milestone tag) | Read-only CLI: `doctor` + `scan` (TDD plan phases 1-4) | The honesty checkpoint: `awt doctor` on the real machine reports exactly the residue verified by hand (6 stale githubRepoPaths, ~11 stale history values, the orphaned plugin dir). No write code ships before this passes. |
-| v1.0.0 | The complete Windows-native CLI: mover (`plan`/`apply`/`verify`/`rollback`, phases 5-9) plus F13 `awt list`, F14 `awt archive`, F15 `awt associate` (phases 13-15) | Release plan hygiene gates + doc checklist at `docs/internal/release-plans/plan_v1.0.0/` |
-| v1.1.0 | Repair: `awt repair --drive-letter` (S-03, AC-45..AC-53), plus the `doctor` warnings channel | Plan at `docs/internal/release-plans/plan_v1.1.0/`. Ships after v1.0.0; does not gate that tag |
+| v1.0.0 | The complete Windows-native CLI: mover (`plan`/`apply`/`verify`/`rollback`, phases 5-9), F13 `awt list`, F14 `awt archive`, F15 `awt associate` (phases 13-15), and `awt repair --drive-letter` (S-03, folded in per D9) | Release plan hygiene gates + doc checklist at `docs/internal/release-plans/plan_v1.0.0/`, including the S-04 safety closeout (gate g) |
 | v1.x (parked candidates) | P10 cross-volume move (AC-2); P11 Codex/Gemini adapters (AC-27) | Promotion into a release plan when scheduled; both sit behind the existing adapter boundary and copy primitives, no re-architecture needed |
 | v2.0.0 | Tauri 2 + React GUI over the identical `awt-core` for every v1 capability (old phase 12; AC-25 parity) | GUI security baseline and native-parity requirements written into DESIGN.md BEFORE build starts; parity test `GUI plan model == awt plan --json`; signing + updater pipeline |
 
@@ -104,8 +103,9 @@ as its first effort.
 ## 6. Governance
 
 - Specs own acceptance criteria; release plans only aggregate (jp-release-plan
-  convention). The v1 spec set: S-01 (mover, AC-1, AC-3..24, AC-26) and S-02
-  (pointer to the committed F13-F15 spec, AC-28..44). Deferred AC: AC-2 (P10),
+  convention). The v1 spec set: S-01 (mover, AC-1, AC-3..24, AC-26), S-02
+  (pointer to the committed F13-F15 spec, AC-28..44), S-03 (repair, AC-45..AC-53a),
+  and S-04 (safety closeout, AC-54..AC-65). Deferred AC: AC-2 (P10),
   AC-25 (v2), AC-27 (P11).
 - The doctor honesty checkpoint is a hard gate: no phase-5+ write code merges
   before it passes on the real machine.
@@ -114,7 +114,7 @@ as its first effort.
 - Every doc change lands with a `docs/CHANGELOG.md` entry; session logs go to
   `_local/_session-logs/` (gitignored, local-only - not part of the repo).
 
-## 7. Current status (2026-07-28)
+## 7. Current status (2026-07-30)
 
 **v1.0 is feature-complete but NOT releasable:** the first manual acceptance run found a
 release-blocking defect (AR-01, below). All engine phases (1-9) plus the retention
@@ -136,9 +136,10 @@ tests pass, clippy and fmt clean.
 
 **Sweep scope resolved.** The sweep skips vendored and archival regions (`plugins/`,
 `file-history/`, `backups/`) where an old path is correct by design, cutting `doctor` from
-~345s to ~8s warm; sweep results live in `DoctorReport.report_only`, structurally out of the
-rewrite path. Re-measured 2026-07-28 on a 3.30 GB / 55,413-file home: 5.9s warm, but 98s on a
-first run over an uncached tree. Quote the warm figure only with that caveat attached.
+minutes to seconds; sweep results live in `DoctorReport.report_only`, structurally out of the
+rewrite path. Measured on a ~3.3 GB home across 2026-07-28/30: warm runs ranged 5.9s to 14.1s
+and cold runs 98s to 135s, with the spread dominated by OS cache state. Treat these as orders
+of magnitude - warm is seconds, cold is minutes - not as a benchmark figure to quote.
 
 **Adversarial review pass.** Per-feature Codex adversarial reviews were run; they surfaced
 and drove fixes for fail-silent read errors in `list`/`ProjectIndex` (now fail loud on a real
@@ -187,22 +188,32 @@ edit counts across the whole file and saw two. The two were stacked in one expre
 why the acceptance run saw a single symptom. All four are now fixed and regression-tested.
 
 **The acceptance run passed clean on 2026-07-30** at `e50eba2`, against a fresh scratch copy
-(56,761 files, 3.39 GB). All 15 steps passed, no new defects, every exit code matched the
-documented contract, and all four earlier findings were re-confirmed fixed on real data. Hygiene
-gate (f) passes. Report:
-`docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-30.md`.
+(56,761 files, 3.39 GB): all 15 steps, every exit code per contract, all four earlier findings
+re-confirmed fixed on real data. Report:
+`docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-30.md`. **That run is
+happy-path evidence, and it turned out not to be the last word.** An external adversarial code
+audit the same day found data-loss and false-success paths the acceptance sequence never
+exercises - most seriously: rollback of a directory rename backs up only top-level transcripts
+and can delete unbacked sidecar files; `apply` silently skips a missing source folder and still
+reports the move as applied; and a malformed `settings.json` is replaced with a nearly-empty
+object by the next settings write. Every blocking finding was independently verified against
+source before being accepted.
 
-**Remaining before the v1.0 tag:** the maintainer S-01 spec sign-off, evidence-backed by the
-traceability doc. That is the only gate left, and it is deliberately one no agent can clear.
+**Remaining before the v1.0 tag:** (1) the S-04 safety closeout
+(`docs/internal/release-plans/plan_v1.0.0/S-04_safety-closeout/spec.md`, hygiene gate (g)),
+ending in an adversarial acceptance run; (2) the maintainer S-01 spec sign-off, made against the
+closed state; (3) the D10 publication decision on the real transcripts in `test/fixtures/`. The
+earlier claim here that only the sign-off remained was wrong: it mistook happy-path coverage
+for safety coverage.
 
-**v1.1.0 is open and implemented (2026-07-30).** The three decisions left open after the
-acceptance run were all resolved as recommended. `awt repair --drive-letter` recovers history
-entries whose drive letter was corrupted, repairing only where exactly one drive resolves and
-naming everything it declines (2,303 of 3,121 damaged lines on the machine where this was found).
-`doctor` gained a warnings channel for shapes an adapter recognizes and deliberately skips, the
-first being a wrong-typed `githubRepoPaths` value, which was previously silent. Dependabot was
-added, monthly. Plan: `docs/internal/release-plans/plan_v1.1.0/`. None of this gates the v1.0.0
-tag. The `cpm` ->
+**Repair shipped and was folded into v1.0.0 (D9, 2026-07-30).** `awt repair --drive-letter`
+recovers history entries whose drive letter was corrupted, repairing only where exactly one
+drive resolves and naming everything it declines (2,303 of 3,121 damaged lines on the machine
+where this was found); it refuses a `history.jsonl` that is not valid UTF-8 (AC-53a). `doctor`
+gained a warnings channel for shapes an adapter recognizes and deliberately skips. Dependabot
+was added, monthly. The briefly-separate v1.1.0 plan was retired: v1 is defined as everything
+the CLI does, and tagging a v1.0.0 that lacked a shipped CLI capability would have made the tag
+a lie about the code. The `cpm` ->
 `awt` rename landed 2026-07-24 (ADR-0001). The signing / SmartScreen posture is CI-3 (the binary
 channel), not a tag blocker - v1.0 may ship source-first.
 
