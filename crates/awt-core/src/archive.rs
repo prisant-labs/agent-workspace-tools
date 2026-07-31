@@ -200,7 +200,8 @@ pub fn archive_project(
     let index = ProjectIndex::build(fs, home)?;
     let key = normalize_path(from_abs);
     let dirs = index.by_cwd.get(&key).ok_or_else(|| {
-        AwtError::UnrecognizedFormat(format!(
+        // AR-08: guard refusal (exit 2), matching associate; see associate.rs.
+        AwtError::Locked(format!(
             "no Claude state found for project '{from_abs}'; run 'awt list' to see known projects"
         ))
     })?;
@@ -475,9 +476,10 @@ mod tests {
             run_token: "test".into(),
         };
         let err = archive_project(&fs, Path::new("/h"), "E:\\NoSuchProject", &opts).unwrap_err();
+        // AR-08: a missing project is a guard refusal (exit-2 class), not a format error.
         assert!(
-            matches!(err, crate::error::AwtError::UnrecognizedFormat(_)),
-            "expected UnrecognizedFormat, got {err:?}"
+            matches!(err, crate::error::AwtError::Locked(_)),
+            "expected Locked, got {err:?}"
         );
     }
 

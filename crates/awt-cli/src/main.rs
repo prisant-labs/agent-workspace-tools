@@ -33,7 +33,7 @@ struct Cli {
     /// Backup root directory (default: system temp dir)
     #[arg(long, global = true)]
     backup_root: Option<PathBuf>,
-    /// Allow overwriting a destination that already exists
+    /// Proceed despite a worktree source or a live IDE lock (collisions still refuse)
     #[arg(long, global = true)]
     force: bool,
     /// Disable automatic rollback on apply failure
@@ -91,7 +91,7 @@ enum Cmd {
     },
     /// Restore pre-move state from a backup manifest
     Rollback {
-        /// Path to the manifest.json written by a previous apply run
+        /// Path to the manifest.json or report.json written by a previous apply run
         #[arg(long)]
         report: PathBuf,
     },
@@ -468,6 +468,10 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
             Ok(())
         }
         Cmd::Rollback { report } => {
+            // AR-05: apply prints the report.json path and this flag is named --report, so
+            // accept either file; resolve to the manifest before touching anything.
+            let manifest_path = awt_core::rollback::resolve_manifest_path(fs, report)?;
+            let report = &manifest_path;
             rollback(report, fs)?;
             let results = verify_rollback(report, fs)?;
             // Load the manifest to get run_id for the report (manifest still present after rollback).
@@ -606,7 +610,7 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
                     std::path::Path::new(transcript_path),
                     &opts,
                 )?;
-                println!("archived: {} copied, {} skipped", r.copied, r.skipped);
+                print_archive_result(&r, cli.json);
                 return Ok(());
             }
             if let Some(transcript) = session.as_ref() {
@@ -620,7 +624,7 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
                     run_token: pick_run_id(),
                 };
                 let r = awt_core::archive::archive_session(fs, home, transcript, &opts)?;
-                println!("archived: {} copied, {} skipped", r.copied, r.skipped);
+                print_archive_result(&r, cli.json);
                 return Ok(());
             }
             let dir = archive_dir
@@ -633,9 +637,22 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
                 run_token: pick_run_id(),
             };
             let r = awt_core::archive::archive_all(fs, home, &opts)?;
-            println!("archived: {} copied, {} skipped", r.copied, r.skipped);
+            print_archive_result(&r, cli.json);
             Ok(())
         }
+    }
+}
+
+/// Print an archive summary, honoring --json (AR-07: archive was the one subcommand that
+/// advertised --json but always emitted the text line).
+fn print_archive_result(r: &awt_core::archive::ArchiveReport, json: bool) {
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({ "copied": r.copied, "skipped": r.skipped })
+        );
+    } else {
+        println!("archived: {} copied, {} skipped", r.copied, r.skipped);
     }
 }
 

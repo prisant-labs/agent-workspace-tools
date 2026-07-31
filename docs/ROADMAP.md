@@ -199,12 +199,18 @@ reports the move as applied; and a malformed `settings.json` is replaced with a 
 object by the next settings write. Every blocking finding was independently verified against
 source before being accepted.
 
-**Remaining before the v1.0 tag:** (1) the S-04 safety closeout
-(`docs/internal/release-plans/plan_v1.0.0/S-04_safety-closeout/spec.md`, hygiene gate (g)),
-ending in an adversarial acceptance run; (2) the maintainer S-01 spec sign-off, made against the
-closed state; (3) the D10 publication decision on the real transcripts in `test/fixtures/`. The
-earlier claim here that only the sign-off remained was wrong: it mistook happy-path coverage
-for safety coverage.
+**The S-04 safety closeout completed 2026-07-31, gate (g) PASS.** Every audit AC (AC-53a,
+AC-54..AC-62) closed test-first, and the adversarial acceptance run passed: Run 1 found four
+new findings (a rollback panic on the report.json path, stale `--force` help, `archive --json`
+emitting text, and a no-state refusal on the wrong exit code), all fixed same-day red-first;
+Run 2 on a fresh scratch copy passed the full happy-path and hostile matrix, including a real
+junction and byte-identical whole-tree rollback. Report:
+`docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-31.md`.
+
+**Remaining before the v1.0 tag (both maintainer-owned):** (1) the maintainer S-01 spec
+sign-off, made against the closed state; (2) the D10 publication decision on the real
+transcripts still reachable in Git history. The earlier claim here that only the sign-off
+remained was wrong: it mistook happy-path coverage for safety coverage.
 
 **Repair shipped and was folded into v1.0.0 (D9, 2026-07-30).** `awt repair --drive-letter`
 recovers history entries whose drive letter was corrupted, repairing only where exactly one

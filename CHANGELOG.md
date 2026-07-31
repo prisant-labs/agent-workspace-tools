@@ -17,8 +17,9 @@ The repair capability below was briefly drafted as a separate v1.1.0; the mainta
 into v1.0.0 on 2026-07-30 (decision D9 in the release plan) because v1 is defined as everything
 the CLI does and no v1.0.0 tag existed yet to freeze against.
 
-The dating of this section is deferred to the tag. The tag is gated on the v1 safety closeout
-(S-04), the maintainer spec sign-off (S-01), and a clean adversarial acceptance run - see
+The dating of this section is deferred to the tag. The v1 safety closeout (S-04) completed
+2026-07-31, including a passing adversarial acceptance run; the tag now waits on the
+maintainer spec sign-off (S-01) and the fixture-history decision (D10) - see
 `docs/release-runbook.md` and the release plan.
 
 ### Added
@@ -101,6 +102,21 @@ The dating of this section is deferred to the tag. The tag is gated on the v1 sa
 
 ### Fixed
 
+- **`rollback --report` panicked (exit 101) when handed the `report.json` that `apply` itself
+  prints.** The flag is named `--report` and apply's last output line points at `report.json`,
+  so the natural invocation crashed with nothing restored. Rollback now accepts either file: a
+  backup `manifest.json` passes through, an apply `report.json` dereferences to its sibling
+  manifest, and any other JSON shape refuses with exit 4 instead of panicking. Found by the
+  2026-07-31 adversarial acceptance run (AR-05).
+- **`archive --json` printed the text summary line.** The `--json` sweep that fixed AR-03 on
+  `plan`/`verify` missed `archive`; all three archive paths (full sweep, `--session`,
+  `--hook-stdin`) now emit `{"copied": n, "skipped": n}` (AR-07).
+- **`associate` and `archive` on a path with no recorded state exited 4 instead of 2.** Exit 4
+  is reserved for store bytes the tool cannot parse; "nothing recorded for this path" is a
+  guard refusal, exit 2. Message unchanged, class corrected (AR-08).
+- `--force` help text still advertised "allow overwriting a destination that already exists",
+  a bypass removed by the AC-58 surface reduction (collisions refuse unconditionally). It now
+  names the two guards force actually lifts: worktree source and live IDE lock (AR-06).
 - `awt list --html` help text said the HTML inventory was written *instead of* the table. It is
   written *in addition to* the table; the help text was wrong, not the behavior.
 - `--src`, `--dst`, and `--report` had no help text in `--help` output. They are now described.

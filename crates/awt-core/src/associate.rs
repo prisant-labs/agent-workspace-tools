@@ -39,7 +39,10 @@ pub fn associate(
     // Resolving through transcripts alone meant the longer a project had been dead, the
     // more certain `associate` was to refuse it.
     if crate::doctor::scan(fs, home, from)?.hits.is_empty() {
-        return Err(AwtError::UnrecognizedFormat(format!(
+        // AR-08: a guard refusal (exit 2), not UnrecognizedFormat (exit 4). The input was
+        // understood; there is simply nothing recorded to act on. Exit 4 is reserved for
+        // store bytes the tool cannot parse.
+        return Err(AwtError::Locked(format!(
             "no Claude state found for project '{from}'; run 'awt list' to see known projects"
         )));
     }
