@@ -244,6 +244,17 @@ pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) 
         )));
     }
 
+    // Guard: reparse points inside trees this plan will walk (AC-61). The snapshot and
+    // merge walks refuse junctions/symlinks; surfacing that refusal HERE makes it a plan-time
+    // guard (exit 2, nothing attempted) instead of an apply-time failure that auto-rollback
+    // then has to clean up. The walk inside apply keeps the same check as TOCTOU
+    // defense-in-depth for a link created between plan and apply.
+    for c in &changes {
+        if let Change::RenameDir { from, .. } | Change::MergeDir { from, .. } = c {
+            crate::fs::walk_files_strict(fs, from)?;
+        }
+    }
+
     // AR-04: the same literal can be reached by more than one hit. `.claude.json` may hold
     // one path under two `githubRepoPaths` slugs, and each hit plans its own change. But a
     // change's count check scans the WHOLE file, so N separate changes of `expected: 1`

@@ -3,6 +3,33 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-07-31 - AC-61 and AC-62 closed; every code AC in the safety closeout is done
+
+Phases 17.8 and 17.10, red-first where the behavior changed. Workspace suite 175 tests.
+Only the adversarial acceptance run (17.11) and the maintainer's D10/S-01 halves remain.
+
+- **AC-61 (path confinement).** The hook's `transcript_path` check was lexical - lowercase
+  prefix comparison - which `<projects>/../../outside` defeats byte-for-byte. It now rejects
+  `..`/`.` components outright and canonicalizes both sides against the real filesystem
+  before requiring containment; a transcript that does not exist is refused. New
+  `FileSystem::is_reparse_point` reads real NTFS reparse attributes (junctions included,
+  which std's `is_symlink` has not always reported). Policy split by operation and recorded
+  as such: mutation walks REFUSE a junction at plan time (a guard, exit 2, with a TOCTOU
+  re-check in the snapshot walk), archive SKIPS it (a protective sweep across all projects
+  must not abort on one link). Proven with a real `mklink /J` junction through the binary,
+  and a real `..`-escape through hook stdin.
+  Worth recording: the first implementation refused inside the snapshot, and the real-FS
+  test caught it surfacing as exit 3 ("verification failed") because `apply_verified` wraps
+  apply errors - the guard was moved to plan time where a refusal belongs.
+- **AC-62 (synthetic fixtures, engineering half).** `scripts/generate-reference-fixtures.py`
+  deterministically generates both reference transcripts, preserving exactly what the golden
+  tests lock - 2,082 anchored rewrites (227/54 and 1,240/534/27), the 10/55 preserved
+  package/branch mentions, line counts 329/2,285, every line valid JSON - and nothing else
+  from the originals. 18.1 MB of real conversation replaced by ~540 KB of synthetic data;
+  golden tests pass unchanged. `test/fixtures/README.md` rewritten: everything synthetic,
+  regeneration rules, and an honest record of what was published until 2026-07-31 and why it
+  left. History removal remains the maintainer's D10 call.
+
 ## 2026-07-30 (later still) - AC-58 executed, dependabot queue processed, D10 read aid built
 
 Four maintainer decisions collected and executed in one sitting: remove the inert options

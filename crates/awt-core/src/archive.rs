@@ -36,6 +36,14 @@ fn fs_walk(fs: &dyn FileSystem, dir: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     if let Ok(children) = fs.read_dir(dir) {
         for child in children {
+            // AC-61: never follow a junction or symlink while archiving - a link inside a
+            // project-state tree could pull arbitrary outside content into the archive (or
+            // recurse forever). Unlike the mutation walk this one SKIPS rather than refuses,
+            // because archive is a best-effort protective sweep across every project and one
+            // link should not abort protecting the rest; the skip is the documented policy.
+            if fs.is_reparse_point(&child) {
+                continue;
+            }
             if fs.is_dir(&child) {
                 out.extend(fs_walk(fs, &child));
             } else {
