@@ -18,9 +18,40 @@ pub trait FileSystem {
     fn mtime_secs(&self, path: &Path) -> io::Result<u64>;
 }
 
+/// `read_dir` where a MISSING directory is a valid empty result but any other failure is an
+/// error (AC-59). The distinction matters: "the optional root does not exist" is a fact,
+/// "the directory could not be read" is a failure that must not masquerade as emptiness.
+pub fn read_dir_optional(fs: &dyn FileSystem, path: &Path) -> crate::error::Result<Vec<PathBuf>> {
+    match fs.read_dir(path) {
+        Ok(d) => Ok(d),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// Strict recursive walk for MUTATION paths (AC-59): any `read_dir` failure propagates. The
+/// lenient `walk_files` below swallows read errors, which is tolerable for read-only
+/// inventory but poison for backup and apply - a subtree that silently drops out of the walk
+/// is a subtree that silently drops out of the snapshot.
+pub fn walk_files_strict(fs: &dyn FileSystem, root: &Path) -> crate::error::Result<Vec<PathBuf>> {
+    let mut out = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        for child in fs.read_dir(&dir)? {
+            if fs.is_dir(&child) {
+                stack.push(child);
+            } else {
+                out.push(child);
+            }
+        }
+    }
+    Ok(out)
+}
+
 /// Recursively collect every FILE path under `root` (directories are descended into, not
-/// returned). Order is unspecified. Used by the merge apply and merge backup to enumerate a
-/// directory's files without depending on `Ctx`.
+/// returned). Order is unspecified. LENIENT: read errors truncate the walk silently, so this
+/// is only appropriate for read-only reporting; anything that writes must use
+/// `walk_files_strict`.
 pub fn walk_files(fs: &dyn FileSystem, root: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     let mut stack = vec![root.to_path_buf()];

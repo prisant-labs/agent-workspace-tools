@@ -39,7 +39,14 @@ Estimated 7-10 engineering days. The three Criticals, in one line each:
   applied, exits 0, and verify never checks the folder.
 - **A malformed `settings.json` is replaced with an empty one** by the next settings write.
 
-**Progress: all three Criticals are closed (2026-07-30, red-first, 158 tests green).** Rollback
+**Progress: all three Criticals AND three of the six Highs are closed (2026-07-30, red-first,
+164 tests green).** AC-57: verification now derives from the applied plan - every planned json
+splice is checked as raw bytes, malformed history lines fail, and a verify that errors rolls
+the apply back instead of stranding it. AC-59: mutation-path reads fail closed, proven with a
+failure-injecting filesystem. AC-60: plugin state is found via the recorded `cwd` spelling, so
+a case or separator variant of the path no longer silently strands plugin dirs.
+
+Earlier progress note: Rollback
 now snapshots recursively and renames the directory back wholesale, so the complete tree
 returns - proven at tree level and end-to-end on the real filesystem. A missing source refuses
 at plan AND apply, and verify checks the folder postconditions. Settings writes fail closed and

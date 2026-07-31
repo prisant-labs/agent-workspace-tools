@@ -11,6 +11,7 @@ pub fn verify(
     home: &Path,
     mv: &Move,
     manifest: Option<&Manifest>,
+    plan: Option<&crate::plan::Plan>,
 ) -> Result<Vec<VerifyResult>> {
     let index = ProjectIndex::build(fs, home)?;
     let ctx = Ctx {
@@ -22,6 +23,38 @@ pub fn verify(
     let mut out = Vec::new();
     for store in registry() {
         out.extend(store.verify(&ctx, mv)?);
+    }
+    // Plan-derived splice checks (AC-57): when the caller can supply the plan that was
+    // applied, verify each planned json splice against the file's actual bytes - the
+    // destination anchor must be present and the source anchor gone. The store-level checks
+    // above only assert old-key ABSENCE, so sabotage (or a bug) that removes both old and
+    // new keys verified green before this. Anchors are matched as raw bytes because the
+    // splice wrote raw bytes; parsed-level checks reintroduce the AR-01 blind spot.
+    if let Some(p) = plan {
+        for c in &p.changes {
+            if let crate::model::Change::RenameJsonKey { path, from, to, .. }
+            | crate::model::Change::RewriteJsonArrayValue { path, from, to, .. } = c
+            {
+                match fs.read(path) {
+                    Err(e) => out.push(VerifyResult {
+                        check: "planned json edit verifiable".into(),
+                        ok: false,
+                        detail: format!("{}: read failed: {e}", path.display()),
+                    }),
+                    Ok(bytes) => {
+                        let text = String::from_utf8_lossy(&bytes);
+                        out.push(VerifyResult {
+                            check: "planned json edit landed".into(),
+                            ok: text.contains(to.as_str()) && !text.contains(from.as_str()),
+                            detail: format!(
+                                "{}: expected {to} present and {from} absent",
+                                path.display()
+                            ),
+                        });
+                    }
+                }
+            }
+        }
     }
     if let Some(m) = manifest {
         // Folder postcondition (AC-55): when the plan actually moved the project folder (a
@@ -126,7 +159,7 @@ mod tests {
         };
         let plan = build_plan(&fs, Path::new("/h"), &mv, &opts).unwrap();
         apply(&plan, &fs, Path::new("/backup"), "T").unwrap();
-        let results = verify(&fs, Path::new("/h"), &mv, None).unwrap();
+        let results = verify(&fs, Path::new("/h"), &mv, None, None).unwrap();
         assert!(results.iter().all(|r| r.ok), "{results:?}");
     }
 }

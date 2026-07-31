@@ -27,6 +27,33 @@ fn hex_lower(bytes: &[u8]) -> String {
     s
 }
 
+/// Every hash suffix that could denote `src_abs`'s plugin state dir (AC-60).
+///
+/// The state-dir suffix is a hash of the EXACT bytes Claude Code recorded as `cwd`, while
+/// callers may legitimately spell the same path in any case or separator variant - every
+/// other store matches paths case-insensitively, so the variant resolves everything else and
+/// used to silently miss the plugin dir (hashing the caller's spelling finds nothing, and
+/// verify repeated the same wrong derivation and passed). The recorded spellings live in the
+/// reverse index; the caller's own spelling is kept as a fallback for state written by a
+/// session whose transcript is gone.
+fn candidate_suffixes(ctx: &Ctx, src_abs: &str) -> Vec<String> {
+    let key = crate::paths::normalize_path(src_abs);
+    let mut spellings: Vec<&str> = ctx
+        .index
+        .cwds
+        .iter()
+        .filter(|c| crate::paths::normalize_path(c) == key)
+        .map(String::as_str)
+        .collect();
+    if !spellings.contains(&src_abs) {
+        spellings.push(src_abs);
+    }
+    let mut suffixes: Vec<String> = spellings.into_iter().map(state_hash).collect();
+    suffixes.sort_unstable();
+    suffixes.dedup();
+    suffixes
+}
+
 impl Store for PluginState {
     fn id(&self) -> &'static str {
         Self::ID
@@ -37,16 +64,14 @@ impl Store for PluginState {
     }
 
     fn detect(&self, ctx: &Ctx, mv: &Move) -> Result<Vec<Hit>> {
-        // Suffix is sha256 of the EXACT backslash-form src path (first 16 hex chars).
-        // We search every plugin's state dir for any entry whose name ends with that suffix.
-        let suffix = state_hash(&mv.src_abs);
+        let suffixes = candidate_suffixes(ctx, &mv.src_abs);
         let mut hits = Vec::new();
         let data = ctx.home.join(".claude").join("plugins").join("data");
-        for plugin in ctx.fs.read_dir(&data).unwrap_or_default() {
+        for plugin in crate::fs::read_dir_optional(ctx.fs, &data)? {
             let state = plugin.join("state");
-            for entry in ctx.fs.read_dir(&state).unwrap_or_default() {
+            for entry in crate::fs::read_dir_optional(ctx.fs, &state)? {
                 if let Some(name) = entry.file_name().and_then(|n| n.to_str()) {
-                    if name.ends_with(&suffix) {
+                    if suffixes.iter().any(|s| name.ends_with(s.as_str())) {
                         hits.push(Hit {
                             store: Self::ID,
                             detail: name.to_string(),
@@ -86,9 +111,9 @@ impl Store for PluginState {
         // Read each plugin's state dir once, then match the known-dead hashes against it.
         let data = ctx.home.join(".claude").join("plugins").join("data");
         let mut entries: Vec<(String, PathBuf)> = Vec::new();
-        for plugin in ctx.fs.read_dir(&data).unwrap_or_default() {
+        for plugin in crate::fs::read_dir_optional(ctx.fs, &data)? {
             let state = plugin.join("state");
-            for entry in ctx.fs.read_dir(&state).unwrap_or_default() {
+            for entry in crate::fs::read_dir_optional(ctx.fs, &state)? {
                 if let Some(name) = entry.file_name().and_then(|n| n.to_str()) {
                     entries.push((name.to_string(), state.clone()));
                 }
@@ -125,14 +150,19 @@ impl Store for PluginState {
     }
 
     fn verify(&self, ctx: &Ctx, mv: &Move) -> Result<Vec<VerifyResult>> {
-        let old_hash = state_hash(&mv.src_abs);
+        // Same recorded-spelling derivation as detect (AC-60): verifying with the caller's
+        // hash alone repeats detect's old blind spot and passes over a leftover dir.
+        let suffixes: Vec<String> = candidate_suffixes(ctx, &mv.src_abs)
+            .into_iter()
+            .map(|s| format!("-{s}"))
+            .collect();
         let data = ctx.home.join(".claude").join("plugins").join("data");
         let mut old_found = false;
-        'outer: for plugin in ctx.fs.read_dir(&data).unwrap_or_default() {
+        'outer: for plugin in crate::fs::read_dir_optional(ctx.fs, &data)? {
             let state = plugin.join("state");
-            for entry in ctx.fs.read_dir(&state).unwrap_or_default() {
+            for entry in crate::fs::read_dir_optional(ctx.fs, &state)? {
                 if let Some(name) = entry.file_name().and_then(|n| n.to_str()) {
-                    if name.ends_with(&format!("-{old_hash}")) {
+                    if suffixes.iter().any(|s| name.ends_with(s.as_str())) {
                         old_found = true;
                         break 'outer;
                     }

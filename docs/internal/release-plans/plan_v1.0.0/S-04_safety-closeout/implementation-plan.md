@@ -5,7 +5,7 @@ type: implementation-plan
 status: in-progress
 created: 2026-07-30
 updated: 2026-07-30
-phases-complete: [17.1, 17.2, 17.3, 17.4]
+phases-complete: [17.1, 17.2, 17.3, 17.4, 17.5, 17.6, 17.7]
 linked-spec: ./spec.md
 target-release: v1.0.0
 ac-coverage: complete
@@ -29,9 +29,9 @@ settled; the adversarial acceptance run is last because it certifies the sum.
 | 17.2 | Whole-tree rollback for directory renames: recursive snapshot (every file, not top-level `*.jsonl`), rollback renames the directory back BEFORE restoring modified files, no delete step; refuses loudly if both old and new dirs exist; tree-map regression tests incl. nested sidecars, binary files, injected mid-apply failure, and a real-filesystem end-to-end via the binary | AC-54 | **Complete 2026-07-30** |
 | 17.3 | Source-existence guard in `build_plan` (`SourceMissing`, exit 2, ordered AFTER dest-exists so AC-19's idempotency signal is preserved); fatal missing `MoveTree` source in apply; `verify` asserts destination-present and source-absent whenever the manifest records a folder move; associate (move_folder=false) explicitly exempt | AC-55 | **Complete 2026-07-30** |
 | 17.4 | Settings fail-closed: only `NotFound` initializes; read/parse/UTF-8/non-object failures propagate as exit 4 with the file untouched; atomic tmp+rename write; unrelated-key preservation test | AC-56 | **Complete 2026-07-30** |
-| 17.5 | Failure-injecting `FileSystem` double; read errors become errors across plan/backup/apply/verify; optional-root policy documented in one place | AC-59 | Not started |
-| 17.6 | Plan-derived verification: scope-aware, destination-key presence, folder postcondition, malformed-line and read-error failures | AC-57 | Not started |
-| 17.7 | Plugin hash from recorded `cwd` via `ProjectIndex`; case/separator variant tests | AC-60 | Not started |
+| 17.5 | Failure-injecting `FailingFs` test double; `walk_files_strict` for backup and merge-apply (a read_dir failure aborts before any write); `read_dir_optional` (missing root = empty, real error = error) in plugin detect/audit/verify; verify hard-errors treated like failed checks in `apply_verified` (rollback, not strand); projects verify reports unreadable dirs instead of counting zero | AC-59 | **Complete 2026-07-30** |
+| 17.6 | Plan-derived verification: `verify` takes the applied plan and asserts every planned json splice landed (destination anchor present, source anchor gone, raw bytes); malformed `history.jsonl` lines are failures, not skips; folder postconditions landed with AC-55. Scope-awareness deliberately NOT plumbed: the `minimal`/`full` tiers are slated for removal under AC-58 (17.9), after which Standard-only verification is scope-correct by definition | AC-57 | **Complete 2026-07-30** (scope caveat resolves via 17.9) |
+| 17.7 | Plugin hash derived from every recorded `cwd` spelling that normalizes to src (via `ProjectIndex.cwds`), caller spelling kept as fallback; detect AND verify use the same derivation; case/separator variant tests for both | AC-60 | **Complete 2026-07-30** |
 | 17.8 | Path confinement: canonicalize hook transcript paths, reject traversal, refuse reparse points in mutated/archived trees; Windows junction tests | AC-61 | Not started |
 | 17.9 | Surface reduction: remove `keep-dest`/`keep-src`, `--recursive`, and `minimal`/`full` scopes from the CLI (default decision per AC-58); docs and reference updated; refusal tests for nested projects | AC-58 | Not started |
 | 17.10 | Synthetic fixture replacement: procedural generation of the shapes and counts the golden tests need; re-lock counts; remove real transcripts from the working tree (history decision is D10, maintainer) | AC-62 | Not started |
@@ -59,6 +59,12 @@ first; they do not gate the tag.
 | `a_missing_settings_file_still_initializes` | AC-56 (over-correction guard) |
 | `settings_writes_preserve_unrelated_keys` | AC-56 |
 | `invalid_utf8_is_refused_and_nothing_is_written` | AC-53a |
+| `backup_walk_read_failure_aborts_before_any_write` | AC-59 |
+| `apply_verified_rolls_back_when_verify_itself_errors` | AC-59 |
+| `verify_reports_malformed_history_lines` | AC-57 |
+| `verify_with_plan_catches_a_missing_destination_anchor` | AC-57 |
+| `plugin_state_is_found_when_src_is_spelled_differently` | AC-60 |
+| `plugin_verify_catches_a_leftover_dir_under_the_recorded_spelling` | AC-60 |
 
 ## Decision dependencies
 

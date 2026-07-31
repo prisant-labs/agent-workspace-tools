@@ -41,7 +41,10 @@ pub fn snapshot(
                 // file whose survival was never provable. The first shipped version copied
                 // only top-level *.jsonl, which paired with the old delete-based rollback to
                 // destroy nested sidecars during the undo.
-                for (j, child) in crate::fs::walk_files(fs, from).into_iter().enumerate() {
+                for (j, child) in crate::fs::walk_files_strict(fs, from)?
+                    .into_iter()
+                    .enumerate()
+                {
                     backup_one(fs, &dir, &child, &format!("d{i}-{j}"), &mut entries)?;
                 }
                 entries.push(ManifestEntry {
@@ -57,7 +60,10 @@ pub fn snapshot(
                 // AND sidecars), captured here PRE-merge. Each file's `original` is its real
                 // pre-merge path; rollback restores those bytes and, via the marker below,
                 // removes exactly these files' relative paths from B (never B's own files).
-                for (j, child) in crate::fs::walk_files(fs, from).into_iter().enumerate() {
+                for (j, child) in crate::fs::walk_files_strict(fs, from)?
+                    .into_iter()
+                    .enumerate()
+                {
                     backup_one(fs, &dir, &child, &format!("m{i}-{j}"), &mut entries)?;
                 }
                 entries.push(ManifestEntry {
