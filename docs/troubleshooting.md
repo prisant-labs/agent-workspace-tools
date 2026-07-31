@@ -30,6 +30,11 @@ Each of these stops the run before any change is made and tells you what to do.
   time. If you are re-running a move that already completed, you will see the
   destination-exists refusal instead - that one means "already done". A path that never
   existed means a typo; a folder that is genuinely gone is `awt associate`'s job.
+- **Nested projects under the source.** "refusing to move ...: N nested project(s) with
+  their own Claude state live under it". Moving the parent would break every child's
+  path-keyed state, so the tool refuses. Move the nested project(s) to their own location
+  first, then move the parent. (A `--recursive` flag existed in pre-release builds; it was
+  removed because it only silenced this warning without actually moving anything.)
 - **Worktree source.** The source's `.git` is a file, not a directory, so it is a git
   worktree; moving it would break its linkage. Move the real repository, or pass `--force`
   if you understand the consequences.

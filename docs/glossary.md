@@ -74,7 +74,8 @@ with sha256, into `<backup-root>/awt-<run-id>/`. The `manifest.json` in that dir
 against the snapshot and proves byte-identity, failing with exit 3 on any mismatch.
 
 **Guard / fail closed.** A precondition that stops a run before anything is written: destination
-exists, worktree source, cross-volume move, live lock, ambiguous history. All produce exit 2.
+exists, missing source, nested projects under the source, worktree source, cross-volume
+move, live lock, ambiguous history. All produce exit 2.
 "Fail closed" means the default on uncertainty is to refuse.
 
 **Idempotent by refusal.** Re-running `apply` on an already-migrated project exits 2 with a

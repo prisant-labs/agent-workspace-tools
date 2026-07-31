@@ -194,7 +194,6 @@ mod tests {
             fs: &fs,
             home: PathBuf::from("/h"),
             index: &idx,
-            scope: crate::model::Scope::Standard,
         };
         let mv = Move {
             src_abs: "E:\\Projects\\A".into(),
@@ -225,7 +224,6 @@ mod tests {
             fs: &fs,
             home: PathBuf::from("/h"),
             index: &idx,
-            scope: crate::model::Scope::Standard,
         };
         let mv = Move {
             src_abs: "E:\\Projects\\A".into(),

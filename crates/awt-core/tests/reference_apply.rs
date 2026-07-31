@@ -1,8 +1,8 @@
 mod fixtures;
 use awt_core::apply::apply;
 use awt_core::fs::FileSystem;
-use awt_core::model::{Move, Scope};
-use awt_core::plan::{build_plan, Collision, PlanOpts};
+use awt_core::model::Move;
+use awt_core::plan::{build_plan, PlanOpts};
 use std::path::Path;
 
 #[test]
@@ -26,11 +26,8 @@ fn reference_move_end_to_end_leaves_no_old_cwd() {
     )
     .unwrap();
     let opts = PlanOpts {
-        recursive: false,
-        on_collision: Collision::Refuse,
         force: false,
         move_folder: true,
-        scope: Scope::Standard,
     };
     let plan = build_plan(&fs, home, &mv, &opts).unwrap();
     apply(&plan, &fs, Path::new("/backup"), "REF").unwrap();

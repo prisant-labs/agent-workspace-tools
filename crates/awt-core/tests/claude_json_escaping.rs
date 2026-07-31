@@ -13,8 +13,8 @@
 
 use awt_core::apply::apply;
 use awt_core::fs::{FileSystem, MemoryFileSystem};
-use awt_core::model::{Move, Scope};
-use awt_core::plan::{build_plan, Collision, PlanOpts};
+use awt_core::model::Move;
+use awt_core::plan::{build_plan, PlanOpts};
 use std::path::Path;
 
 const HOME: &str = "/home/.claude-fixture";
@@ -66,11 +66,8 @@ fn plan_and_apply(fs: &MemoryFileSystem) {
         dst_abs: NEW.into(),
     };
     let opts = PlanOpts {
-        recursive: false,
-        on_collision: Collision::Refuse,
         force: false,
         move_folder: true,
-        scope: Scope::Standard,
     };
     let plan = build_plan(fs, Path::new(HOME), &mv, &opts).unwrap();
     apply(&plan, fs, Path::new("/backup"), "AR01").expect(
@@ -178,11 +175,8 @@ fn forward_slash_paths_still_rewrite() {
         dst_abs: "E:/tmp/probe-moved".into(),
     };
     let opts = PlanOpts {
-        recursive: false,
-        on_collision: Collision::Refuse,
         force: false,
         move_folder: true,
-        scope: Scope::Standard,
     };
     let plan = build_plan(&fs, Path::new(HOME), &mv, &opts).unwrap();
     apply(&plan, &fs, Path::new("/backup"), "AR01FWD").unwrap();

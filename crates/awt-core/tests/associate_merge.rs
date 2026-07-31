@@ -1,8 +1,8 @@
 use awt_core::apply::{apply_verified, ApplyOpts};
 use awt_core::associate::{associate, AssociateOpts};
 use awt_core::fs::{FileSystem, MemoryFileSystem};
-use awt_core::model::{Change, Move, Scope};
-use awt_core::plan::{build_plan, Collision, PlanOpts};
+use awt_core::model::{Change, Move};
+use awt_core::plan::{build_plan, PlanOpts};
 use std::path::Path;
 
 // The two projects dirs and B's own transcript bytes, reused by both tests.
@@ -32,7 +32,6 @@ fn associate_merges_into_existing_destination() {
         export: false,
         export_subdir: ".claude-sessions".into(),
         run_id: "MERGE".into(),
-        on_collision: Collision::Refuse,
     };
     associate(&fs, Path::new("/h"), "E:\\A", "E:\\B", &opts).unwrap();
 
@@ -72,11 +71,8 @@ fn associate_merge_rolls_back_cleanly() {
     };
     // Mirror exactly what `associate` plans: no folder move, Standard scope.
     let plan_opts = PlanOpts {
-        recursive: false,
-        on_collision: Collision::Refuse,
         force: false,
         move_folder: false,
-        scope: Scope::Standard,
     };
     let mut plan = build_plan(&fs, Path::new("/h"), &mv, &plan_opts).unwrap();
     // Confirm we are actually testing the MERGE path, not a plain rename.

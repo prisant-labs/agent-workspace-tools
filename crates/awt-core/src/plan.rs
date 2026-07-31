@@ -2,23 +2,20 @@ use crate::error::{AwtError, Result};
 use crate::fs::FileSystem;
 use crate::index::ProjectIndex;
 use crate::locks::detect_live;
-use crate::model::{Change, Ctx, Move, Scope};
+use crate::model::{Change, Ctx, Move};
 use crate::paths::{normalize_path, same_volume};
 use crate::stores::registry;
 use std::path::Path;
 
-#[derive(Clone)]
-pub enum Collision {
-    Refuse,
-    KeepDest,
-    KeepSrc,
-}
+/// AC-58 (maintainer decision 2026-07-30): the `recursive`, `on_collision`, and `scope`
+/// options were removed rather than left advertised-but-inert. `keep-dest`/`keep-src` were
+/// parsed and never implemented - selecting either silently bypassed the collision guard;
+/// `recursive` only silenced the nested-project warning while moving nothing; `minimal`
+/// could never pass verification and `full` rewrote files verification did not cover. Each
+/// may return behind a real spec; none may return as a guard bypass.
 pub struct PlanOpts {
-    pub recursive: bool,
-    pub on_collision: Collision,
     pub force: bool,
     pub move_folder: bool,
-    pub scope: Scope,
 }
 #[derive(Debug)]
 pub struct Plan {
@@ -202,7 +199,6 @@ pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) 
         fs,
         home: home.to_path_buf(),
         index: &index,
-        scope: opts.scope,
     };
     let mut changes = Vec::new();
     let mut nested = Vec::new();
@@ -214,32 +210,38 @@ pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) 
         // at the old location after the move completes and verifies clean.
         warnings.extend(store.warn(&ctx)?);
         for hit in store.detect(&ctx, mv)? {
-            // Collision guard for claude.json destination key
-            if store.id() == "claude.json" {
-                if let Collision::Refuse = opts.on_collision {
-                    if dest_key_exists(&ctx, mv)? {
-                        return Err(AwtError::DestinationExists(format!(
-                            "claude.json already has a key for {}",
-                            mv.dst_abs
-                        )));
-                    }
-                }
+            // Collision guard for the claude.json destination key. Unconditional: the
+            // keep-dest/keep-src modes that used to gate this were never implemented, so the
+            // only thing selecting them did was skip this guard (AC-58).
+            if store.id() == "claude.json" && dest_key_exists(&ctx, mv)? {
+                return Err(AwtError::DestinationExists(format!(
+                    "claude.json already has a key for {}",
+                    mv.dst_abs
+                )));
             }
             changes.extend(store.plan(&ctx, mv, &hit)?);
         }
     }
 
-    // Nested project detection (keys strictly under src)
+    // Nested project detection (keys strictly under src). A HARD refusal (AC-58): moving
+    // the parent breaks every child's path-keyed state, and the removed `--recursive` flag
+    // only ever silenced this warning while moving nothing. The honest options are "move the
+    // children out first" or a real multi-project transaction, which does not exist yet.
     for k in index.by_cwd.keys() {
         if k != &src_key && k.starts_with(&format!("{src_key}/")) {
             nested.push(k.clone());
         }
     }
-    if !nested.is_empty() && !opts.recursive {
-        warnings.push(format!(
-            "{} nested project(s) will break unless --recursive",
-            nested.len()
-        ));
+    if !nested.is_empty() && opts.move_folder {
+        nested.sort();
+        return Err(AwtError::NestedProjects(format!(
+            "refusing to move {}: {} nested project(s) with their own Claude state live under \
+             it ({}). Moving the parent would break their path-keyed state. Move the nested \
+             project(s) first, then re-run.",
+            mv.src_abs,
+            nested.len(),
+            nested.join(", ")
+        )));
     }
 
     // AR-04: the same literal can be reached by more than one hit. `.claude.json` may hold
@@ -375,11 +377,8 @@ mod tests {
 
     fn opts() -> PlanOpts {
         PlanOpts {
-            recursive: false,
-            on_collision: Collision::Refuse,
             force: false,
             move_folder: true,
-            scope: crate::model::Scope::Standard,
         }
     }
 

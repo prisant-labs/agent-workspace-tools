@@ -6,7 +6,7 @@
 use crate::error::Result;
 use crate::fs::FileSystem;
 use crate::index::ProjectIndex;
-use crate::model::{Ctx, Hit, Move, Scope, Stale};
+use crate::model::{Ctx, Hit, Move, Stale};
 use crate::stores::{registry, sweep::sweep_for};
 use std::path::{Path, PathBuf};
 
@@ -33,7 +33,6 @@ fn ctx_for<'a>(fs: &'a dyn FileSystem, home: &Path, index: &'a ProjectIndex) -> 
         fs,
         home: home.to_path_buf(),
         index,
-        scope: Scope::Standard,
     }
 }
 

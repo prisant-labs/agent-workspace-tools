@@ -59,6 +59,17 @@ The dating of this section is deferred to the tag. The tag is gated on the v1 sa
 - **Script-friendly exit codes** - 0 success, 1 io, 2 guard refusal (nothing written), 3
   verification failed, 4 unrecognized store format. Exit codes are unaffected by `--json`.
 
+### Removed
+
+- **`--on-collision keep-dest`/`keep-src`, `--recursive`, and `--scope minimal`/`full`**
+  (AC-58, maintainer decision 2026-07-30). None was implemented behind its help text, and two
+  silently weakened guards: the collision modes bypassed the destination-key check while
+  changing nothing else, and `--recursive` suppressed the nested-project warning while moving
+  nothing. `minimal` could never pass verification; `full` rewrote files verification did not
+  cover. There is now exactly one rewrite behavior, collisions always refuse, and **a move
+  whose source contains nested projects refuses outright** (exit 2, naming the children) -
+  move the nested projects first. Each option may return later behind a real spec.
+
 ### Changed
 
 - Renamed the binary and crates from `cpm` / `cpm-core` / `cpm-cli` to `awt` / `awt-core` /

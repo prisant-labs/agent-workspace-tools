@@ -16,8 +16,8 @@
 use awt_core::associate::{associate, AssociateOpts};
 use awt_core::error::AwtError;
 use awt_core::fs::{FileSystem, MemoryFileSystem};
-use awt_core::model::{Move, Scope};
-use awt_core::plan::{build_plan, Collision, PlanOpts};
+use awt_core::model::Move;
+use awt_core::plan::{build_plan, PlanOpts};
 use std::path::Path;
 
 const HOME: &str = "/h";
@@ -28,17 +28,13 @@ fn opts() -> AssociateOpts {
         export: true,
         export_subdir: ".claude-sessions".into(),
         run_id: "T".into(),
-        on_collision: Collision::Refuse,
     }
 }
 
 fn plan_opts() -> PlanOpts {
     PlanOpts {
-        recursive: false,
-        on_collision: Collision::Refuse,
         force: false,
         move_folder: true,
-        scope: Scope::Standard,
     }
 }
 
