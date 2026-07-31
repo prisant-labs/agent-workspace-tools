@@ -128,9 +128,18 @@ pub fn apply(plan: &Plan, fs: &dyn FileSystem, backup_root: &Path, run_id: &str)
     // 3. move tree LAST
     for c in &plan.changes {
         if let Change::MoveTree { from, to } = c {
-            if fs.exists(from) {
-                fs.rename(from, to)?;
+            // A missing source here is fatal, never a skip (AC-55). The plan guaranteed the
+            // source existed at plan time; if it vanished since (concurrent delete, ejected
+            // volume), recording the move as applied would be a false success on the user's
+            // most trust-sensitive claim. Failing returns Err, which apply_verified turns
+            // into an auto-rollback of the store rewrites already made above.
+            if !fs.exists(from) {
+                return Err(AwtError::SourceMissing(format!(
+                    "{} vanished between plan and apply",
+                    from.display()
+                )));
             }
+            fs.rename(from, to)?;
             applied.push(Applied {
                 change: format!("move {} -> {}", from.display(), to.display()),
                 counts: 0,

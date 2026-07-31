@@ -96,18 +96,31 @@ The dating of this section is deferred to the tag. The tag is gated on the v1 sa
 - **`repair` read a damaged `history.jsonl` with a lossy UTF-8 decode**, violating the
   never-lossy-rewrite invariant; planning against lossily-decoded text computes counts for a
   file that does not exist on disk. It now refuses invalid UTF-8 with exit 4 (AC-53a).
+- **Rollback could delete files it never backed up.** A directory rename snapshotted only
+  top-level `*.jsonl`, then rollback recursively deleted the renamed directory - nested memory
+  files, tool results, and any other sidecar were destroyed by the undo while it reported
+  success. The snapshot is now recursive and rollback renames the whole directory back before
+  restoring modified files, so the complete tree provably returns (AC-54).
+- **A missing source folder was a silent success.** `apply` skipped the folder move, recorded
+  it as applied, and exited 0. A folder move now requires the source to exist at plan time
+  (exit 2), a source that vanishes before apply is a hard failure with auto-rollback, and
+  verify asserts the destination is present and the source absent (AC-55).
+- **A malformed `settings.json` was replaced with a nearly-empty one.** Any read or parse
+  failure loaded as an empty object that the next `--set-retention` or hook install/uninstall
+  wrote over the user's file. Settings operations now refuse (exit 4) unless the file is
+  genuinely absent, and write atomically via a temp file (AC-56).
 
 ### Known issues
 
 - **A v1 safety closeout (S-04) is in progress and blocks the tag.** An external adversarial
-  code audit (2026-07-30) found data-loss and false-success paths that the happy-path acceptance
-  run did not exercise, the most serious being: rollback of a directory rename backs up only
-  top-level transcripts and can delete unbacked sidecar files; `apply` silently skips a missing
-  source folder and reports the move as applied; and a malformed settings file is replaced with
-  a nearly-empty one on the next settings write. The closeout effort tracks each finding as an
-  acceptance criterion with a raw-byte or tree-level regression test. Until it completes, treat
-  `apply` as safe only under the conditions the acceptance run exercised, and prefer running
-  against a copy of `~/.claude`.
+  code audit (2026-07-30) found data-loss and false-success paths the happy-path acceptance run
+  did not exercise. The three Critical findings (rollback tree loss, missing-source false
+  success, settings fail-open) are **fixed** - see Fixed above. Still open: verification is not
+  yet derived from the plan (a green verify does not check everything promised), several
+  advertised flags are inert (`--on-collision keep-dest`/`keep-src`, `--recursive`, the
+  `minimal`/`full` scopes), some I/O failures read as absence, plugin-state hashing uses the
+  caller's path spelling, path confinement is lexical, and real transcripts remain published as
+  fixtures. Until the closeout completes, prefer running against a copy of `~/.claude`.
 
 ### Notes
 

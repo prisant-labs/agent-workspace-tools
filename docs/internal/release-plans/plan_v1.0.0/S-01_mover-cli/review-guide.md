@@ -34,7 +34,7 @@ Standing column vocabulary:
 
 | AC | The promise, in plain words | Evidence | Standing |
 |---|---|---|---|
-| AC-1 | A same-volume move is a rename: fast, atomic, and the old folder is gone afterwards | cross-volume guard + test | **Contested by AC-55**: if the source folder does not exist, apply currently *skips* the move, reports success, and exits 0 - so "the move completes" is not yet always true when the tool says it is |
+| AC-1 | A same-volume move is a rename: fast, atomic, and the old folder is gone afterwards | cross-volume guard + test; missing-source guard at plan AND apply, folder postcondition in verify (AC-55, closed 2026-07-30) | Proven |
 | AC-3 | If something already exists at the destination, nothing happens at all | guard + exit-2 test | Proven for the default. **Contested by AC-58**: choosing `keep-dest`/`keep-src` silently bypasses this guard without implementing anything |
 | AC-4 | A git worktree is never moved without an explicit override | guard test | Test-thin (the `--force` override path itself is untested) |
 | AC-5 | The plan lists every store that references the project - nothing is touched that was not listed | per-store tests | Test-thin (no single test seeds all stores at once) |
@@ -48,9 +48,9 @@ Standing column vocabulary:
 | AC-13 | Every variant key in `.claude.json` migrates; the file still parses; entry count unchanged | detect/plan tests + escaping suite | Test-thin (no apply-then-readback integration test), though the AR-01/AR-04 regression suite now covers the raw-byte layer |
 | AC-14 | `history.jsonl` entries follow the project to its new path | detect/plan tests | Test-thin (same gap) |
 | AC-15 | The dry run shows everything and writes nothing | byte-identical-after-plan test | Proven |
-| AC-16 | Before the first write, a backup exists containing the original of every file the run will modify | sha256 snapshot test | **Contested by AC-54**: the promise reads "every file the run will modify", and holds for those - but rollback *deletes* files the run never modified and never backed up (sidecars in a renamed directory). Decide whether this criterion says what you mean: is the unit of protection the *file touched* or the *tree affected*? |
-| AC-17 | Rollback puts everything back the way it was | restore tests + byte-identity proof (AC-17v) | **Contested by AC-54**: restores what was backed up, byte-proven - and can destroy unbacked sidecars in the same directory while reporting success. The 5/5 proof's denominator is the manifest, not the tree |
-| AC-18 | Verify passes only if every promised postcondition actually holds on disk | pass-case test | **Contested by AC-57**: verify checks old-key absence but not new-key presence, ignores the folder move, skips malformed history lines, and treats some read errors as absence - so a green verify does not yet check everything this criterion promises |
+| AC-16 | Before the first write, a backup exists containing the original of every file the run will modify | recursive snapshot: every file under a renamed directory is captured, so the manifest now covers the affected TREE, not just the touched files (AC-54, closed 2026-07-30) | Proven |
+| AC-17 | Rollback puts everything back the way it was | rename-back rollback + tree-map tests (sidecars, binaries, injected mid-apply failure, real-FS end-to-end) + byte-identity proof (AC-17v) | Proven - and the proof's denominator is now the tree, not the manifest (AC-54, closed 2026-07-30) |
+| AC-18 | Verify passes only if every promised postcondition actually holds on disk | pass-case test; folder postconditions now checked when the plan moved a folder (AC-55) | **Still contested by AC-57**: destination-key presence, applied-scope awareness, malformed history lines, and read-errors-as-absence remain open |
 | AC-19 | Running apply twice is safe: the second run refuses (exit 2), which is the "already done" signal | behavior + decision 19b | Proven |
 | AC-20 | An unrecognized store shape stops everything before any write | state-untouched test | Proven |
 | AC-21 | A live Claude Code process blocks the run unless you force it | lock-detection test | Proven |
@@ -63,9 +63,10 @@ Standing column vocabulary:
 
 Worth noticing during the read, because a sign-off blesses the boundary as well as the content:
 
-- **No criterion covers settings writes** - which is where the fail-open overwrite lives
-  (S-04 AC-56). S-01 predates `archive`/`associate`/`repair`; their criteria live in S-02/S-03.
-- **No criterion demands the source folder exist** before a move is planned (S-04 AC-55).
+- **No criterion covers settings writes** - that gap is where the fail-open overwrite lived;
+  closed under S-04 AC-56 (2026-07-30). S-01 predates `archive`/`associate`/`repair`; their
+  criteria live in S-02/S-03.
+- ~~No criterion demands the source folder exist~~ closed 2026-07-30: plan, apply, and verify all enforce it (S-04 AC-55).
 - **No criterion constrains I/O failure behavior** (error versus silently-empty scan;
   S-04 AC-59).
 - The `--recursive` and scope flags are not promised by any S-01 criterion - which is exactly

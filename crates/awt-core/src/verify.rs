@@ -24,6 +24,36 @@ pub fn verify(
         out.extend(store.verify(&ctx, mv)?);
     }
     if let Some(m) = manifest {
+        // Folder postcondition (AC-55): when the plan actually moved the project folder (a
+        // <move-tree> marker is in the manifest), the move's most basic claim must be checked
+        // from disk: the destination is a directory and the source is gone. Before this check,
+        // every store could verify green while no folder move had happened at all. Scoped to
+        // manifest-carrying verifies because only the manifest knows whether this run was a
+        // folder move or an associate (which legitimately has no source folder).
+        if m.entries.iter().any(|e| e.backup.starts_with("<move-tree")) {
+            let src = mv.src_abs.replace('\\', "/");
+            let dst = mv.dst_abs.replace('\\', "/");
+            let dst_ok = fs.is_dir(Path::new(&dst));
+            out.push(VerifyResult {
+                check: "project folder present at destination".into(),
+                ok: dst_ok,
+                detail: if dst_ok {
+                    dst.clone()
+                } else {
+                    format!("{dst} is not a directory")
+                },
+            });
+            let src_gone = !fs.exists(Path::new(&src));
+            out.push(VerifyResult {
+                check: "project folder absent at source".into(),
+                ok: src_gone,
+                detail: if src_gone {
+                    src.clone()
+                } else {
+                    format!("{src} still exists")
+                },
+            });
+        }
         for e in &m.entries {
             if !e.original.ends_with(".jsonl") || e.sha256.is_empty() {
                 continue;

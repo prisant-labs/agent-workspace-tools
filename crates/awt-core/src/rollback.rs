@@ -103,7 +103,52 @@ pub fn rollback(manifest_path: &Path, fs: &dyn FileSystem) -> Result<()> {
     if had_move_tree && fs.exists(Path::new(&dst)) && !fs.exists(Path::new(&src)) {
         fs.rename(Path::new(&dst), Path::new(&src))?;
     }
-    // 2. restore each backed-up file to its original path; rename dirs back
+    // 1.5. Rename each renamed project-state DIRECTORY back, wholesale, BEFORE any file
+    //      restore (AC-54). The rename that apply performed left every byte on disk under the
+    //      new name - sidecars included - so renaming the directory back is the only rollback
+    //      that provably returns the COMPLETE tree, not just the manifested files. The first
+    //      shipped version instead restored manifested files into a recreated old dir and then
+    //      remove_dir_all'd the new dir, which destroyed every unbacked sidecar during the
+    //      undo. Order matters: the restore in step 2 writes into the old paths, so the old
+    //      dir must exist again first, and creating it by restore-then-delete is exactly the
+    //      bug this replaces.
+    let (old_enc, new_enc) = (
+        crate::paths::encode_project_dir(v["src_abs"].as_str().unwrap()),
+        crate::paths::encode_project_dir(v["dst_abs"].as_str().unwrap()),
+    );
+    for e in entries {
+        if !e["backup"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("<dir-rename")
+        {
+            continue;
+        }
+        let old_dir = e["original"].as_str().unwrap();
+        if !old_dir.contains(&old_enc) {
+            continue;
+        }
+        let new_dir = old_dir.replace(&old_enc, &new_enc);
+        let new_exists = fs.exists(Path::new(&new_dir));
+        let old_exists = fs.exists(Path::new(old_dir));
+        match (new_exists, old_exists) {
+            // The normal post-apply state: rename the whole tree back.
+            (true, false) => fs.rename(Path::new(&new_dir), Path::new(old_dir))?,
+            // Apply failed before this dir was renamed: nothing to undo here.
+            (false, true) | (false, false) => {}
+            // Both exist: someone recreated the old dir since apply. Merging blind could
+            // clobber either side; refuse loudly rather than guess.
+            (true, true) => {
+                return Err(AwtError::VerifyFailed(format!(
+                    "rollback: both {old_dir} and {new_dir} exist; refusing to merge them - \
+                     resolve manually, then re-run rollback"
+                )));
+            }
+        }
+    }
+    // 2. restore each backed-up file to its original path (over the renamed-back tree, so
+    //    rewritten files get their pre-migration bytes while untouched sidecars are already
+    //    home)
     for e in entries {
         let original = e["original"].as_str().unwrap();
         let backup = e["backup"].as_str().unwrap();
@@ -126,29 +171,10 @@ pub fn rollback(manifest_path: &Path, fs: &dyn FileSystem) -> Result<()> {
         }
         fs.write(Path::new(original), &bytes)?;
     }
-    // 3. Remove the lingering new-encoded projects dir. apply renamed the old-encoded dir to
-    //    the new one; step 2 restored the transcripts back into the OLD-encoded dir, so the
-    //    new-encoded dir now holds only a stale duplicate. Leaving it turns an "undo" into an
-    //    orphan - the exact residue this tool detects. Derive it from a dir-rename entry (whose
-    //    `original` is the old-encoded dir) by swapping the old project encoding for the new.
-    let (old_enc, new_enc) = (
-        crate::paths::encode_project_dir(v["src_abs"].as_str().unwrap()),
-        crate::paths::encode_project_dir(v["dst_abs"].as_str().unwrap()),
-    );
-    for e in entries {
-        let backup = e["backup"].as_str().unwrap();
-        if !backup.starts_with("<dir-rename") {
-            continue;
-        }
-        let old_dir = e["original"].as_str().unwrap();
-        if old_dir.contains(&old_enc) {
-            let new_dir = old_dir.replace(&old_enc, &new_enc);
-            if fs.exists(Path::new(&new_dir)) {
-                fs.remove_dir_all(Path::new(&new_dir))?;
-            }
-        }
-    }
-    // 4. Un-merge (the merge counterpart of step 3). For a merge into an existing B, step 2
+    // (The old step 3 - remove_dir_all on the new-encoded dir - is gone. Step 1.5's
+    //  rename-back both restores the tree and leaves nothing to remove: the same operation
+    //  that guarantees completeness also guarantees no orphan.)
+    // 4. Un-merge (the merge counterpart of the dir handling above). For a merge into an existing B, step 2
     //    already restored A's files to their pre-merge paths under E--A; here we remove EXACTLY
     //    the copies that were merged into B, addressed by RELATIVE path, and nothing else. B's
     //    own transcripts were never backed up, so they never appear in `entries` and are never
