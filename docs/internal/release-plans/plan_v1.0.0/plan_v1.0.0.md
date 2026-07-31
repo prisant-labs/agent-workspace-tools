@@ -75,7 +75,7 @@ Re-evaluated 2026-07-28.
 | (d) Phases done | Every plan's completion table shows every phase `Done` | FAIL - S-01 phases 1-9, S-02 phases 13-15, and S-03 phases 16.1-16.4 Complete; S-04 phases 17.2-17.11 Not started |
 | (e) Staleness | No `spec.md` edited after its sibling `implementation-plan.md`'s last edit | PASS |
 | (f) Acceptance run | The manual acceptance run in `docs/acceptance-run.md` passes on real data | **PASS - clean end-to-end run on 2026-07-30** against a fresh scratch copy at `e50eba2`. All 15 steps passed, no new defects, every exit code matched the contract. See [acceptance-run-2026-07-30.md](acceptance-run-2026-07-30.md); the earlier failing run is [acceptance-run-2026-07-28.md](acceptance-run-2026-07-28.md). Happy-path evidence only; adversarial coverage is gate (g) |
-| (g) Safety closeout | Every Critical and High AC in S-04 is closed and an adversarial acceptance run passes | **FAIL - S-04 opened 2026-07-30** after an external audit; AC-53a closed same day, AC-54..AC-62 open. See [S-04_safety-closeout/spec.md](S-04_safety-closeout/spec.md) |
+| (g) Safety closeout | Every Critical and High AC in S-04 is closed and an adversarial acceptance run passes | **FAIL - in progress.** All three Criticals closed 2026-07-30 (AC-54 whole-tree rollback, AC-55 missing-source, AC-56 settings fail-open) plus AC-53a; the Highs AC-57..AC-62 and the adversarial run (17.11) remain. See [S-04_safety-closeout/spec.md](S-04_safety-closeout/spec.md) |
 
 Gate (a) will FAIL until the maintainer reviews S-01's carved spec and flips it from
 `draft` to `committed` (it carries `requires-human-review: true` from its

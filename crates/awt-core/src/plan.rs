@@ -137,9 +137,22 @@ pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) 
             mv.src_abs, mv.dst_abs
         )));
     }
-    // Guard: destination folder exists (only relevant when we will move the folder there)
+    // Guard: destination folder exists (only relevant when we will move the folder there).
+    // Checked BEFORE the source guard deliberately: after a completed move, the source is
+    // gone AND the destination exists, and the re-run must refuse with DestinationExists -
+    // that specific refusal is the documented idempotency signal (AC-19, decision 19b). If
+    // the source guard fired first, a re-run would read as "source folder not found", which
+    // sends the user hunting for a typo instead of telling them the move already happened.
     if opts.move_folder && fs.exists(Path::new(&mv.dst_abs.replace('\\', "/"))) {
         return Err(AwtError::DestinationExists(mv.dst_abs.clone()));
+    }
+    // Guard: the source must exist as a directory when a real folder move is requested
+    // (AC-55). Without this, a mistyped or already-moved source planned a "move" whose
+    // MoveTree step would silently no-op at apply time while every store was still
+    // rewritten toward the destination - a false success. Deliberately NOT applied when
+    // move_folder is false: `associate` exists precisely for gone folders.
+    if opts.move_folder && !fs.is_dir(Path::new(&mv.src_abs.replace('\\', "/"))) {
+        return Err(AwtError::SourceMissing(mv.src_abs.clone()));
     }
     // Guard: worktree source (.git is a file, not a dir)
     let git = format!("{}/.git", mv.src_abs.replace('\\', "/"));
@@ -373,6 +386,9 @@ mod tests {
     #[test]
     fn refuses_when_destination_folder_exists() {
         let fs = MemoryFileSystem::new();
+        // Source exists too: this test must isolate the DESTINATION guard, and (per AC-19)
+        // dest-exists must fire even when the source is also present.
+        fs.write(Path::new("E:/Projects/A/.keep"), b"x").unwrap();
         fs.write(Path::new("E:/Projects/B/keep.txt"), b"x").unwrap();
         let mv = Move {
             src_abs: "E:\\Projects\\A".into(),
@@ -421,6 +437,7 @@ mod tests {
     #[test]
     fn refuses_when_lock_exists_and_force_false() {
         let fs = MemoryFileSystem::new();
+        fs.write(Path::new("E:/Projects/A/.keep"), b"x").unwrap(); // source exists (AC-55 guard)
         fs.write(Path::new("/h/.claude/ide/session.lock"), b"")
             .unwrap();
         let mv = Move {
@@ -437,6 +454,7 @@ mod tests {
     #[test]
     fn proceeds_with_warning_when_lock_exists_and_force_true() {
         let fs = MemoryFileSystem::new();
+        fs.write(Path::new("E:/Projects/A/.keep"), b"x").unwrap(); // source exists (AC-55 guard)
         fs.write(Path::new("/h/.claude/ide/session.lock"), b"")
             .unwrap();
         let mv = Move {
@@ -499,7 +517,8 @@ mod tests {
     #[test]
     fn render_plan_locks_format() {
         let fs = MemoryFileSystem::new();
-        // Seed a claude.json with a source key so the plan emits a json key change.
+        fs.write(Path::new("E:/Projects/A/.keep"), b"x").unwrap(); // source exists (AC-55 guard)
+                                                                   // Seed a claude.json with a source key so the plan emits a json key change.
         let json = r#"{"projects":{"E:\\Projects\\A":{}}}"#;
         fs.write(Path::new("/h/.claude.json"), json.as_bytes())
             .unwrap();

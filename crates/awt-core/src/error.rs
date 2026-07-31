@@ -6,6 +6,10 @@ pub enum AwtError {
     Locked(String),
     /// Cross-volume move attempted. Deferred to v1.x (spec AC-2). Nothing written.
     CrossVolume(String),
+    /// A folder move was requested but the source is not a directory on disk (AC-55).
+    /// Without this guard, apply silently skipped the move and reported success while
+    /// Claude state was rewritten toward a destination no folder occupies.
+    SourceMissing(String),
     UnrecognizedFormat(String),
     VerifyFailed(String),
     Io(std::io::Error),
@@ -27,6 +31,11 @@ impl std::fmt::Display for AwtError {
             AwtError::Ambiguous(s) | AwtError::Locked(s) | AwtError::CrossVolume(s) => {
                 write!(f, "{s}")
             }
+            AwtError::SourceMissing(s) => write!(
+                f,
+                "source folder not found: {s}. A move needs an existing source directory; \
+                 check the path, or use 'awt associate' to re-home history whose folder is gone"
+            ),
             AwtError::UnrecognizedFormat(s) => write!(f, "unrecognized store format: {s}"),
             AwtError::VerifyFailed(s) => write!(f, "verification failed: {s}"),
             AwtError::Io(e) => write!(f, "{e}"),

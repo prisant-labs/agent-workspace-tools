@@ -3,6 +3,39 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-07-30 (night) - the three S-04 Criticals closed (AC-54, AC-55, AC-56)
+
+Phases 17.2-17.4 of the safety closeout, executed red-first; every test failed against the old
+code before its fix. Workspace suite 158 tests (144 before).
+
+- **AC-54 (rollback tree loss).** The snapshot for a directory rename is now recursive - every
+  file, not top-level `*.jsonl` - and rollback renames the whole directory back BEFORE
+  restoring modified files, replacing the restore-then-`remove_dir_all` sequence that destroyed
+  unbacked sidecars during the undo. If both old and new directories exist at rollback time it
+  refuses loudly rather than merging blind. Proven by tree-map comparison (nested markdown,
+  binary blobs, nested transcripts), an injected mid-apply failure exercising auto-rollback
+  with the directory already renamed, and an end-to-end run of the real binary on the real
+  filesystem, since the fix's core operation is a directory rename and an in-memory model
+  could lie about that.
+- **AC-55 (missing-source false success).** `build_plan` refuses a folder move whose source is
+  not a directory (new `SourceMissing`, exit 2), ordered AFTER the destination-exists guard so
+  a re-run of a completed move still reads as "already done" (AC-19's documented idempotency
+  signal) rather than "source not found". A source that vanishes between plan and apply is a
+  hard failure that triggers auto-rollback. Verify now asserts destination-present and
+  source-absent whenever the manifest records a folder move. `associate` is explicitly exempt
+  - gone folders are its purpose - with a test pinning that.
+- **AC-56 (settings fail-open).** `load_settings` fails closed: only file-not-found may
+  initialize a fresh object; read failures, parse failures, invalid UTF-8, and a non-object
+  root all refuse (exit 4) with the file untouched. Writes go through a temp file and rename.
+- **Doc impact:** troubleshooting gains the source-not-found guard entry; the review guide's
+  contested standings for AC-1, AC-16, and AC-17 flip to Proven (AC-18 stays contested by
+  AC-57); the S-04 implementation plan records phases and test map; root CHANGELOG's Fixed and
+  Known-issues sections updated; maintainer-todo 1.1 reflects progress.
+- **Test-suite side effect:** the three CLI plan tests that seeded from the golden fixture
+  hardcoded a source path that only exists on the original dev machine; the new source guard
+  exposed that latent portability bug. They now build a real temp source dir, so they test the
+  same behavior on any machine, CI included.
+
 ## 2026-07-30 (evening) - adversarial audit, S-04 safety closeout, v1.1.0 folded into v1.0.0, retractions
 
 An external adversarial code audit (read-only, report kept local per repo convention) found

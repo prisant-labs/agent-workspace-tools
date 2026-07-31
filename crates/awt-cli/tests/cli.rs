@@ -20,19 +20,10 @@ fn seed_home(home: &std::path::Path, src_abs: &str) {
     std::fs::write(proj_state.join("s.jsonl"), cwd_json.as_bytes()).unwrap();
 }
 
-// Recursively copy a dir tree (std only).
-fn copy_tree(from: &std::path::Path, to: &std::path::Path) {
-    for e in std::fs::read_dir(from).unwrap() {
-        let e = e.unwrap();
-        let dst = to.join(e.file_name());
-        if e.file_type().unwrap().is_dir() {
-            std::fs::create_dir_all(&dst).unwrap();
-            copy_tree(&e.path(), &dst);
-        } else {
-            std::fs::copy(e.path(), &dst).unwrap();
-        }
-    }
-}
+// (A copy_tree helper lived here while the plan tests seeded from the golden fixture. Those
+// tests now build their own real source dirs - see seed_real_move - because the fixture's
+// recorded cwd only exists on the machine that produced it, and the AC-55 source guard
+// correctly refuses a source that does not exist.)
 
 /// Pipe a SessionEnd JSON payload to `awt archive --hook-stdin` and verify the
 /// transcript is archived to the target directory (end-to-end hook integration test).
@@ -105,46 +96,45 @@ fn hook_stdin_archives_transcript() {
     );
 }
 
+/// Create a real, existing source project dir plus a home whose transcript records it as cwd.
+/// Everything lives under caller-owned temp dirs so the AC-55 source-exists guard passes on
+/// any machine, including a CI runner with no E:\ drive. (The fixture-based variant of these
+/// tests hardcoded a real path from the dev machine, which only ever existed there.)
+/// Returns (src_abs, dst_abs); dst shares src's volume and does not exist.
+fn seed_real_move(root: &std::path::Path, home: &std::path::Path) -> (String, String) {
+    let src_dir = root.join("src").join("proj");
+    std::fs::create_dir_all(&src_dir).unwrap();
+    std::fs::write(src_dir.join("f.txt"), b"x").unwrap();
+    let src_abs = src_dir.to_str().unwrap().to_string();
+    seed_home(home, &src_abs);
+    let dst_abs = root.join("dst-nonexistent").to_str().unwrap().to_string();
+    (src_abs, dst_abs)
+}
+
 #[test]
 fn plan_is_non_empty_and_writes_nothing() {
-    let tmp = tempfile::tempdir().unwrap();
-    // Seed the fixture UNDER <temp>/.claude so ProjectIndex (home/.claude/projects) finds it.
-    let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap();
-    let claude = tmp.path().join(".claude");
-    std::fs::create_dir_all(&claude).unwrap();
-    copy_tree(&base.join("test/fixtures/reference-move/before"), &claude);
+    let root = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let (src_abs, dst_abs) = seed_real_move(root.path(), home.path());
 
-    let projects = claude.join("projects/E--Projects-Github-Repos-markdown-for-humans");
-    let before: Vec<(std::path::PathBuf, Vec<u8>)> = std::fs::read_dir(&projects)
-        .unwrap()
-        .map(|e| {
-            let p = e.unwrap().path();
-            let b = std::fs::read(&p).unwrap();
-            (p, b)
-        })
-        .collect();
-    assert!(!before.is_empty(), "fixture seeding failed");
-
-    // The destination must be on the same volume as src (E:) to pass the
-    // cross-volume guard (AC-1). Use a non-existent string path: volume
-    // comparison is string-based (both "E:"), and existence check returns
-    // false for any non-existent path. No real directory is created, so
-    // the test runs even when the runner has no E: drive.
-    let dst_str = "E:\\awt-plan-nonexistent-dst".to_string();
+    let encoded = encode_project_dir_local(&src_abs);
+    let transcript = home
+        .path()
+        .join(".claude")
+        .join("projects")
+        .join(&encoded)
+        .join("s.jsonl");
+    let before = std::fs::read(&transcript).unwrap();
 
     let out = Command::new(env!("CARGO_BIN_EXE_awt"))
         .args([
             "plan",
             "--home",
-            tmp.path().to_str().unwrap(),
+            home.path().to_str().unwrap(),
             "--src",
-            "E:\\Projects\\Github Repos\\markdown-for-humans",
+            &src_abs,
             "--dst",
-            &dst_str,
+            &dst_abs,
         ])
         .output()
         .unwrap();
@@ -157,22 +147,19 @@ fn plan_is_non_empty_and_writes_nothing() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     // Non-vacuous: the plan must actually describe the move and at least one rewrite.
     assert!(
-        stdout.contains("markdown-for-humans"),
+        stdout.contains("proj"),
         "plan did not mention the move: {stdout}"
     );
     assert!(
         stdout.contains("rewrite"),
         "plan produced no rewrites (empty/vacuous plan): {stdout}"
     );
-    // Dry-run wrote nothing: every seeded transcript is byte-identical afterward.
-    for (p, b) in &before {
-        assert_eq!(
-            &std::fs::read(p).unwrap(),
-            b,
-            "plan must not modify {}",
-            p.display()
-        );
-    }
+    // Dry-run wrote nothing: the seeded transcript is byte-identical afterward.
+    assert_eq!(
+        std::fs::read(&transcript).unwrap(),
+        before,
+        "plan must not modify the transcript"
+    );
 }
 
 /// Verifies that `awt apply --json` prints a machine-readable JSON report to stdout
@@ -338,26 +325,20 @@ fn apply_default_writes_report_json_to_backup_dir() {
 /// binary whose `plan --json` returns prose.
 #[test]
 fn plan_json_flag_emits_parseable_json() {
-    let tmp = tempfile::tempdir().unwrap();
-    let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap();
-    let claude = tmp.path().join(".claude");
-    std::fs::create_dir_all(&claude).unwrap();
-    copy_tree(&base.join("test/fixtures/reference-move/before"), &claude);
+    let root = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let (src_abs, dst_abs) = seed_real_move(root.path(), home.path());
 
     let out = Command::new(env!("CARGO_BIN_EXE_awt"))
         .args([
             "plan",
             "--json",
             "--home",
-            tmp.path().to_str().unwrap(),
+            home.path().to_str().unwrap(),
             "--src",
-            r"E:\Projects\Github Repos\markdown-for-humans",
+            &src_abs,
             "--dst",
-            r"E:\awt-plan-nonexistent-dst",
+            &dst_abs,
         ])
         .output()
         .unwrap();
@@ -371,8 +352,8 @@ fn plan_json_flag_emits_parseable_json() {
     let v: serde_json::Value = serde_json::from_str(&stdout)
         .unwrap_or_else(|e| panic!("plan --json did not emit JSON ({e}); got:\n{stdout}"));
 
-    assert_eq!(v["src"], r"E:\Projects\Github Repos\markdown-for-humans");
-    assert_eq!(v["dst"], r"E:\awt-plan-nonexistent-dst");
+    assert_eq!(v["src"], src_abs.as_str());
+    assert_eq!(v["dst"], dst_abs.as_str());
 
     let changes = v["changes"].as_array().expect("changes must be an array");
     assert!(!changes.is_empty(), "vacuous plan: {stdout}");
@@ -397,49 +378,42 @@ fn plan_json_flag_emits_parseable_json() {
 /// `plan --json` must stay a dry run: emitting JSON is not a licence to write.
 #[test]
 fn plan_json_still_writes_nothing() {
-    let tmp = tempfile::tempdir().unwrap();
-    let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap();
-    let claude = tmp.path().join(".claude");
-    std::fs::create_dir_all(&claude).unwrap();
-    copy_tree(&base.join("test/fixtures/reference-move/before"), &claude);
+    let root = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let (src_abs, dst_abs) = seed_real_move(root.path(), home.path());
 
-    let projects = claude.join("projects/E--Projects-Github-Repos-markdown-for-humans");
-    let before: Vec<(std::path::PathBuf, Vec<u8>)> = std::fs::read_dir(&projects)
-        .unwrap()
-        .map(|e| {
-            let p = e.unwrap().path();
-            let b = std::fs::read(&p).unwrap();
-            (p, b)
-        })
-        .collect();
-    assert!(!before.is_empty(), "fixture seeding failed");
+    let encoded = encode_project_dir_local(&src_abs);
+    let transcript = home
+        .path()
+        .join(".claude")
+        .join("projects")
+        .join(&encoded)
+        .join("s.jsonl");
+    let before = std::fs::read(&transcript).unwrap();
 
     Command::new(env!("CARGO_BIN_EXE_awt"))
         .args([
             "plan",
             "--json",
             "--home",
-            tmp.path().to_str().unwrap(),
+            home.path().to_str().unwrap(),
             "--src",
-            r"E:\Projects\Github Repos\markdown-for-humans",
+            &src_abs,
             "--dst",
-            r"E:\awt-plan-nonexistent-dst",
+            &dst_abs,
         ])
         .output()
         .unwrap();
 
-    for (p, b) in &before {
-        assert_eq!(
-            &std::fs::read(p).unwrap(),
-            b,
-            "plan --json must not modify {}",
-            p.display()
-        );
-    }
+    assert_eq!(
+        std::fs::read(&transcript).unwrap(),
+        before,
+        "plan --json must not modify the transcript"
+    );
+    assert!(
+        !std::path::Path::new(&dst_abs).exists(),
+        "plan --json must not create the destination"
+    );
 }
 
 /// `verify --json` must emit the check list as data, and must keep its exit-code contract:

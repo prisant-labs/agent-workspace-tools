@@ -39,8 +39,12 @@ Estimated 7-10 engineering days. The three Criticals, in one line each:
   applied, exits 0, and verify never checks the folder.
 - **A malformed `settings.json` is replaced with an empty one** by the next settings write.
 
-AC-53a (repair refuses invalid UTF-8) already closed, 2026-07-30. Everything else is red-first
-test work an agent can execute; your two calls inside it are 1.2 and 1.3 below.
+**Progress: all three Criticals are closed (2026-07-30, red-first, 158 tests green).** Rollback
+now snapshots recursively and renames the directory back wholesale, so the complete tree
+returns - proven at tree level and end-to-end on the real filesystem. A missing source refuses
+at plan AND apply, and verify checks the folder postconditions. Settings writes fail closed and
+write atomically. AC-53a closed earlier the same day. Remaining: the Highs (AC-57..AC-62) and
+the adversarial acceptance run; your two calls inside them are 1.2 and 1.3 below.
 
 ### 1.2 Decide D10: the real transcripts published in `test/fixtures/` **[HUMAN]**
 

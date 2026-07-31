@@ -10,19 +10,48 @@ fn settings_path(home: &Path) -> PathBuf {
     home.join(".claude").join("settings.json")
 }
 
-fn load_settings(fs: &dyn FileSystem, home: &Path) -> serde_json::Value {
+/// Load settings.json, failing CLOSED on anything except genuine absence (AC-56).
+///
+/// Only io::ErrorKind::NotFound may initialize a fresh, empty settings object: a machine that
+/// has never run Claude Code is a valid empty state. Every other outcome - a read failure, a
+/// parse failure, invalid UTF-8, a root that is not an object - propagates as an error,
+/// because the caller's next step is to WRITE this value back over the user's file. The first
+/// shipped version returned an empty object on any failure, which meant a transient read
+/// error or one malformed byte silently erased the user's entire settings on the next
+/// settings-touching command.
+fn load_settings(fs: &dyn FileSystem, home: &Path) -> Result<serde_json::Value> {
     let path = settings_path(home);
-    if let Ok(bytes) = fs.read(&path) {
-        if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&bytes) {
-            return v;
+    let bytes = match fs.read(&path) {
+        Ok(b) => b,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(serde_json::Value::Object(serde_json::Map::new()));
         }
+        Err(e) => return Err(AwtError::Io(e)),
+    };
+    let v: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| {
+        AwtError::UnrecognizedFormat(format!(
+            "{}: {e}. Refusing to modify settings that do not parse - a write here would \
+             replace your settings with a nearly-empty file. Fix or remove the file first",
+            path.display()
+        ))
+    })?;
+    if !v.is_object() {
+        return Err(AwtError::UnrecognizedFormat(format!(
+            "{}: root is not a JSON object. Refusing to modify settings of an unrecognized \
+             shape",
+            path.display()
+        )));
     }
-    serde_json::Value::Object(serde_json::Map::new())
+    Ok(v)
 }
 
+/// Write settings atomically: serialize to a sibling temp file, then rename over the final
+/// path, so a crash mid-write can never leave a half-written settings.json.
 fn save_settings(fs: &dyn FileSystem, home: &Path, v: &serde_json::Value) -> Result<()> {
     let path = settings_path(home);
-    fs.write(&path, serde_json::to_vec_pretty(v).unwrap().as_slice())?;
+    let tmp = path.with_file_name("settings.json.awt-tmp");
+    fs.write(&tmp, serde_json::to_vec_pretty(v).unwrap().as_slice())?;
+    fs.rename(&tmp, &path)?;
     Ok(())
 }
 
@@ -35,7 +64,7 @@ pub fn set_retention(fs: &dyn FileSystem, home: &Path, days: u32, force_zero: bo
             "cleanupPeriodDays=0 triggers issue #23710; pass --force-zero to override".into(),
         ));
     }
-    let mut v = load_settings(fs, home);
+    let mut v = load_settings(fs, home)?;
     v["cleanupPeriodDays"] = serde_json::json!(days);
     save_settings(fs, home, &v)?;
     Ok(())
@@ -66,7 +95,7 @@ pub fn install_session_end_hook(
     exe_path: &Path,
     archive_dir: &Path,
 ) -> Result<()> {
-    let mut v = load_settings(fs, home);
+    let mut v = load_settings(fs, home)?;
     let cmd = format!(
         "{} archive --hook-stdin --archive-dir \"{}\"",
         exe_path.to_string_lossy(),
@@ -93,7 +122,7 @@ pub fn install_session_end_hook(
 /// Remove any awt archive SessionEnd hook entries from ~/.claude/settings.json.
 /// Leaves all other SessionEnd entries untouched.
 pub fn uninstall_session_end_hook(fs: &dyn FileSystem, home: &Path) -> Result<()> {
-    let mut v = load_settings(fs, home);
+    let mut v = load_settings(fs, home)?;
     if let Some(arr) = v
         .get_mut("hooks")
         .and_then(|h| h.get_mut("SessionEnd"))
