@@ -80,6 +80,9 @@ materially incorrect.
   that verification and backup do not cover) each either acquire a full spec, implementation,
   and tests, or are removed from the v1 surface. **Default for this effort: remove them.** A
   safety-affecting flag that does nothing is worse than a smaller honest surface.
+  **Executed 2026-07-30 on the maintainer's explicit confirmation:** all three removed end to
+  end; nested projects are a hard refusal naming the children; the collision guard is
+  unconditional; rejected-flag and refusal tests added.
 
 - **AC-59 (I/O failure is never absence).** In planning, backup, apply, and verify paths, a
   failed directory read or file read is an error, not an empty result. Missing *optional* roots

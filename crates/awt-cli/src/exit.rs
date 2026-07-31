@@ -11,7 +11,8 @@ pub fn code_for(err: &AwtError) -> i32 {
         | AwtError::Ambiguous(_)
         | AwtError::Locked(_)
         | AwtError::CrossVolume(_)
-        | AwtError::SourceMissing(_) => 2,
+        | AwtError::SourceMissing(_)
+        | AwtError::NestedProjects(_) => 2,
         AwtError::VerifyFailed(_) => 3,
         AwtError::UnrecognizedFormat(_) => 4,
         AwtError::Io(_) => 1,
@@ -31,6 +32,7 @@ mod tests {
         assert_eq!(code_for(&AwtError::Locked("l".into())), 2);
         assert_eq!(code_for(&AwtError::CrossVolume("c".into())), 2);
         assert_eq!(code_for(&AwtError::SourceMissing("s".into())), 2);
+        assert_eq!(code_for(&AwtError::NestedProjects("n".into())), 2);
         // These three each need their own code: a script must be able to tell a bad
         // write (3) from a shape we refused to touch at all (4) from plain io (1).
         assert_eq!(code_for(&AwtError::VerifyFailed("v".into())), 3);

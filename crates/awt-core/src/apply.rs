@@ -213,7 +213,7 @@ mod tests {
     use crate::error::AwtError;
     use crate::fs::{FileSystem, MemoryFileSystem};
     use crate::model::{Change, Move};
-    use crate::plan::{build_plan, Collision, PlanOpts};
+    use crate::plan::{build_plan, PlanOpts};
     use std::path::Path;
 
     #[test]
@@ -230,11 +230,8 @@ mod tests {
             dst_abs: "E:\\Projects\\B".into(),
         };
         let opts = PlanOpts {
-            recursive: false,
-            on_collision: Collision::Refuse,
             force: false,
             move_folder: true,
-            scope: crate::model::Scope::Standard,
         };
         let plan = build_plan(&fs, Path::new("/h"), &mv, &opts).unwrap();
         apply(&plan, &fs, Path::new("/backup"), "T").unwrap();
@@ -258,11 +255,8 @@ mod tests {
             dst_abs: "E:\\Projects\\B".into(),
         };
         let opts = PlanOpts {
-            recursive: false,
-            on_collision: Collision::Refuse,
             force: false,
             move_folder: true,
-            scope: crate::model::Scope::Standard,
         };
         let mut plan = build_plan(&fs, Path::new("/h"), &mv, &opts).unwrap();
         // Inject an impossible expected count so apply's count-guard trips mid-apply (after the
@@ -306,11 +300,8 @@ mod tests {
             dst_abs: "E:\\Projects\\B".into(),
         };
         let opts = PlanOpts {
-            recursive: false,
-            on_collision: Collision::Refuse,
             force: false,
             move_folder: true,
-            scope: crate::model::Scope::Standard,
         };
         let plan = build_plan(&fs, Path::new("/h"), &mv, &opts).unwrap();
         let aopts = ApplyOpts {
@@ -344,11 +335,8 @@ mod tests {
             dst_abs: "E:\\Projects\\B".into(),
         };
         let opts = PlanOpts {
-            recursive: false,
-            on_collision: Collision::Refuse,
             force: false,
             move_folder: true,
-            scope: crate::model::Scope::Standard,
         };
         let err = build_plan(&fs, Path::new("/h"), &mv, &opts).unwrap_err();
         assert!(matches!(err, AwtError::UnrecognizedFormat(_)));

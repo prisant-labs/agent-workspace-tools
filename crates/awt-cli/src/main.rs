@@ -7,8 +7,8 @@ use awt_core::doctor::{doctor, scan};
 use awt_core::error::AwtError;
 use awt_core::fs::FileSystem;
 use awt_core::fs::RealFileSystem;
-use awt_core::model::{Move, Scope};
-use awt_core::plan::{build_plan, render_plan, Collision, PlanOpts};
+use awt_core::model::Move;
+use awt_core::plan::{build_plan, render_plan, PlanOpts};
 use awt_core::rollback::{rollback, verify_rollback};
 use awt_core::verify::verify;
 use clap::{Parser, Subcommand};
@@ -36,19 +36,15 @@ struct Cli {
     /// Allow overwriting a destination that already exists
     #[arg(long, global = true)]
     force: bool,
-    /// Also move nested projects under src
-    #[arg(long, global = true)]
-    recursive: bool,
     /// Disable automatic rollback on apply failure
     #[arg(long, global = true)]
     no_auto_rollback: bool,
-    /// Collision strategy: refuse (default), keep-dest, keep-src
-    #[arg(long, global = true)]
-    on_collision: Option<String>,
-    /// Rewrite scope: minimal, standard (default), full
-    #[arg(long, global = true)]
-    scope: Option<String>,
 }
+// AC-58 (2026-07-30): --recursive, --on-collision, and --scope were removed rather than left
+// advertised-but-inert. keep-dest/keep-src silently bypassed the collision guard without
+// implementing anything; --recursive silenced the nested-project warning while moving
+// nothing (nested projects are now a hard refusal); minimal could never verify and full
+// rewrote files verification did not cover. Reintroduction requires a real spec.
 
 #[derive(Subcommand)]
 enum Cmd {
@@ -228,22 +224,9 @@ fn print_scan(rep: &awt_core::doctor::ScanReport, src: &str, json: bool) {
 }
 
 fn plan_opts(cli: &Cli) -> PlanOpts {
-    let scope = match cli.scope.as_deref() {
-        Some("minimal") => Scope::Minimal,
-        Some("full") => Scope::Full,
-        _ => Scope::Standard,
-    };
-    let on_collision = match cli.on_collision.as_deref() {
-        Some("keep-dest") => Collision::KeepDest,
-        Some("keep-src") => Collision::KeepSrc,
-        _ => Collision::Refuse,
-    };
     PlanOpts {
-        recursive: cli.recursive,
-        on_collision,
         force: cli.force,
         move_folder: true,
-        scope,
     }
 }
 
@@ -547,11 +530,6 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
                     "--no-reassociate and --no-export together leave nothing to do".into(),
                 ));
             }
-            let on_collision = match cli.on_collision.as_deref() {
-                Some("keep-dest") => Collision::KeepDest,
-                Some("keep-src") => Collision::KeepSrc,
-                _ => Collision::Refuse,
-            };
             let aopts = AssociateOpts {
                 reassociate,
                 export,
@@ -559,7 +537,6 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
                     .clone()
                     .unwrap_or_else(|| ".claude-sessions".into()),
                 run_id: pick_run_id(),
-                on_collision,
             };
             let r = associate(fs, home, from, to, &aopts)?;
             let export_loc = format!("{}/{}", to.replace('\\', "/"), aopts.export_subdir);

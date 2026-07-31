@@ -168,7 +168,7 @@ mod tests {
     use super::*;
     use crate::fs::MemoryFileSystem;
     use crate::model::Move;
-    use crate::plan::{build_plan, Collision, PlanOpts};
+    use crate::plan::{build_plan, PlanOpts};
     use std::path::Path;
 
     #[test]
@@ -186,11 +186,8 @@ mod tests {
             dst_abs: "E:\\Projects\\B".into(),
         };
         let opts = PlanOpts {
-            recursive: false,
-            on_collision: Collision::Refuse,
             force: false,
             move_folder: true,
-            scope: crate::model::Scope::Standard,
         };
         let plan = build_plan(&fs, Path::new("/h"), &mv, &opts).unwrap();
         let m = snapshot(&plan, &fs, Path::new("/backup"), "TEST").unwrap();
@@ -211,11 +208,8 @@ mod tests {
             dst_abs: "E:\\Projects\\B".into(),
         };
         let opts = PlanOpts {
-            recursive: false,
-            on_collision: Collision::Refuse,
             force: false,
             move_folder: true,
-            scope: crate::model::Scope::Standard,
         };
         let plan = build_plan(&fs, Path::new("/h"), &mv, &opts).unwrap();
         let m = snapshot(&plan, &fs, Path::new("/backup"), "TEST").unwrap();

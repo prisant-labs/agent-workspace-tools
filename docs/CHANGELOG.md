@@ -3,6 +3,29 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-07-30 (later still) - AC-58 executed, dependabot queue processed, D10 read aid built
+
+Four maintainer decisions collected and executed in one sitting: remove the inert options
+(AC-58), aid-read-rewrite for the published transcripts (D10), branch protection after the
+D10 rewrite, dependabot processed now.
+
+- **AC-58 executed.** `Collision` and `Scope` enums, the Minimal/Full plan branches,
+  `Ctx.scope`, and the three CLI flags deleted end to end; 22 files swept. Nested projects
+  are a hard refusal (`NestedProjects`, exit 2) that names the children - the removed
+  `--recursive` only ever silenced that warning. The collision guard is unconditional. clap
+  rejects the removed flags with exit 2, pinned by a binary test. Workspace suite 168 tests.
+  Docs: commands.md flag table and notes, troubleshooting guard entry, glossary Scope entry
+  rewritten as historical, quickstart guard list, review-guide AC-3 flips to Proven and the
+  AC-18 scope caveat closes, AC-44 amended in the S-02 canonical and pointer specs
+  ("refuse by default" becomes "refuse, full stop").
+- **D10 read aid** (local-only, `_local/fixture-review/`): every email/URL/base64/secret-shape
+  hit across the four fixture transcripts with file and line, pre-triaged - the 60
+  `sk-`-prefixed strings are kebab-case task IDs, not keys. Exposure data recorded: 0 human
+  views in 14 days but 60 clones from 28 unique sources, which shifts the priority from
+  deletion to rotation-if-needed.
+- **Dependabot**: checkout 4->7, cache 4->6, and the grouped cargo bumps merged CI-green; the
+  sha2 major rebases behind them.
+
 ## 2026-07-30 (late night) - three S-04 Highs closed (AC-57, AC-59, AC-60)
 
 Phases 17.5-17.7, red-first; workspace suite 164 tests (158 before).
