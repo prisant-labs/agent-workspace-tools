@@ -16,6 +16,14 @@ pub trait FileSystem {
     fn remove_file(&self, path: &Path) -> io::Result<()>;
     fn remove_dir_all(&self, path: &Path) -> io::Result<()>;
     fn mtime_secs(&self, path: &Path) -> io::Result<u64>;
+    /// True if `path` is a reparse point (Windows junction or symlink) rather than a plain
+    /// file or directory (AC-61). Mutation and archive walks refuse these: following a link
+    /// inside a tree being snapshotted, rewritten, or archived lets the operation escape the
+    /// tree it believes it is confined to. Defaulted to false so read-only test doubles need
+    /// not care.
+    fn is_reparse_point(&self, _path: &Path) -> bool {
+        false
+    }
 }
 
 /// `read_dir` where a MISSING directory is a valid empty result but any other failure is an
@@ -38,6 +46,19 @@ pub fn walk_files_strict(fs: &dyn FileSystem, root: &Path) -> crate::error::Resu
     let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
         for child in fs.read_dir(&dir)? {
+            // Reparse points (junctions/symlinks) are refused outright in mutation walks
+            // (AC-61): following one lets a snapshot, rewrite, or delete escape the tree it
+            // believes it is confined to, and NOT following one means the backup silently
+            // covers less than the directory appears to contain. Neither is acceptable
+            // during a write; refuse and let the user relocate the link first.
+            if fs.is_reparse_point(&child) {
+                return Err(crate::error::AwtError::Locked(format!(
+                    "reparse point (junction or symlink) inside the tree: {}. Mutation and \
+                     archive operations refuse links because following them can escape the \
+                     tree being operated on. Remove or relocate the link, then re-run.",
+                    child.display()
+                )));
+            }
             if fs.is_dir(&child) {
                 stack.push(child);
             } else {
@@ -132,6 +153,25 @@ impl FileSystem for RealFileSystem {
             .unwrap_or_default()
             .as_secs())
     }
+    fn is_reparse_point(&self, path: &Path) -> bool {
+        // symlink_metadata does NOT follow the link, which is the whole point here.
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::MetadataExt;
+            const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+            // Junctions are reparse points but std's is_symlink() has not always reported
+            // them, so check the attribute bit directly rather than trusting the FileType.
+            std::fs::symlink_metadata(path)
+                .map(|m| m.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0)
+                .unwrap_or(false)
+        }
+        #[cfg(not(windows))]
+        {
+            std::fs::symlink_metadata(path)
+                .map(|m| m.file_type().is_symlink())
+                .unwrap_or(false)
+        }
+    }
 }
 
 /// An in-memory filesystem that models NTFS case behavior:
@@ -156,13 +196,23 @@ pub struct MemoryFileSystem {
     // key   : lowercased normalized path (for case-insensitive lookup)
     // value : (original-cased normalized path, file bytes, mtime unix secs)
     files: Mutex<BTreeMap<String, FsEntry>>,
+    // Paths registered as reparse points (junctions/symlinks) for AC-61 tests.
+    reparse: Mutex<std::collections::BTreeSet<String>>,
 }
 
 impl MemoryFileSystem {
     pub fn new() -> Self {
         Self {
             files: Mutex::new(BTreeMap::new()),
+            reparse: Mutex::new(std::collections::BTreeSet::new()),
         }
+    }
+
+    /// Register `path` as a reparse point (junction/symlink) so `is_reparse_point` reports
+    /// it. Test-support: the in-memory model has no real links, but the walks that refuse
+    /// them (AC-61) must be testable without touching the real filesystem.
+    pub fn mark_reparse(&self, path: &Path) {
+        self.reparse.lock().unwrap().insert(norm_key(path));
     }
 
     /// Write a file with an explicit mtime (Unix seconds). Intended for tests
@@ -314,6 +364,9 @@ impl FileSystem for MemoryFileSystem {
             .get(&norm_key(path))
             .map(|(_, _, mtime)| *mtime)
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, norm(path)))
+    }
+    fn is_reparse_point(&self, path: &Path) -> bool {
+        self.reparse.lock().unwrap().contains(&norm_key(path))
     }
 }
 
