@@ -3,6 +3,33 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-07-30 (late night) - three S-04 Highs closed (AC-57, AC-59, AC-60)
+
+Phases 17.5-17.7, red-first; workspace suite 164 tests (158 before).
+
+- **AC-57 (plan-derived verification).** `verify` now accepts the applied plan and asserts
+  every planned `claude.json` splice actually landed - destination anchor present, source
+  anchor gone, checked as **raw bytes** so the check lives at the same layer the write does.
+  Malformed `history.jsonl` lines are verification failures instead of silently skipped.
+  Scope-awareness was deliberately not plumbed: the unused `minimal`/`full` tiers are slated
+  for removal under AC-58, after which Standard-only verification is scope-correct by
+  definition.
+- **AC-59 (I/O failure is never absence).** New `walk_files_strict` and `read_dir_optional`
+  primitives in `fs.rs`: mutation-path walks (backup, merge-apply) abort on an unreadable
+  subtree instead of snapshotting around it; plugin-state scans distinguish "no plugins dir"
+  from "could not read it". `apply_verified` treats a verify that ERRORS exactly like a verify
+  that fails - rollback, not a stranded applied-but-unproven migration (the old `?` bubbled
+  past the rollback branch). An unreadable transcripts dir is a failed check, not "zero
+  stale". All proven with a failure-injecting `FailingFs` test double.
+- **AC-60 (plugin hash from recorded spelling).** Plugin-state detection and verification
+  derive candidate hashes from every recorded `cwd` spelling that normalizes to the source
+  path (the reverse index already retained the original spellings), with the caller's own
+  spelling as fallback. Previously `e:/projects/a` resolved every store except the plugin dir
+  recorded under `E:\Projects\A` - and verify repeated the identical wrong derivation, so the
+  stranded dir also passed verification.
+- Doc impact: gate (g) progress, S-04 phase table and test map, review-guide AC-18 flips to
+  Proven (with the scope caveat named), maintainer-todo, root CHANGELOG Fixed entries.
+
 ## 2026-07-30 (night) - the three S-04 Criticals closed (AC-54, AC-55, AC-56)
 
 Phases 17.2-17.4 of the safety closeout, executed red-first; every test failed against the old

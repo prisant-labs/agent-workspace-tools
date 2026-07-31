@@ -162,7 +162,25 @@ impl Store for ClaudeProjects {
         }];
         let old_cwd = format!(r#""cwd":"{}""#, mv.src_abs.replace('\\', "\\\\"));
         let mut stale = 0usize;
-        for child in ctx.fs.read_dir(&new_dir).unwrap_or_default() {
+        // A read_dir failure here is a verification failure, not emptiness (AC-59): "the
+        // transcripts could not be read" must never verify as "zero stale transcripts". A
+        // genuinely absent dir stays a valid empty state (the no-transcripts case above).
+        let children = if new_exists {
+            match ctx.fs.read_dir(&new_dir) {
+                Ok(c) => c,
+                Err(e) => {
+                    out.push(VerifyResult {
+                        check: "moved transcripts readable".into(),
+                        ok: false,
+                        detail: format!("{}: {e}", new_dir.display()),
+                    });
+                    Vec::new()
+                }
+            }
+        } else {
+            Vec::new()
+        };
+        for child in children {
             if child.extension().and_then(|e| e.to_str()) == Some("jsonl") {
                 let bytes = ctx.fs.read(&child)?;
                 let text = std::str::from_utf8(&bytes).map_err(|e| {

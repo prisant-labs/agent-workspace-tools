@@ -128,21 +128,49 @@ impl Store for ClaudeHistory {
         let text = std::str::from_utf8(&bytes)
             .map_err(|e| AwtError::UnrecognizedFormat(format!("history.jsonl: {e}")))?;
         let old = normalize_path(&mv.src_abs);
-        let count = text
-            .lines()
-            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
-            .filter(|v| {
-                v.get("project")
-                    .and_then(|x| x.as_str())
-                    .map(|pr| normalize_path(pr) == old)
-                    .unwrap_or(false)
-            })
-            .count();
-        Ok(vec![VerifyResult {
+        // A malformed line is a verification FAILURE, not something to skip (AC-57). The
+        // previous filter_map silently dropped unparseable lines, so a rewrite that corrupted
+        // a line - the exact accident this check exists to catch - verified green.
+        let mut count = 0usize;
+        let mut malformed = 0usize;
+        let mut first_bad = 0usize;
+        for (i, l) in text.lines().enumerate() {
+            if l.trim().is_empty() {
+                continue;
+            }
+            match serde_json::from_str::<serde_json::Value>(l) {
+                Err(_) => {
+                    if malformed == 0 {
+                        first_bad = i + 1;
+                    }
+                    malformed += 1;
+                }
+                Ok(v) => {
+                    if v.get("project")
+                        .and_then(|x| x.as_str())
+                        .map(|pr| normalize_path(pr) == old)
+                        .unwrap_or(false)
+                    {
+                        count += 1;
+                    }
+                }
+            }
+        }
+        let mut out = vec![VerifyResult {
             check: "zero history lines for old path".into(),
             ok: count == 0,
             detail: format!("{count} lines"),
-        }])
+        }];
+        out.push(VerifyResult {
+            check: "every history line parses".into(),
+            ok: malformed == 0,
+            detail: if malformed == 0 {
+                "all lines parse".into()
+            } else {
+                format!("{malformed} line(s) failed to parse, first at line {first_bad}")
+            },
+        });
+        Ok(out)
     }
 }
 

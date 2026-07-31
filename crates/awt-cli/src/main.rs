@@ -387,7 +387,10 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
                 src_abs: src.clone(),
                 dst_abs: dst.clone(),
             };
-            let results = verify(fs, home, &mv, None)?;
+            // Standalone verify has neither a manifest nor the original plan, so it runs the
+            // store-level postconditions only; the plan-derived splice checks and folder
+            // postconditions run in apply_verified, which has both.
+            let results = verify(fs, home, &mv, None, None)?;
             let failed = results.iter().filter(|r| !r.ok).count();
             if cli.json {
                 let checks: Vec<_> = results

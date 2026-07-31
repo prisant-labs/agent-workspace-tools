@@ -105,6 +105,20 @@ The dating of this section is deferred to the tag. The tag is gated on the v1 sa
   it as applied, and exited 0. A folder move now requires the source to exist at plan time
   (exit 2), a source that vanishes before apply is a hard failure with auto-rollback, and
   verify asserts the destination is present and the source absent (AC-55).
+- **A green verify could miss real damage.** Verification now takes the applied plan and
+  asserts every planned `claude.json` edit actually landed (destination anchor present, source
+  anchor gone, checked as raw bytes); a malformed `history.jsonl` line is a verification
+  failure instead of being silently skipped; an unreadable transcripts directory is a failure
+  instead of "zero stale"; and a verify that cannot run at all now rolls the apply back rather
+  than leaving it applied-but-unproven (AC-57, AC-59).
+- **A read failure could masquerade as emptiness.** Backup and merge walks are now strict - an
+  unreadable subtree aborts the apply before any write instead of producing a snapshot that
+  looks complete while missing files (AC-59).
+- **Plugin state was missed when the path was spelled differently.** The state-dir hash is
+  computed from the exact bytes Claude Code recorded, but detection hashed the caller's typed
+  path - so `e:/projects/a` resolved every store except the plugin dir recorded under
+  `E:\Projects\A`, and verify repeated the same blind spot and passed. Both now derive
+  candidate hashes from every recorded spelling of the path (AC-60).
 - **A malformed `settings.json` was replaced with a nearly-empty one.** Any read or parse
   failure loaded as an empty object that the next `--set-retention` or hook install/uninstall
   wrote over the user's file. Settings operations now refuse (exit 4) unless the file is

@@ -36,7 +36,7 @@ pub fn apply(plan: &Plan, fs: &dyn FileSystem, backup_root: &Path, run_id: &str)
                 // history) - session filenames are UUIDs so this should never fire, but if it
                 // does we stop loudly rather than lose data. Then remove the now-empty `from`.
                 let mut moved = 0usize;
-                for file in crate::fs::walk_files(fs, from) {
+                for file in crate::fs::walk_files_strict(fs, from)? {
                     let rel = file.strip_prefix(from).map_err(|e| {
                         AwtError::VerifyFailed(format!(
                             "merge: {} not under {}: {e}",
@@ -175,7 +175,23 @@ pub fn apply_verified(
         }
     };
     let manifest = crate::backup::Manifest::load(fs, &manifest_path)?;
-    let results = crate::verify::verify(fs, &plan.home, &plan.mv, Some(&manifest))?;
+    // A verify that ERRORS is treated exactly like a verify that fails (AC-59): the apply's
+    // postconditions are unproven either way, and an unproven migration must not stand. The
+    // previous `?` here bubbled the error up PAST the rollback branch, stranding the move in
+    // a "done but unverifiable" state.
+    let results = match crate::verify::verify(fs, &plan.home, &plan.mv, Some(&manifest), Some(plan))
+    {
+        Ok(r) => r,
+        Err(e) => {
+            if opts.auto_rollback {
+                crate::rollback::rollback(&manifest_path, fs)?;
+            }
+            return Err(AwtError::VerifyFailed(format!(
+                "verification could not run ({e}); the apply was rolled back; backup at {}",
+                backup_dir.display()
+            )));
+        }
+    };
     let failed: Vec<_> = results.iter().filter(|r| !r.ok).collect();
     if !failed.is_empty() {
         if opts.auto_rollback {
