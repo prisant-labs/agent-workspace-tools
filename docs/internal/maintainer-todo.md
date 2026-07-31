@@ -86,9 +86,11 @@ and the review guide are reconciled.
 
 ### 1.4 Adversarial acceptance run **[DELEGABLE, you own the verdict]**
 
-After the closeout: the revised matrix (missing source, sidecar-bearing project, malformed
-settings, junction-in-tree, invalid UTF-8, case-variant plugin path) on a fresh scratch copy.
-This is S-04 phase 17.11 and flips hygiene gate (g).
+**Now the only technical step left in the closeout** - every code AC is closed as of
+2026-07-31 (AC-61 path confinement and the synthetic fixtures landed last). The revised
+matrix: missing source, nested project, sidecar-bearing project, malformed settings,
+junction-in-tree (real mklink /J), invalid UTF-8 repair input, case-variant plugin path,
+removed-flag rejection, plus the happy-path core. Fresh scratch copy; flips hygiene gate (g).
 
 ### 1.5 Sign off S-01 **[HUMAN - nobody else can do this]**
 

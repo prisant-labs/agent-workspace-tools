@@ -35,6 +35,12 @@ Each of these stops the run before any change is made and tells you what to do.
   path-keyed state, so the tool refuses. Move the nested project(s) to their own location
   first, then move the parent. (A `--recursive` flag existed in pre-release builds; it was
   removed because it only silenced this warning without actually moving anything.)
+- **Reparse point (junction or symlink) inside the tree.** A move refuses when the
+  project-state directory contains a junction or symlink: following it could let the
+  snapshot or a later delete escape the tree, and not following it means the backup covers
+  less than the directory appears to hold. Remove or relocate the link, then re-run.
+  (`archive` handles links differently: it skips them and archives everything else, because
+  a protective sweep across all projects should not abort on one link.)
 - **Worktree source.** The source's `.git` is a file, not a directory, so it is a git
   worktree; moving it would break its linkage. Move the real repository, or pass `--force`
   if you understand the consequences.

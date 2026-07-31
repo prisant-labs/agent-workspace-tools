@@ -658,23 +658,48 @@ fn associate_result_lines(
     lines
 }
 
-/// Verify that `transcript_path` is under `home/.claude/projects`.
-/// Returns an error if not, so the hook-stdin dispatch fails loudly on unexpected input.
+/// Verify that `transcript_path` is under `home/.claude/projects` SEMANTICALLY, not just
+/// lexically (AC-61).
+///
+/// The first shipped version lowercased both strings and prefix-compared them, which a path
+/// like `<projects>/../../../outside/x.jsonl` defeats: it starts with the accepted prefix as
+/// bytes and escapes it on resolution. Hook input arrives from outside this process, so it
+/// gets the full treatment: reject parent-directory components outright, then canonicalize
+/// both sides (resolving links and relative hops against the real filesystem) and require
+/// containment of the RESOLVED path. Canonicalization also neutralizes a symlinked transcript
+/// pointing out of the tree.
 fn check_transcript_confinement(
     transcript_path: &str,
     home: &std::path::Path,
 ) -> awt_core::error::Result<()> {
+    use std::path::Component;
+    let refuse = |why: &str| {
+        Err(AwtError::UnrecognizedFormat(format!(
+            "transcript_path '{transcript_path}' {why}; hook-stdin input may be malformed \
+             or malicious"
+        )))
+    };
+    let tp = std::path::Path::new(transcript_path);
+    if tp
+        .components()
+        .any(|c| matches!(c, Component::ParentDir | Component::CurDir))
+    {
+        return refuse("contains '..' or '.' components");
+    }
     let projects_root = home.join(".claude").join("projects");
-    let tp_norm = transcript_path.replace('\\', "/").to_lowercase();
-    let pr_norm = projects_root
-        .to_string_lossy()
-        .replace('\\', "/")
-        .to_lowercase();
-    if tp_norm != pr_norm && !tp_norm.starts_with(&format!("{pr_norm}/")) {
-        return Err(AwtError::UnrecognizedFormat(format!(
-            "transcript_path '{transcript_path}' is outside ~/.claude/projects; \
-             hook-stdin input may be malformed"
-        )));
+    // Canonicalize BOTH sides so \\?\-prefixing, 8.3 short names, case, and links are all
+    // resolved the same way before comparing. The transcript must exist to be archived, so
+    // a canonicalize failure is itself a refusal, not a pass.
+    let (Ok(canon_tp), Ok(canon_root)) = (
+        std::fs::canonicalize(tp),
+        std::fs::canonicalize(&projects_root),
+    ) else {
+        return refuse("or the projects root could not be resolved on disk");
+    };
+    let tp_norm = canon_tp.to_string_lossy().to_lowercase();
+    let root_norm = canon_root.to_string_lossy().to_lowercase();
+    if !tp_norm.starts_with(&format!("{root_norm}{}", std::path::MAIN_SEPARATOR)) {
+        return refuse("resolves outside ~/.claude/projects");
     }
     Ok(())
 }
@@ -700,40 +725,81 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
 
-    // --- Finding 8 tests: hook-stdin transcript path confinement ---
+    // --- Finding 8 + AC-61 tests: hook-stdin transcript path confinement ---
+    //
+    // These build REAL temp trees because the confinement is now semantic: paths are
+    // canonicalized against the actual filesystem before comparison (the earlier lexical
+    // prefix check accepted `<projects>/../../outside` because it starts with the accepted
+    // bytes). Consequently a path that does not exist cannot pass either.
+
+    /// Real home with a real transcript under projects, plus a real file outside.
+    /// Returns (home_dir, inside_transcript, outside_file).
+    fn confinement_fixture() -> (tempfile::TempDir, std::path::PathBuf, std::path::PathBuf) {
+        let home = tempfile::tempdir().unwrap();
+        let proj = home.path().join(".claude").join("projects").join("E--p");
+        std::fs::create_dir_all(&proj).unwrap();
+        let inside = proj.join("session.jsonl");
+        std::fs::write(&inside, b"{}\n").unwrap();
+        let outside = home.path().join("outside.jsonl");
+        std::fs::write(&outside, b"{}\n").unwrap();
+        (home, inside, outside)
+    }
 
     #[test]
-    fn transcript_confinement_rejects_path_outside_projects() {
+    fn transcript_confinement_accepts_a_real_path_under_projects() {
+        let (home, inside, _) = confinement_fixture();
         assert!(
-            check_transcript_confinement("/etc/passwd", Path::new("/home/user")).is_err(),
-            "path outside home must be rejected"
+            check_transcript_confinement(inside.to_str().unwrap(), home.path()).is_ok(),
+            "a real transcript under projects must be accepted"
         );
     }
 
     #[test]
-    fn transcript_confinement_rejects_sibling_of_projects() {
-        // A path that is a sibling of the projects dir, not inside it.
+    fn transcript_confinement_rejects_a_real_path_outside_projects() {
+        let (home, _, outside) = confinement_fixture();
         assert!(
-            check_transcript_confinement(
-                "/home/user/.claude/settings.json",
-                Path::new("/home/user"),
-            )
-            .is_err(),
-            "path outside projects dir must be rejected"
+            check_transcript_confinement(outside.to_str().unwrap(), home.path()).is_err(),
+            "a path outside projects must be rejected"
+        );
+    }
+
+    /// The AC-61 case: lexically under the accepted prefix, escapes on resolution. The old
+    /// lowercase-prefix check accepted this.
+    #[test]
+    fn transcript_confinement_rejects_dotdot_escape() {
+        let (home, _, outside) = confinement_fixture();
+        let sneaky = home
+            .path()
+            .join(".claude")
+            .join("projects")
+            .join("E--p")
+            .join("..")
+            .join("..")
+            .join("..")
+            .join(outside.file_name().unwrap());
+        assert!(
+            std::fs::canonicalize(&sneaky).is_ok(),
+            "fixture sanity: the sneaky path must actually resolve to the outside file"
+        );
+        assert!(
+            check_transcript_confinement(sneaky.to_str().unwrap(), home.path()).is_err(),
+            "a '..' path that resolves outside projects must be rejected"
         );
     }
 
     #[test]
-    fn transcript_confinement_accepts_path_under_projects() {
+    fn transcript_confinement_rejects_nonexistent_paths() {
+        let (home, _, _) = confinement_fixture();
+        let ghost = home
+            .path()
+            .join(".claude")
+            .join("projects")
+            .join("nope")
+            .join("ghost.jsonl");
         assert!(
-            check_transcript_confinement(
-                "/home/user/.claude/projects/myproj/session.jsonl",
-                Path::new("/home/user"),
-            )
-            .is_ok(),
-            "path under home/.claude/projects must be accepted"
+            check_transcript_confinement(ghost.to_str().unwrap(), home.path()).is_err(),
+            "a transcript that does not exist cannot be archived and must be refused"
         );
     }
 
