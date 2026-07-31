@@ -33,13 +33,16 @@ pub fn snapshot(
     for (i, c) in plan.changes.iter().enumerate() {
         match c {
             Change::RenameDir { from, .. } => {
-                // Snapshot runs BEFORE any rename, so `from` is the PRE-rename dir. Copy every
-                // *.jsonl under it wholesale: the plan's RewriteFile paths are POST-rename and
-                // do not exist yet, so this is how transcripts actually get backed up (B-01).
-                for child in fs.read_dir(from).unwrap_or_default() {
-                    if child.extension().and_then(|e| e.to_str()) == Some("jsonl") {
-                        backup_one(fs, &dir, &child, &format!("d{i}"), &mut entries)?;
-                    }
+                // Snapshot runs BEFORE any rename, so `from` is the PRE-rename dir. Copy EVERY
+                // file under it recursively - transcripts AND sidecars (AC-54). Two reasons:
+                // the plan's RewriteFile paths are POST-rename and do not exist yet, so this
+                // pass is how modified files actually get their originals captured (B-01); and
+                // the manifest is verify_rollback's denominator, so a file absent here is a
+                // file whose survival was never provable. The first shipped version copied
+                // only top-level *.jsonl, which paired with the old delete-based rollback to
+                // destroy nested sidecars during the undo.
+                for (j, child) in crate::fs::walk_files(fs, from).into_iter().enumerate() {
+                    backup_one(fs, &dir, &child, &format!("d{i}-{j}"), &mut entries)?;
                 }
                 entries.push(ManifestEntry {
                     original: from.to_string_lossy().into_owned(),

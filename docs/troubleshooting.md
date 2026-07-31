@@ -24,6 +24,12 @@ Each of these stops the run before any change is made and tells you what to do.
 
 - **Destination exists.** The destination folder (or a `~/.claude.json` key for it)
   already exists. Choose a destination that does not exist, or resolve the collision.
+- **Source folder not found.** "source folder not found: ... A move needs an existing source
+  directory; check the path, or use 'awt associate' to re-home history whose folder is gone."
+  A move requires the source to exist as a directory at plan time, and to still exist at apply
+  time. If you are re-running a move that already completed, you will see the
+  destination-exists refusal instead - that one means "already done". A path that never
+  existed means a typo; a folder that is genuinely gone is `awt associate`'s job.
 - **Worktree source.** The source's `.git` is a file, not a directory, so it is a git
   worktree; moving it would break its linkage. Move the real repository, or pass `--force`
   if you understand the consequences.

@@ -5,6 +5,7 @@ type: implementation-plan
 status: in-progress
 created: 2026-07-30
 updated: 2026-07-30
+phases-complete: [17.1, 17.2, 17.3, 17.4]
 linked-spec: ./spec.md
 target-release: v1.0.0
 ac-coverage: complete
@@ -25,9 +26,9 @@ settled; the adversarial acceptance run is last because it certifies the sum.
 | Phase | Work | AC | Status |
 |-------|------|----|--------|
 | 17.1 | Repair refuses invalid UTF-8 | AC-53a | **Complete** (landed with the spec: strict `from_utf8` in `build_repair_plan`, red-then-green test, docs updated) |
-| 17.2 | Whole-tree rollback for directory renames: manifest records `from`/`to`, rollback renames the directory back before restoring modified files; tree-hash regression tests incl. sidecars, binaries, injected apply/verify failures | AC-54 | Not started |
-| 17.3 | Source-existence guard in `build_plan`; fatal missing `MoveTree` source in apply; `verify` asserts source-absent and destination-present after a folder move | AC-55 | Not started |
-| 17.4 | Settings fail-closed: only `NotFound` initializes; all other read/parse failures propagate as exit 4; atomic write; malformed/invalid-UTF-8/non-object-root/read-denied tests | AC-56 | Not started |
+| 17.2 | Whole-tree rollback for directory renames: recursive snapshot (every file, not top-level `*.jsonl`), rollback renames the directory back BEFORE restoring modified files, no delete step; refuses loudly if both old and new dirs exist; tree-map regression tests incl. nested sidecars, binary files, injected mid-apply failure, and a real-filesystem end-to-end via the binary | AC-54 | **Complete 2026-07-30** |
+| 17.3 | Source-existence guard in `build_plan` (`SourceMissing`, exit 2, ordered AFTER dest-exists so AC-19's idempotency signal is preserved); fatal missing `MoveTree` source in apply; `verify` asserts destination-present and source-absent whenever the manifest records a folder move; associate (move_folder=false) explicitly exempt | AC-55 | **Complete 2026-07-30** |
+| 17.4 | Settings fail-closed: only `NotFound` initializes; read/parse/UTF-8/non-object failures propagate as exit 4 with the file untouched; atomic tmp+rename write; unrelated-key preservation test | AC-56 | **Complete 2026-07-30** |
 | 17.5 | Failure-injecting `FileSystem` double; read errors become errors across plan/backup/apply/verify; optional-root policy documented in one place | AC-59 | Not started |
 | 17.6 | Plan-derived verification: scope-aware, destination-key presence, folder postcondition, malformed-line and read-error failures | AC-57 | Not started |
 | 17.7 | Plugin hash from recorded `cwd` via `ProjectIndex`; case/separator variant tests | AC-60 | Not started |
@@ -38,6 +39,26 @@ settled; the adversarial acceptance run is last because it certifies the sum.
 
 Medium follow-ups AC-63..AC-65 are scheduled after 17.11 or into v2 prework, whichever comes
 first; they do not gate the tag.
+
+## Test map (phases complete so far)
+
+| Test | AC |
+|------|----|
+| `rollback_restores_the_complete_tree_including_unbacked_sidecars` | AC-54 |
+| `auto_rollback_after_midapply_failure_preserves_sidecars` | AC-54 |
+| `apply_then_rollback_restores_sidecars_on_the_real_filesystem` (binary, real FS) | AC-54 |
+| `plan_refuses_when_the_source_folder_does_not_exist` | AC-55 |
+| `associate_still_plans_without_a_source_folder` | AC-55 (guard scoped correctly) |
+| `apply_hard_fails_if_the_source_vanishes_between_plan_and_apply` | AC-55 |
+| `verify_fails_when_the_folder_move_did_not_actually_happen` | AC-55 |
+| `set_retention_refuses_malformed_settings_and_touches_nothing` | AC-56 |
+| `set_retention_refuses_invalid_utf8_settings` | AC-56 |
+| `set_retention_refuses_a_non_object_root` | AC-56 |
+| `install_hook_refuses_malformed_settings_and_touches_nothing` | AC-56 |
+| `uninstall_hook_refuses_malformed_settings_and_touches_nothing` | AC-56 |
+| `a_missing_settings_file_still_initializes` | AC-56 (over-correction guard) |
+| `settings_writes_preserve_unrelated_keys` | AC-56 |
+| `invalid_utf8_is_refused_and_nothing_is_written` | AC-53a |
 
 ## Decision dependencies
 
