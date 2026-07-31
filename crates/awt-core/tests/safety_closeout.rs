@@ -224,7 +224,8 @@ fn verify_fails_when_the_folder_move_did_not_actually_happen() {
     let manifest =
         awt_core::backup::Manifest::load(&fs, Path::new("/backup/awt-AC55V/manifest.json"))
             .unwrap();
-    let results = awt_core::verify::verify(&fs, Path::new(HOME), &mv(), Some(&manifest)).unwrap();
+    let results =
+        awt_core::verify::verify(&fs, Path::new(HOME), &mv(), Some(&manifest), None).unwrap();
     assert!(
         results.iter().any(|r| !r.ok && r.check.contains("folder")),
         "verify must assert the folder postcondition when the plan moved a folder: {results:?}"

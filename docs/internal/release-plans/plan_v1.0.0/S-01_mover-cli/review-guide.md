@@ -50,7 +50,7 @@ Standing column vocabulary:
 | AC-15 | The dry run shows everything and writes nothing | byte-identical-after-plan test | Proven |
 | AC-16 | Before the first write, a backup exists containing the original of every file the run will modify | recursive snapshot: every file under a renamed directory is captured, so the manifest now covers the affected TREE, not just the touched files (AC-54, closed 2026-07-30) | Proven |
 | AC-17 | Rollback puts everything back the way it was | rename-back rollback + tree-map tests (sidecars, binaries, injected mid-apply failure, real-FS end-to-end) + byte-identity proof (AC-17v) | Proven - and the proof's denominator is now the tree, not the manifest (AC-54, closed 2026-07-30) |
-| AC-18 | Verify passes only if every promised postcondition actually holds on disk | pass-case test; folder postconditions now checked when the plan moved a folder (AC-55) | **Still contested by AC-57**: destination-key presence, applied-scope awareness, malformed history lines, and read-errors-as-absence remain open |
+| AC-18 | Verify passes only if every promised postcondition actually holds on disk | pass-case test; folder postconditions (AC-55); plan-derived splice checks assert every planned json edit landed, on raw bytes (AC-57); malformed history lines and unreadable dirs are failures, and a verify that ERRORS now rolls the apply back (AC-59) | Proven, one caveat: verification runs at Standard scope, which becomes exactly right when the unused `minimal`/`full` tiers are removed under AC-58 |
 | AC-19 | Running apply twice is safe: the second run refuses (exit 2), which is the "already done" signal | behavior + decision 19b | Proven |
 | AC-20 | An unrecognized store shape stops everything before any write | state-untouched test | Proven |
 | AC-21 | A live Claude Code process blocks the run unless you force it | lock-detection test | Proven |
@@ -67,8 +67,9 @@ Worth noticing during the read, because a sign-off blesses the boundary as well 
   closed under S-04 AC-56 (2026-07-30). S-01 predates `archive`/`associate`/`repair`; their
   criteria live in S-02/S-03.
 - ~~No criterion demands the source folder exist~~ closed 2026-07-30: plan, apply, and verify all enforce it (S-04 AC-55).
-- **No criterion constrains I/O failure behavior** (error versus silently-empty scan;
-  S-04 AC-59).
+- ~~No criterion constrains I/O failure behavior~~ closed 2026-07-30: mutation paths fail
+  closed, verify treats read errors as failures, and a failure-injecting filesystem tests it
+  (S-04 AC-59).
 - The `--recursive` and scope flags are not promised by any S-01 criterion - which is exactly
   why removing them (AC-58) needs no spec amendment here.
 
