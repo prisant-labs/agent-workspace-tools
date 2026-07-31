@@ -58,8 +58,8 @@ awt plan --src "E:\Projects\old-name" --dst "E:\Projects\new-name"
 
 Read the plan. It lists the folder move, the `projects/` directory rename, each transcript rewrite
 with its edit count, the `~/.claude.json` key change, and the `history.jsonl` edits. If a guard
-fires (destination exists, worktree source, cross-volume move, a live lock, or an ambiguous
-history), the plan refuses and tells you what to do - see `docs/troubleshooting.md`.
+fires (destination exists, missing or nested source, worktree source, cross-volume move, a
+live lock, or an ambiguous history), the plan refuses and tells you what to do - see `docs/troubleshooting.md`.
 
 When the plan looks right, apply it:
 

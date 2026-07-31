@@ -2,9 +2,9 @@ use crate::apply::{apply_verified, ApplyOpts};
 use crate::archive::{archive_project, ArchiveOpts};
 use crate::error::{AwtError, Result};
 use crate::fs::FileSystem;
-use crate::model::{Move, Scope};
+use crate::model::Move;
 use crate::paths::normalize_path;
-use crate::plan::{build_plan, Collision, PlanOpts};
+use crate::plan::{build_plan, PlanOpts};
 use std::path::{Path, PathBuf};
 
 pub struct AssociateOpts {
@@ -12,7 +12,6 @@ pub struct AssociateOpts {
     pub export: bool,
     pub export_subdir: String,
     pub run_id: String,
-    pub on_collision: Collision,
 }
 
 pub fn associate(
@@ -68,11 +67,8 @@ pub fn associate(
             dst_abs: to.to_string(),
         };
         let plan_opts = PlanOpts {
-            recursive: false,
-            on_collision: opts.on_collision.clone(),
             force: false,
             move_folder: false,
-            scope: Scope::Standard,
         };
         let plan = build_plan(fs, home, &mv, &plan_opts)?;
         let aopts = ApplyOpts {
@@ -106,7 +102,6 @@ mod tests {
             export: false,
             export_subdir: ".claude-sessions".into(),
             run_id: "T".into(),
-            on_collision: crate::plan::Collision::Refuse,
         };
         let err = associate(&fs, Path::new("/h"), "E:\\A", "E:\\A", &opts).unwrap_err();
         assert!(
@@ -124,7 +119,6 @@ mod tests {
             export: false,
             export_subdir: ".claude-sessions".into(),
             run_id: "T".into(),
-            on_collision: crate::plan::Collision::Refuse,
         };
         let err = associate(
             &fs,
@@ -154,7 +148,6 @@ mod tests {
             export: true,
             export_subdir: ".claude-sessions".into(),
             run_id: "T".into(),
-            on_collision: crate::plan::Collision::Refuse,
         };
         associate(&fs, Path::new("/h"), "E:\\A", "E:\\B", &opts).unwrap();
         assert!(fs.exists(Path::new("/h/.claude/projects/E--A/s.jsonl"))); // records untouched
@@ -182,7 +175,6 @@ mod tests {
             export: true,
             export_subdir: ".claude-sessions".into(),
             run_id: "T".into(),
-            on_collision: crate::plan::Collision::Refuse,
         };
         associate(&fs, Path::new("/h"), "E:\\A", "E:\\B", &opts).unwrap();
         assert!(fs.exists(Path::new("E:/B/.claude-sessions/projects/E--A/s.jsonl")));

@@ -54,7 +54,6 @@ impl Store for ClaudeProjects {
 
     fn plan(&self, ctx: &Ctx, mv: &Move, hit: &Hit) -> Result<Vec<Change>> {
         use crate::error::AwtError;
-        use crate::model::Scope;
         use crate::paths::encode_project_dir;
         use crate::rewrite::{anchored_rewrite, build_path_rules};
         let projects = ctx.home.join(".claude").join("projects");
@@ -77,51 +76,26 @@ impl Store for ClaudeProjects {
         };
         let mut changes = vec![first];
         let rules = build_path_rules(&mv.src_abs, &mv.dst_abs);
-        // Scope tiers (B-05): Minimal renames the dir and rewrites nothing inside; Standard
-        // (default) rewrites the moved project's own transcripts; Full also rewrites sidecars.
-        if ctx.scope >= Scope::Standard {
-            for child in ctx.fs.read_dir(&hit.target).unwrap_or_default() {
-                if child.extension().and_then(|e| e.to_str()) == Some("jsonl") {
-                    let bytes = ctx.fs.read(&child)?;
-                    let text = std::str::from_utf8(&bytes).map_err(|e| {
-                        AwtError::UnrecognizedFormat(format!("{}: {e}", child.display()))
-                    })?;
-                    let (_, n) = anchored_rewrite(text, &rules);
-                    // the file lives under the NEW dir after the rename; path is post-rename
-                    let post = new_dir.join(child.file_name().unwrap());
-                    changes.push(Change::RewriteFile {
-                        path: post,
-                        rules: rules.clone(),
-                        expected: n,
-                    });
-                }
-            }
-        }
-        if ctx.scope == Scope::Full {
-            // Full adds sidecars: memory/*.md and <sessionId>/ subdir files (tool-results,
-            // subagents). Same anchored rules; skip the top-level *.jsonl already handled above.
-            for side in ctx.fs_walk_text(&hit.target) {
-                let rel = match side.strip_prefix(&hit.target) {
-                    Ok(r) => r,
-                    Err(_) => continue,
-                };
-                let top_level = rel
-                    .parent()
-                    .map(|p| p.as_os_str().is_empty())
-                    .unwrap_or(true);
-                if top_level && side.extension().and_then(|e| e.to_str()) == Some("jsonl") {
-                    continue;
-                }
-                let bytes = ctx.fs.read(&side)?;
+        // One behavior, no tiers (AC-58): the moved project's own transcripts are rewritten.
+        // The old Minimal tier renamed the dir and rewrote nothing, so Standard verification
+        // always failed it; Full rewrote nested sidecars that verification and (pre-AC-54)
+        // backup did not cover. Both were removed rather than half-kept. Sidecars still move
+        // with the dir rename and still survive rollback byte-identically (AC-54); they are
+        // simply never content-rewritten, which mirrors the report-only principle: a path
+        // inside a memory note is a record, not a live key.
+        // The read_dir is strict (AC-59): hit.target came from detect, so an unreadable dir
+        // here is a failure, not an empty project.
+        for child in ctx.fs.read_dir(&hit.target)? {
+            if child.extension().and_then(|e| e.to_str()) == Some("jsonl") {
+                let bytes = ctx.fs.read(&child)?;
                 let text = std::str::from_utf8(&bytes).map_err(|e| {
-                    AwtError::UnrecognizedFormat(format!("{}: {e}", side.display()))
+                    AwtError::UnrecognizedFormat(format!("{}: {e}", child.display()))
                 })?;
                 let (_, n) = anchored_rewrite(text, &rules);
-                if n == 0 {
-                    continue;
-                }
+                // the file lives under the NEW dir after the rename; path is post-rename
+                let post = new_dir.join(child.file_name().unwrap());
                 changes.push(Change::RewriteFile {
-                    path: new_dir.join(rel),
+                    path: post,
                     rules: rules.clone(),
                     expected: n,
                 });
@@ -237,7 +211,6 @@ mod tests {
             fs: &fs,
             home: PathBuf::from("/h"),
             index: &idx,
-            scope: crate::model::Scope::Standard,
         };
         let mv = Move {
             src_abs: "E:\\Projects\\Github Repos\\markdown-for-humans".into(),
@@ -263,7 +236,6 @@ mod tests {
             fs: &fs,
             home: PathBuf::from("/h"),
             index: &idx,
-            scope: crate::model::Scope::Standard,
         };
         let mv = Move {
             src_abs: "E:\\Projects\\Github Repos\\markdown-for-humans".into(),
@@ -287,7 +259,6 @@ mod tests {
             fs: &fs,
             home: PathBuf::from("/h"),
             index: &idx,
-            scope: crate::model::Scope::Standard,
         };
         let stale = ClaudeProjects.audit(&ctx).unwrap();
         assert_eq!(stale.len(), 1);
@@ -323,7 +294,6 @@ mod tests {
             fs: &fs,
             home: PathBuf::from("/h"),
             index: &idx,
-            scope: crate::model::Scope::Standard,
         };
         let stale = ClaudeProjects.audit(&ctx).unwrap();
         assert_eq!(stale.len(), 1);
@@ -343,7 +313,6 @@ mod tests {
             fs: &fs,
             home: PathBuf::from("/h"),
             index: &idx,
-            scope: crate::model::Scope::Standard,
         };
         let mv = Move {
             src_abs: "E:\\Projects\\A".into(),
@@ -382,7 +351,6 @@ mod tests {
             fs: &fs,
             home: PathBuf::from("/h"),
             index: &idx,
-            scope: crate::model::Scope::Standard,
         };
         let stale = ClaudeProjects.audit(&ctx).unwrap();
         assert_eq!(stale.len(), 1);

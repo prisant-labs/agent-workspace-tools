@@ -1,7 +1,7 @@
 use crate::error::Result;
 use crate::fs::FileSystem;
 use crate::index::ProjectIndex;
-use crate::model::{Ctx, Move, Scope, Store};
+use crate::model::{Ctx, Move, Store};
 use crate::paths::normalize_path;
 use crate::sessions::{footprint, SessionFootprint};
 use crate::stores::claude_history::ClaudeHistory;
@@ -87,7 +87,6 @@ fn ac31_counts(
         fs,
         home: home.to_path_buf(),
         index,
-        scope: Scope::Standard,
     };
 
     let json_hits = ClaudeJson.detect(&ctx, &mv_norm)?;

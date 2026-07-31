@@ -63,16 +63,26 @@ you can answer, recorded at
 1. Read them with fresh eyes: does anything in there need rotation or notification?
 2. Removal-going-forward, or coordinated history rewrite (invalidates clones)?
 
+**Your read is now cheap:** the extraction aid at
+`_local/fixture-review/2026-07-30-extraction-aid.md` (local-only, never committed) indexes
+every pattern hit with file and line, pre-triaged: the 60 `sk-` strings are kebab-case task
+IDs, not keys; the 820 base64 runs are dominated by embedded media; the read that matters is
+64 emails and 172 non-well-known URLs. You approved the sequence aid -> read -> rewrite; the
+rewrite happens after your read and after the synthetic fixtures land, and branch protection
+goes on right after the rewrite.
+
+Exposure data, for calibration: 0 forks, 0 stars, 0 views in 14 days, but 60 clones from 28
+unique sources (automated crawlers). The content has left GitHub; rotation, if anything needs
+it, matters more than deletion.
+
 Synthetic replacement fixtures proceed under S-04 AC-62 regardless.
 
-### 1.3 Confirm the AC-58 surface removals **[HUMAN - quick]**
+### 1.3 AC-58 surface removals - **CONFIRMED AND DONE 2026-07-30**
 
-Three advertised options do not do what they say: `--on-collision keep-dest`/`keep-src` (parsed,
-never implemented - selecting one silently bypasses the collision guard), `--recursive`
-(suppresses the nested-project warning, moves nothing), and the `minimal`/`full` scope tiers
-(minimal cannot pass verification; full rewrites files backup does not cover). The closeout's
-default is **remove them from v1** and reintroduce properly specced later. Say so if you want
-any of them implemented instead - that changes the closeout's size materially.
+You approved the removal. All three options are gone end to end (CLI, core enums, plan
+branches); nested projects are now a hard refusal that names the children; the collision guard
+is unconditional; clap rejects the removed flags with exit 2. Docs, glossary, troubleshooting,
+and the review guide are reconciled.
 
 ### 1.4 Adversarial acceptance run **[DELEGABLE, you own the verdict]**
 
@@ -129,7 +139,9 @@ own with `scripts/new-scratch-home.ps1`.
 
 - **Branch protection on `main`** - recommended (require the CI check, require PRs). Repo
   settings, two minutes, your GitHub admin.
-- **Dependabot's first PR** (`actions/checkout` bump) has already arrived; handle like any PR.
+- **Dependabot queue processed 2026-07-30** (your call: process now): actions/checkout 4->7,
+  actions/cache 4->6, and the grouped cargo minor/patch bumps merged CI-green; the sha2 0.11
+  major is rebasing and merges when its fresh CI passes.
 - **CI-3 signed binary channel** - still not a tag blocker; v1.0 ships source-first.
 - **P10 cross-volume, P11 Codex/Gemini adapters** - parked, promotable.
 - **v2 "Taura" GUI** - deliberately gated behind the closeout plus a frozen, versioned

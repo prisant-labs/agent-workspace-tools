@@ -1,6 +1,5 @@
 use awt_core::associate::{associate, AssociateOpts};
 use awt_core::fs::{FileSystem, MemoryFileSystem};
-use awt_core::plan::Collision;
 use std::path::Path;
 
 #[test]
@@ -18,7 +17,6 @@ fn associate_finds_sessions_when_source_folder_is_gone() {
         export: true,
         export_subdir: ".claude-sessions".into(),
         run_id: "T".into(),
-        on_collision: Collision::Refuse,
     };
     associate(&fs, Path::new("/h"), "E:\\Old\\A", "E:\\New\\B", &opts).unwrap();
     assert!(fs.exists(Path::new("/h/.claude/projects/E--New-B/s.jsonl"))); // reassociated

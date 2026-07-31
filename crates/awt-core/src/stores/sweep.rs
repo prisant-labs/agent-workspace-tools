@@ -134,7 +134,6 @@ mod tests {
             fs: &fs,
             home: PathBuf::from("/h"),
             index: &idx,
-            scope: crate::model::Scope::Standard,
         };
         let stale = sweep_for(&ctx, &["E:\\Gone\\project".into()]);
         assert!(stale.iter().any(|s| s.reference.contains("Gone")));
@@ -174,7 +173,6 @@ mod tests {
             fs: &fs,
             home: PathBuf::from("/h"),
             index: &idx,
-            scope: crate::model::Scope::Standard,
         };
         let stale = sweep_for(&ctx, &["E:\\Gone\\project".into()]);
 
@@ -207,7 +205,6 @@ mod tests {
             fs: &fs,
             home: PathBuf::from("/data/projects/home"),
             index: &idx,
-            scope: crate::model::Scope::Standard,
         };
         let stale = sweep_for(&ctx, &["E:\\Gone\\project".into()]);
         assert_eq!(
@@ -236,7 +233,6 @@ mod tests {
             fs: &fs,
             home: PathBuf::from("/h"),
             index: &idx,
-            scope: crate::model::Scope::Standard,
         };
         let stale = sweep_for(&ctx, &["E:\\Gone\\project".into()]);
         assert!(
@@ -253,7 +249,6 @@ mod tests {
             fs: &fs,
             home: PathBuf::from("/h"),
             index: &idx,
-            scope: crate::model::Scope::Standard,
         };
         let mv = Move {
             src_abs: "E:\\Old".into(),

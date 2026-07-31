@@ -13,8 +13,8 @@
 
 use awt_core::doctor::doctor;
 use awt_core::fs::{FileSystem, MemoryFileSystem};
-use awt_core::model::{Move, Scope};
-use awt_core::plan::{build_plan, Collision, PlanOpts};
+use awt_core::model::Move;
+use awt_core::plan::{build_plan, PlanOpts};
 use std::path::Path;
 
 const HOME: &str = "/h";
@@ -41,11 +41,8 @@ fn seed() -> MemoryFileSystem {
 
 fn plan_opts() -> PlanOpts {
     PlanOpts {
-        recursive: false,
-        on_collision: Collision::Refuse,
         force: false,
         move_folder: true,
-        scope: Scope::Standard,
     }
 }
 

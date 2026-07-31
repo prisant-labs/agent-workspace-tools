@@ -5,7 +5,7 @@ type: implementation-plan
 status: in-progress
 created: 2026-07-30
 updated: 2026-07-30
-phases-complete: [17.1, 17.2, 17.3, 17.4, 17.5, 17.6, 17.7]
+phases-complete: [17.1, 17.2, 17.3, 17.4, 17.5, 17.6, 17.7, 17.9]
 linked-spec: ./spec.md
 target-release: v1.0.0
 ac-coverage: complete
@@ -33,7 +33,7 @@ settled; the adversarial acceptance run is last because it certifies the sum.
 | 17.6 | Plan-derived verification: `verify` takes the applied plan and asserts every planned json splice landed (destination anchor present, source anchor gone, raw bytes); malformed `history.jsonl` lines are failures, not skips; folder postconditions landed with AC-55. Scope-awareness deliberately NOT plumbed: the `minimal`/`full` tiers are slated for removal under AC-58 (17.9), after which Standard-only verification is scope-correct by definition | AC-57 | **Complete 2026-07-30** (scope caveat resolves via 17.9) |
 | 17.7 | Plugin hash derived from every recorded `cwd` spelling that normalizes to src (via `ProjectIndex.cwds`), caller spelling kept as fallback; detect AND verify use the same derivation; case/separator variant tests for both | AC-60 | **Complete 2026-07-30** |
 | 17.8 | Path confinement: canonicalize hook transcript paths, reject traversal, refuse reparse points in mutated/archived trees; Windows junction tests | AC-61 | Not started |
-| 17.9 | Surface reduction: remove `keep-dest`/`keep-src`, `--recursive`, and `minimal`/`full` scopes from the CLI (default decision per AC-58); docs and reference updated; refusal tests for nested projects | AC-58 | Not started |
+| 17.9 | Surface reduction executed on maintainer confirmation: `Collision` enum, `Scope` enum, and the three CLI flags deleted end to end (CLI arg parsing, `PlanOpts`, `AssociateOpts`, `Ctx.scope`, the Minimal/Full plan branches); nested projects are a hard refusal (`NestedProjects`, exit 2) naming the children; collision guard unconditional; clap rejects the removed flags (exit 2) with a test; docs, glossary, troubleshooting, and review guide updated | AC-58 | **Complete 2026-07-30** |
 | 17.10 | Synthetic fixture replacement: procedural generation of the shapes and counts the golden tests need; re-lock counts; remove real transcripts from the working tree (history decision is D10, maintainer) | AC-62 | Not started |
 | 17.11 | Adversarial acceptance run: revised matrix (missing source, sidecar project, malformed settings, junction, invalid UTF-8, case-variant plugin path) against a fresh scratch copy; dated report | gate (g) | Not started |
 
@@ -65,6 +65,10 @@ first; they do not gate the tag.
 | `verify_with_plan_catches_a_missing_destination_anchor` | AC-57 |
 | `plugin_state_is_found_when_src_is_spelled_differently` | AC-60 |
 | `plugin_verify_catches_a_leftover_dir_under_the_recorded_spelling` | AC-60 |
+| `nested_projects_are_a_hard_refusal` | AC-58 |
+| `a_project_with_no_nested_children_still_plans` | AC-58 (guard scoped correctly) |
+| `destination_key_collision_always_refuses` | AC-58 |
+| `removed_options_are_rejected_outright` (binary) | AC-58 |
 
 ## Decision dependencies
 

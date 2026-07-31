@@ -10,6 +10,10 @@ pub enum AwtError {
     /// Without this guard, apply silently skipped the move and reported success while
     /// Claude state was rewritten toward a destination no folder occupies.
     SourceMissing(String),
+    /// The source contains nested projects with their own Claude state (AC-58). Moving the
+    /// parent would break every child's path-keyed state, so the tool refuses. The removed
+    /// `--recursive` flag claimed to handle this and only silenced the warning.
+    NestedProjects(String),
     UnrecognizedFormat(String),
     VerifyFailed(String),
     Io(std::io::Error),
@@ -31,6 +35,7 @@ impl std::fmt::Display for AwtError {
             AwtError::Ambiguous(s) | AwtError::Locked(s) | AwtError::CrossVolume(s) => {
                 write!(f, "{s}")
             }
+            AwtError::NestedProjects(s) => write!(f, "{s}"),
             AwtError::SourceMissing(s) => write!(
                 f,
                 "source folder not found: {s}. A move needs an existing source directory; \

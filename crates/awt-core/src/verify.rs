@@ -18,7 +18,6 @@ pub fn verify(
         fs,
         home: home.to_path_buf(),
         index: &index,
-        scope: crate::model::Scope::Standard,
     };
     let mut out = Vec::new();
     for store in registry() {
@@ -127,7 +126,7 @@ mod tests {
     use crate::apply::apply;
     use crate::fs::{FileSystem, MemoryFileSystem};
     use crate::model::Move;
-    use crate::plan::{build_plan, Collision, PlanOpts};
+    use crate::plan::{build_plan, PlanOpts};
     use std::path::Path;
 
     fn setup() -> (MemoryFileSystem, Move) {
@@ -151,11 +150,8 @@ mod tests {
     fn verify_passes_after_apply() {
         let (fs, mv) = setup();
         let opts = PlanOpts {
-            recursive: false,
-            on_collision: Collision::Refuse,
             force: false,
             move_folder: true,
-            scope: crate::model::Scope::Standard,
         };
         let plan = build_plan(&fs, Path::new("/h"), &mv, &opts).unwrap();
         apply(&plan, &fs, Path::new("/backup"), "T").unwrap();

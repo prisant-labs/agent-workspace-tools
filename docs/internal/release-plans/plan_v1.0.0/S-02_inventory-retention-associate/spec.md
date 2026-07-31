@@ -59,4 +59,4 @@ dependency/sequencing summary live there.
 | AC-41 | With `--reassociate`, after apply, A's sessions resume under B: encoded dir, transcript `cwd`, claude.json key, githubRepoPaths, history.jsonl, and plugin state dir all reference B; verify passes; backed up and rollback-able |
 | AC-42 | With `--export`, A's transcripts and SESSION-keyed artifacts are copied into `B/<export-subdir>/` in the F14 archive format with a manifest |
 | AC-43 | `--no-reassociate` performs export only (Claude's live records untouched); `--no-export` performs re-association only (no copy placed in B); at least one mode must be active or the command errors |
-| AC-44 | If B already has a claude.json key (collision), the mover's `--on-collision` policy applies (refuse by default) |
+| AC-44 | If B already has a claude.json key (collision), the mover's collision policy applies - always refuse (amended 2026-07-30 under AC-58: the never-implemented `keep-dest`/`keep-src` modes were removed) |

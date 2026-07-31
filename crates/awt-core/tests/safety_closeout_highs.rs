@@ -4,8 +4,8 @@
 
 use awt_core::apply::{apply, apply_verified, ApplyOpts};
 use awt_core::fs::{FileSystem, MemoryFileSystem};
-use awt_core::model::{Move, Scope};
-use awt_core::plan::{build_plan, Collision, PlanOpts};
+use awt_core::model::Move;
+use awt_core::plan::{build_plan, PlanOpts};
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -13,11 +13,8 @@ const HOME: &str = "/h";
 
 fn opts() -> PlanOpts {
     PlanOpts {
-        recursive: false,
-        on_collision: Collision::Refuse,
         force: false,
         move_folder: true,
-        scope: Scope::Standard,
     }
 }
 

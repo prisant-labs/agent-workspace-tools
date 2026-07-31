@@ -35,7 +35,7 @@ Standing column vocabulary:
 | AC | The promise, in plain words | Evidence | Standing |
 |---|---|---|---|
 | AC-1 | A same-volume move is a rename: fast, atomic, and the old folder is gone afterwards | cross-volume guard + test; missing-source guard at plan AND apply, folder postcondition in verify (AC-55, closed 2026-07-30) | Proven |
-| AC-3 | If something already exists at the destination, nothing happens at all | guard + exit-2 test | Proven for the default. **Contested by AC-58**: choosing `keep-dest`/`keep-src` silently bypasses this guard without implementing anything |
+| AC-3 | If something already exists at the destination, nothing happens at all | guard + exit-2 test; the `keep-dest`/`keep-src` bypass modes were removed, so the guard is unconditional (AC-58, closed 2026-07-30) | Proven |
 | AC-4 | A git worktree is never moved without an explicit override | guard test | Test-thin (the `--force` override path itself is untested) |
 | AC-5 | The plan lists every store that references the project - nothing is touched that was not listed | per-store tests | Test-thin (no single test seeds all stores at once) |
 | AC-6 | History is matched to a folder by what the transcripts *say*, never by folder-name guessing | index tests | Proven |
@@ -50,7 +50,7 @@ Standing column vocabulary:
 | AC-15 | The dry run shows everything and writes nothing | byte-identical-after-plan test | Proven |
 | AC-16 | Before the first write, a backup exists containing the original of every file the run will modify | recursive snapshot: every file under a renamed directory is captured, so the manifest now covers the affected TREE, not just the touched files (AC-54, closed 2026-07-30) | Proven |
 | AC-17 | Rollback puts everything back the way it was | rename-back rollback + tree-map tests (sidecars, binaries, injected mid-apply failure, real-FS end-to-end) + byte-identity proof (AC-17v) | Proven - and the proof's denominator is now the tree, not the manifest (AC-54, closed 2026-07-30) |
-| AC-18 | Verify passes only if every promised postcondition actually holds on disk | pass-case test; folder postconditions (AC-55); plan-derived splice checks assert every planned json edit landed, on raw bytes (AC-57); malformed history lines and unreadable dirs are failures, and a verify that ERRORS now rolls the apply back (AC-59) | Proven, one caveat: verification runs at Standard scope, which becomes exactly right when the unused `minimal`/`full` tiers are removed under AC-58 |
+| AC-18 | Verify passes only if every promised postcondition actually holds on disk | pass-case test; folder postconditions (AC-55); plan-derived splice checks assert every planned json edit landed, on raw bytes (AC-57); malformed history lines and unreadable dirs are failures, and a verify that ERRORS now rolls the apply back (AC-59) | Proven - the scope caveat closed with AC-58: the tiers are gone, so single-behavior verification is scope-correct by definition |
 | AC-19 | Running apply twice is safe: the second run refuses (exit 2), which is the "already done" signal | behavior + decision 19b | Proven |
 | AC-20 | An unrecognized store shape stops everything before any write | state-untouched test | Proven |
 | AC-21 | A live Claude Code process blocks the run unless you force it | lock-detection test | Proven |
@@ -70,8 +70,8 @@ Worth noticing during the read, because a sign-off blesses the boundary as well 
 - ~~No criterion constrains I/O failure behavior~~ closed 2026-07-30: mutation paths fail
   closed, verify treats read errors as failures, and a failure-injecting filesystem tests it
   (S-04 AC-59).
-- The `--recursive` and scope flags are not promised by any S-01 criterion - which is exactly
-  why removing them (AC-58) needs no spec amendment here.
+- The `--recursive` and scope flags were not promised by any S-01 criterion - which is exactly
+  why their removal (AC-58, executed 2026-07-30) needed no spec amendment here.
 
 The closeout spec turns each of these into its own criterion rather than stretching S-01's.
 

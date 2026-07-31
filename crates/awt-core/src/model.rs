@@ -10,21 +10,13 @@ pub struct Move {
     pub dst_abs: String,
 }
 
-/// Rewrite tier. Order matters: Minimal < Standard < Full (derived Ord follows the
-/// declaration order), so `scope >= Scope::Standard` gates the transcript rewrites and
-/// `scope == Scope::Full` additionally emits sidecar rewrites.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Scope {
-    Minimal,
-    Standard,
-    Full,
-}
-
+/// Shared read context for the store adapters. (A `scope` rewrite-tier field lived here
+/// until AC-58 removed the Minimal/Full tiers; every plan now rewrites the moved project's
+/// own transcripts and nothing else.)
 pub struct Ctx<'a> {
     pub fs: &'a dyn FileSystem,
     pub home: PathBuf,
     pub index: &'a ProjectIndex,
-    pub scope: Scope,
 }
 
 #[derive(Debug, Clone)]

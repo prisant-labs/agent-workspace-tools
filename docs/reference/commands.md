@@ -14,10 +14,7 @@ These flags are accepted by every subcommand.
 | `--json` | false | Emit machine-readable JSON to stdout instead of human text. Supported by every subcommand. For `plan` this is the plan model the v2 GUI renders (ROADMAP AC-25 parity); each change carries a `kind` discriminant and a `totals` object gives `changes` and `edits`. Exit codes are unaffected by the format: a failed `verify --json` still exits 3. |
 | `--backup-root <PATH>` | System temp dir | Root directory where backup snapshots are written |
 | `--force` | false | Allow overwriting a destination that already exists |
-| `--recursive` | false | Also move nested projects found under `--src` |
 | `--no-auto-rollback` | false | Disable the automatic rollback triggered on apply failure |
-| `--on-collision <STRATEGY>` | `refuse` | How to handle a collision: `refuse` (default), `keep-dest`, `keep-src` |
-| `--scope <SCOPE>` | `standard` | Which stores to rewrite: `minimal`, `standard` (default), `full` |
 
 ---
 
@@ -27,7 +24,7 @@ These flags are accepted by every subcommand.
 |---|---|
 | 0 | Success |
 | 1 | I/O error (catch-all for file-system failures) |
-| 2 | Guard tripped - nothing was written. Conditions that produce exit 2: destination path already exists, source is a worktree, an ambiguous reference was found, or a flag combination leaves nothing to do |
+| 2 | Guard tripped - nothing was written. Conditions that produce exit 2: destination path already exists, the source folder is missing, nested projects live under the source, source is a worktree, an ambiguous reference was found, or a flag combination leaves nothing to do |
 | 3 | Verify failed - apply ran but at least one postcondition check failed; auto-rollback was attempted |
 | 4 | Unrecognized format - a store contained a shape the tool does not know how to rewrite; no writes were made |
 
@@ -89,7 +86,7 @@ Dry-run: print every change that `apply` would make, without writing anything.
 | `--src <PATH>` | yes | Absolute path of the project in its current location |
 | `--dst <PATH>` | yes | Absolute path of the intended new location |
 
-Global flags that affect planning: `--recursive`, `--on-collision`, `--scope`, `--force`.
+Global flag that affects planning: `--force`.
 
 **Exit codes used:** 0, 1, 2 (guard), 4 (unrecognized format).
 
@@ -108,7 +105,7 @@ Move the project folder from `--src` to `--dst` and rewrite all Claude state to 
 | `--src <PATH>` | yes | Absolute path of the project in its current location |
 | `--dst <PATH>` | yes | Absolute path of the intended new location |
 
-Global flags that affect apply: `--recursive`, `--on-collision`, `--scope`, `--force`, `--no-auto-rollback`, `--backup-root`.
+Global flags that affect apply: `--force`, `--no-auto-rollback`, `--backup-root`.
 
 **Output:** `applied N changes; backup <path>` on success.
 
@@ -270,7 +267,6 @@ Re-link session history from one project path to another, and optionally export 
 
 Passing both `--no-reassociate` and `--no-export` is an error (exit 2 - nothing to do).
 
-Global flag that affects associate: `--on-collision`.
 
 **Output:** `associate complete: N changes applied`.
 
@@ -278,8 +274,13 @@ Global flag that affects associate: `--on-collision`.
 
 ---
 
-## Notes on flag interactions
+## Notes on flags
 
-- `--force` and `--on-collision` are independent. `--force` controls whether `apply` overwrites an existing destination folder on disk; `--on-collision` controls how the tool resolves collisions between Claude state entries when the same key appears for both `--src` and `--dst`.
-- `--scope` values: `minimal` rewrites only the primary project key; `standard` (default) rewrites all path-keyed stores; `full` also rewrites content inside transcripts where the path appears in conversation text.
 - `--no-auto-rollback` is intended for debugging. In normal use, leave auto-rollback enabled.
+- `--recursive`, `--on-collision`, and `--scope` existed in pre-release builds and were
+  **removed** (AC-58, 2026-07-30). None was implemented behind its help text, and two of them
+  silently weakened guards: `keep-dest`/`keep-src` bypassed the collision check while changing
+  nothing else, and `--recursive` suppressed the nested-project warning while moving nothing.
+  A move whose source contains nested projects now refuses outright - move the children first.
+  There is exactly one rewrite behavior: the moved project's own transcripts plus every
+  path-keyed store. Collisions always refuse.

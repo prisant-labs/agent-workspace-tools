@@ -459,3 +459,34 @@ fn verify_json_flag_emits_parseable_json_and_keeps_exit_code() {
         "verify must still exit 3 on failure when emitting JSON"
     );
 }
+
+/// AC-58: the removed options must be REJECTED, not silently accepted. An unknown flag is a
+/// clap usage error (exit 2), which lands in the same "refused, nothing written" class as
+/// every other guard.
+#[test]
+fn removed_options_are_rejected_outright() {
+    let tmp = tempfile::tempdir().unwrap();
+    for extra in [
+        ["--recursive", ""],
+        ["--on-collision", "keep-dest"],
+        ["--scope", "full"],
+    ] {
+        let mut args = vec!["plan", "--home", tmp.path().to_str().unwrap()];
+        args.push(extra[0]);
+        if !extra[1].is_empty() {
+            args.push(extra[1]);
+        }
+        args.extend(["--src", "E:\\a", "--dst", "E:\\b"]);
+        let out = Command::new(env!("CARGO_BIN_EXE_awt"))
+            .args(&args)
+            .output()
+            .unwrap();
+        assert!(!out.status.success(), "{} must be rejected", extra[0]);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            stderr.contains("unexpected argument"),
+            "{}: stderr should name the unknown flag: {stderr}",
+            extra[0]
+        );
+    }
+}
