@@ -72,10 +72,10 @@ Re-evaluated 2026-07-28.
 | (a) Spec status | Every effort's `spec.md` has `status: committed` or `fulfilled` (no `draft`) | FAIL - S-01 is `draft` (awaiting maintainer review; S-02, S-03, S-04 are committed) |
 | (b) Coupled plan | Every effort has an `implementation-plan.md`, OR is in `gate-waivers` frontmatter | PASS |
 | (c) AC coverage | Every `implementation-plan.md` has `ac-coverage: complete` | PASS |
-| (d) Phases done | Every plan's completion table shows every phase `Done` | FAIL - S-01 phases 1-9, S-02 phases 13-15, and S-03 phases 16.1-16.4 Complete; S-04 phases 17.2-17.11 Not started |
+| (d) Phases done | Every plan's completion table shows every phase `Done` | PASS - S-01 phases 1-9, S-02 phases 13-15, S-03 phases 16.1-16.4, and S-04 phases 17.1-17.11 all Complete (17.11 closed 2026-07-31) |
 | (e) Staleness | No `spec.md` edited after its sibling `implementation-plan.md`'s last edit | PASS |
 | (f) Acceptance run | The manual acceptance run in `docs/acceptance-run.md` passes on real data | **PASS - clean end-to-end run on 2026-07-30** against a fresh scratch copy at `e50eba2`. All 15 steps passed, no new defects, every exit code matched the contract. See [acceptance-run-2026-07-30.md](acceptance-run-2026-07-30.md); the earlier failing run is [acceptance-run-2026-07-28.md](acceptance-run-2026-07-28.md). Happy-path evidence only; adversarial coverage is gate (g) |
-| (g) Safety closeout | Every Critical and High AC in S-04 is closed and an adversarial acceptance run passes | **FAIL - in progress.** Closed 2026-07-30: AC-53a and all three Criticals (AC-54/55/56), plus AC-57 (plan-derived verify), AC-59 (I/O fail-closed), AC-60 (plugin hash from recorded spelling). Remaining: ONLY the adversarial acceptance run (17.11) plus the maintainer halves of D10. Every code AC is closed: AC-53a, AC-54..AC-62 (AC-61 and the engineering half of AC-62 closed 2026-07-31). See [S-04_safety-closeout/spec.md](S-04_safety-closeout/spec.md) |
+| (g) Safety closeout | Every Critical and High AC in S-04 is closed and an adversarial acceptance run passes | **PASS - 2026-07-31.** Every code AC closed (AC-53a, AC-54..AC-62) and the adversarial run passed: Run 1 found AR-05..AR-08 (rollback report panic, stale --force help, archive --json ignored, no-state exit misclassified), all fixed same-day red-first; Run 2 on a fresh scratch copy passed every step, including rollback via the report.json path (11/11 byte-identical) and a real-junction archive skip. See [acceptance-run-2026-07-31.md](acceptance-run-2026-07-31.md). The maintainer halves of D10 remain and are tracked outside this gate |
 
 Gate (a) will FAIL until the maintainer reviews S-01's carved spec and flips it from
 `draft` to `committed` (it carries `requires-human-review: true` from its
@@ -116,7 +116,7 @@ Reconciled against the repo 2026-07-28.
 | `test/fixtures/README.md` | Sanitization provenance recorded (plan Task 1.3 step executed) | [x] exists with provenance |
 | Workspace `Cargo.toml` | `version` bumped to `1.0.0` | [x] `version = "1.0.0"` |
 | Binary channel (conditional) | IF binaries are distributed with this tag: CI-3 signing/minisign/winget steps done; otherwise mark N/A with a note | [x] N/A - v1.0.0 ships source-first; CI-3 is not a tag blocker |
-| Git tag `v1.0.0` | Create the annotated tag once all of the above are done | [ ] blocked by gate (g) (S-04 safety closeout + adversarial re-run), gate (a) (S-01 sign-off), and the D10 publication decision |
+| Git tag `v1.0.0` | Create the annotated tag once all of the above are done | [ ] blocked by gate (a) (S-01 sign-off) and the D10 publication decision; gate (g) cleared 2026-07-31 |
 
 The two unticked non-blocked rows are correct as unticked: the README banner should flip
 *during* the tag ceremony, and the runbook row can only be ticked by a release that was

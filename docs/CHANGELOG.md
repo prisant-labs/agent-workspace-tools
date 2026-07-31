@@ -3,6 +3,35 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-07-31 (later) - Adversarial acceptance run PASS; gate (g) flipped
+
+Phase 17.11, the last technical step of the S-04 safety closeout. Two runs, one report:
+[acceptance-run-2026-07-31.md](internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-31.md).
+
+- **Run 1 found four findings; all fixed same-day, red-first (suite 175 -> 180).**
+  AR-05 (rollback report panic): `rollback --report` panicked, exit 101, when handed the
+  report.json that apply's own output prints; it now accepts either file (a report
+  dereferences to its sibling manifest) and refuses any other JSON shape with exit 4, and
+  every manifest-field unwrap in core rollback became the same refusal. AR-06 (stale
+  --force help): the flag still advertised the pre-AC-58 collision override; it now names
+  the two guards it actually lifts. AR-07 (archive ignores --json): the one subcommand the
+  AR-03 sweep missed; all three archive paths now emit `{"copied","skipped"}`. AR-08
+  (no-state exit misclassified): associate/archive on a never-recorded path exited 4
+  (reserved for unparseable stores) instead of 2 (guard refusal); both sites reclassified,
+  two tests pin the class.
+- **Run 2 passed everything on a fresh scratch copy** (3.41 GB, fidelity-verified):
+  the full happy-path chain with rollback via the report.json path restoring 11/11 files
+  byte-identical (subagent sidecars included), plus the hostile matrix - real junction
+  (plan refuses exit 2, archive skips it and archives the rest), hook `..`-escape (exit 4,
+  nothing archived), malformed settings byte-identical refusal, invalid UTF-8 repair
+  refusal, removed flags, nested project, missing source, cross-volume, dest-exists, and a
+  seven-command `--json` sweep with every payload parsing. Repair on real data: exactly
+  34 values / 2,303 lines, idempotent, leftovers exactly the 12/818 D7 known set.
+- **Gates updated in [plan_v1.0.0.md](internal/release-plans/plan_v1.0.0/plan_v1.0.0.md):**
+  (d) PASS (all S-04 phases complete), (g) PASS. The tag row now lists only gate (a)
+  (S-01 sign-off) and D10 as blockers. `maintainer-todo.md` 1.4 marked done;
+  `ROADMAP.md` Section 7 and the README callout/status row updated to match.
+
 ## 2026-07-31 - AC-61 and AC-62 closed; every code AC in the safety closeout is done
 
 Phases 17.8 and 17.10, red-first where the behavior changed. Workspace suite 175 tests.

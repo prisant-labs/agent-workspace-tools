@@ -84,13 +84,17 @@ branches); nested projects are now a hard refusal that names the children; the c
 is unconditional; clap rejects the removed flags with exit 2. Docs, glossary, troubleshooting,
 and the review guide are reconciled.
 
-### 1.4 Adversarial acceptance run **[DELEGABLE, you own the verdict]**
+### 1.4 Adversarial acceptance run - **DONE 2026-07-31, gate (g) flipped**
 
-**Now the only technical step left in the closeout** - every code AC is closed as of
-2026-07-31 (AC-61 path confinement and the synthetic fixtures landed last). The revised
-matrix: missing source, nested project, sidecar-bearing project, malformed settings,
-junction-in-tree (real mklink /J), invalid UTF-8 repair input, case-variant plugin path,
-removed-flag rejection, plus the happy-path core. Fresh scratch copy; flips hygiene gate (g).
+Two runs, documented in
+[acceptance-run-2026-07-31.md](release-plans/plan_v1.0.0/acceptance-run-2026-07-31.md).
+Run 1 found four findings, all fixed same-day red-first (suite 175 -> 180): AR-05
+(rollback panicked on the report.json its own apply output points at; now accepts it),
+AR-06 (stale `--force` help text), AR-07 (`archive --json` emitted text), AR-08
+(`associate` on a never-recorded path exited 4 instead of 2). Run 2 on a fresh scratch
+copy passed every happy-path and adversarial step, including a real junction (plan
+refuses, archive skips) and byte-identical whole-tree rollback. **No technical step
+remains in the closeout; what is left is yours: 1.2 (D10 read) and 1.5 (S-01 sign-off).**
 
 ### 1.5 Sign off S-01 **[HUMAN - nobody else can do this]**
 

@@ -216,7 +216,54 @@ fn associate_still_refuses_a_project_with_no_state_at_all() {
     )
     .unwrap_err();
     assert!(
-        matches!(err, AwtError::UnrecognizedFormat(_)),
-        "expected UnrecognizedFormat for a project with no state, got {err:?}"
+        matches!(err, AwtError::Locked(_)),
+        "expected Locked (guard refusal, AR-08) for a project with no state, got {err:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// AR-08 (2026-07-31 acceptance): "no state found" is a refusal, not an unknown shape
+// ---------------------------------------------------------------------------
+
+/// A project with no recorded state is a guard refusal (exit-2 class): the input was
+/// understood, there is simply nothing to act on. UnrecognizedFormat (exit 4) is reserved
+/// for store bytes the tool cannot parse, and using it here told scripts the store was
+/// corrupt when it was merely empty.
+#[test]
+fn associate_with_no_recorded_state_refuses_as_guard_not_format() {
+    let fs = MemoryFileSystem::new();
+    fs.write(Path::new("/h/.claude.json"), b"{\"projects\":{}}")
+        .unwrap();
+    let err = associate(
+        &fs,
+        Path::new(HOME),
+        "E:\\never\\recorded",
+        "E:\\tmp\\x",
+        &opts(),
+    )
+    .expect_err("no state must refuse");
+    assert!(
+        matches!(&err, AwtError::Locked(m) if m.contains("no Claude state found")),
+        "want Locked (exit-2 class), got {err:?}"
+    );
+}
+
+#[test]
+fn archive_project_with_no_recorded_state_refuses_as_guard_not_format() {
+    let fs = MemoryFileSystem::new();
+    let err = awt_core::archive::archive_project(
+        &fs,
+        Path::new(HOME),
+        "E:\\never\\recorded",
+        &awt_core::archive::ArchiveOpts {
+            archive_dir: std::path::PathBuf::from("/archive"),
+            render: false,
+            run_token: "AR08".into(),
+        },
+    )
+    .expect_err("no state must refuse");
+    assert!(
+        matches!(&err, AwtError::Locked(m) if m.contains("no Claude state found")),
+        "want Locked (exit-2 class), got {err:?}"
     );
 }

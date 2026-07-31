@@ -82,12 +82,57 @@ pub fn verify_rollback(manifest_path: &Path, fs: &dyn FileSystem) -> Result<Vec<
     Ok(out)
 }
 
+/// Resolve the file a user handed to `rollback --report` to the backup manifest (AR-05).
+///
+/// Apply prints `report: ...report.json` and the rollback flag is literally named
+/// `--report`, so the natural invocation passes report.json - which is a different shape
+/// (applied/verify/backup_dir) sitting NEXT to the manifest. Accept either: a manifest is
+/// returned as-is; a report dereferences to its sibling manifest.json; anything else
+/// refuses as unrecognized format (exit 4), never a panic.
+pub fn resolve_manifest_path(fs: &dyn FileSystem, given: &Path) -> Result<PathBuf> {
+    let v: serde_json::Value = serde_json::from_slice(&fs.read(given)?)
+        .map_err(|e| AwtError::UnrecognizedFormat(format!("{}: {e}", given.display())))?;
+    if v.get("src_abs").is_some_and(|s| s.is_string())
+        && v.get("entries").is_some_and(|e| e.is_array())
+    {
+        return Ok(given.to_path_buf());
+    }
+    if v.get("backup_dir").is_some_and(|s| s.is_string()) {
+        let sibling = given.with_file_name("manifest.json");
+        if fs.exists(&sibling) {
+            return Ok(sibling);
+        }
+        return Err(AwtError::UnrecognizedFormat(format!(
+            "{} looks like an apply report but no manifest.json sits next to it",
+            given.display()
+        )));
+    }
+    Err(AwtError::UnrecognizedFormat(format!(
+        "{} is neither a backup manifest (src_abs/entries) nor an apply report (backup_dir)",
+        given.display()
+    )))
+}
+
 pub fn rollback(manifest_path: &Path, fs: &dyn FileSystem) -> Result<()> {
     let v: serde_json::Value = serde_json::from_slice(&fs.read(manifest_path)?)
         .map_err(|e| AwtError::UnrecognizedFormat(e.to_string()))?;
-    let src = v["src_abs"].as_str().unwrap().replace('\\', "/");
-    let dst = v["dst_abs"].as_str().unwrap().replace('\\', "/");
-    let entries = v["entries"].as_array().unwrap();
+    // Missing keys refuse instead of panicking: a direct core caller may skip the CLI's
+    // resolve_manifest_path, and a wrong-shape file must never take down the process.
+    let bad_shape = || {
+        AwtError::UnrecognizedFormat(format!(
+            "{} is not a backup manifest (missing src_abs/dst_abs/entries)",
+            manifest_path.display()
+        ))
+    };
+    let src = v["src_abs"]
+        .as_str()
+        .ok_or_else(bad_shape)?
+        .replace('\\', "/");
+    let dst = v["dst_abs"]
+        .as_str()
+        .ok_or_else(bad_shape)?
+        .replace('\\', "/");
+    let entries = v["entries"].as_array().ok_or_else(bad_shape)?;
     // 1. Move the real project FOLDER back, but ONLY if this run actually moved it. A folder
     //    move is recorded as a <move-tree> marker; an `associate` (which re-homes HISTORY via
     //    a merge or a rename but never moves the folder) records none. Without this gate, an
@@ -113,8 +158,8 @@ pub fn rollback(manifest_path: &Path, fs: &dyn FileSystem) -> Result<()> {
     //      dir must exist again first, and creating it by restore-then-delete is exactly the
     //      bug this replaces.
     let (old_enc, new_enc) = (
-        crate::paths::encode_project_dir(v["src_abs"].as_str().unwrap()),
-        crate::paths::encode_project_dir(v["dst_abs"].as_str().unwrap()),
+        crate::paths::encode_project_dir(v["src_abs"].as_str().ok_or_else(bad_shape)?),
+        crate::paths::encode_project_dir(v["dst_abs"].as_str().ok_or_else(bad_shape)?),
     );
     for e in entries {
         if !e["backup"]
@@ -124,7 +169,7 @@ pub fn rollback(manifest_path: &Path, fs: &dyn FileSystem) -> Result<()> {
         {
             continue;
         }
-        let old_dir = e["original"].as_str().unwrap();
+        let old_dir = e["original"].as_str().ok_or_else(bad_shape)?;
         if !old_dir.contains(&old_enc) {
             continue;
         }
@@ -150,8 +195,8 @@ pub fn rollback(manifest_path: &Path, fs: &dyn FileSystem) -> Result<()> {
     //    rewritten files get their pre-migration bytes while untouched sidecars are already
     //    home)
     for e in entries {
-        let original = e["original"].as_str().unwrap();
-        let backup = e["backup"].as_str().unwrap();
+        let original = e["original"].as_str().ok_or_else(bad_shape)?;
+        let backup = e["backup"].as_str().ok_or_else(bad_shape)?;
         if backup.starts_with("<dir-rename")
             || backup.starts_with("<move-tree")
             || backup.starts_with("<merge-dir")
@@ -191,7 +236,10 @@ pub fn rollback(manifest_path: &Path, fs: &dyn FileSystem) -> Result<()> {
         {
             continue;
         }
-        let from = e["original"].as_str().unwrap().replace('\\', "/");
+        let from = e["original"]
+            .as_str()
+            .ok_or_else(bad_shape)?
+            .replace('\\', "/");
         // B's projects dir is A's sibling, named for the destination encoding.
         let to = match Path::new(&from).parent() {
             Some(parent) => parent.join(&new_enc),
@@ -204,7 +252,10 @@ pub fn rollback(manifest_path: &Path, fs: &dyn FileSystem) -> Result<()> {
             if e2["sha256"].as_str().unwrap_or_default().is_empty() {
                 continue;
             }
-            let orig2 = e2["original"].as_str().unwrap().replace('\\', "/");
+            let orig2 = e2["original"]
+                .as_str()
+                .ok_or_else(bad_shape)?
+                .replace('\\', "/");
             if let Some(rel) = orig2.strip_prefix(&prefix) {
                 let merged = to.join(rel);
                 if fs.exists(&merged) {

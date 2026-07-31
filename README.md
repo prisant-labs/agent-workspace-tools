@@ -18,12 +18,12 @@ No LLM, no network, backup-before-write, verify-after, single-command rollback.
 ![Network](https://img.shields.io/badge/network-zero-brightgreen?style=flat-square)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
-> ⚠️ **Pre-release, in active development.** v1.0 is feature-complete but **not yet tagged**, and
-> commands may still change. A real-data acceptance run passed on 2026-07-30, but an adversarial
-> code audit the same day found data-loss paths the happy-path run does not exercise - most
-> seriously, rollback can delete files it never backed up. A
-> [safety closeout](docs/internal/release-plans/plan_v1.0.0/S-04_safety-closeout/spec.md) tracks
-> every finding as a tested acceptance criterion and blocks the tag until done.
+> ⚠️ **Pre-release, in active development.** v1.0 is feature-complete but **not yet tagged**.
+> The [safety closeout](docs/internal/release-plans/plan_v1.0.0/S-04_safety-closeout/spec.md)
+> that an adversarial audit opened on 2026-07-30 **completed on 2026-07-31**: every finding
+> closed test-first, and an adversarial acceptance run passed on real data (fresh scratch
+> copy, hostile matrix, byte-identical rollback). The tag now waits only on the maintainer's
+> spec sign-off and a fixture-history decision.
 >
 > Because `awt` edits Claude Code state under `~/.claude`, read the
 > [quickstart](docs/quickstart.md) and the [FAQ](docs/faq.md), and **always run it against a copy
@@ -122,7 +122,7 @@ Every `apply` and `rollback` also writes an always-on machine-readable record (`
 | Release | Contents | Status |
 |---|---|---|
 | v0.1.0 | `awt doctor` and `awt scan` - read-only | Internal milestone (not tagged) |
-| **v1.0.0** | Full CLI: mover (`plan`/`apply`/`verify`/`rollback`) plus `list`, `archive`, `associate`, `repair` | **Feature-complete; safety closeout in progress.** Happy-path acceptance passed 2026-07-30; an adversarial audit then found data-loss paths it never exercised. Tag blocked on the closeout, an adversarial re-run, and the spec sign-off. |
+| **v1.0.0** | Full CLI: mover (`plan`/`apply`/`verify`/`rollback`) plus `list`, `archive`, `associate`, `repair` | **Feature-complete; safety closeout done.** Happy-path acceptance passed 2026-07-30; the adversarial audit's closeout completed 2026-07-31 with a passing adversarial acceptance run. Tag blocked only on the maintainer spec sign-off and the fixture-history (D10) decision. |
 | v1.x (parked) | Cross-volume move; Codex and Gemini adapters | Behind the existing adapter boundary; promotable when scheduled |
 | v2.0.0 | Tauri 2 + React GUI over the identical core | Deferred; security and native-parity baselines first |
 
