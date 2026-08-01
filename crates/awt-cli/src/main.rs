@@ -544,8 +544,29 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
             };
             let r = associate(fs, home, from, to, &aopts)?;
             let export_loc = format!("{}/{}", to.replace('\\', "/"), aopts.export_subdir);
-            for line in associate_result_lines(&r, aopts.export, &export_loc) {
-                println!("{line}");
+            if cli.json {
+                // The fourth mutating mode that printed prose under --json (the other
+                // three were the archive settings paths; found 2026-07-31).
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "applied": r.applied.len(),
+                        "backup_dir": if r.backup_dir.is_empty() {
+                            serde_json::Value::Null
+                        } else {
+                            serde_json::Value::String(r.backup_dir.clone())
+                        },
+                        "export": if aopts.export {
+                            serde_json::Value::String(export_loc.clone())
+                        } else {
+                            serde_json::Value::Null
+                        },
+                    })
+                );
+            } else {
+                for line in associate_result_lines(&r, aopts.export, &export_loc) {
+                    println!("{line}");
+                }
             }
             Ok(())
         }
@@ -565,17 +586,35 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
                 })?;
                 let exe = std::env::current_exe().map_err(awt_core::error::AwtError::Io)?;
                 awt_core::settings::install_session_end_hook(fs, home, &exe, &dir)?;
-                println!("awt SessionEnd hook installed in ~/.claude/settings.json");
+                if cli.json {
+                    println!(
+                        "{}",
+                        serde_json::json!({
+                            "hook_installed": true,
+                            "archive_dir": dir.to_string_lossy(),
+                        })
+                    );
+                } else {
+                    println!("awt SessionEnd hook installed in ~/.claude/settings.json");
+                }
                 return Ok(());
             }
             if *uninstall_hook {
                 awt_core::settings::uninstall_session_end_hook(fs, home)?;
-                println!("awt SessionEnd hook removed from ~/.claude/settings.json");
+                if cli.json {
+                    println!("{}", serde_json::json!({ "hook_removed": true }));
+                } else {
+                    println!("awt SessionEnd hook removed from ~/.claude/settings.json");
+                }
                 return Ok(());
             }
             if let Some(d) = days {
                 awt_core::settings::set_retention(fs, home, *d, *force_zero)?;
-                println!("cleanupPeriodDays set to {d}");
+                if cli.json {
+                    println!("{}", serde_json::json!({ "cleanup_period_days": d }));
+                } else {
+                    println!("cleanupPeriodDays set to {d}");
+                }
                 eprintln!(
                     "note: issues #23710 and #62272 warn against setting this to 0; \
                      minimum safe value is 1"

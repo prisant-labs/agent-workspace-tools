@@ -133,6 +133,50 @@ pub fn rollback(manifest_path: &Path, fs: &dyn FileSystem) -> Result<()> {
         .ok_or_else(bad_shape)?
         .replace('\\', "/");
     let entries = v["entries"].as_array().ok_or_else(bad_shape)?;
+    // 0. Preflight (2026-07-31 adversarial review). Validate EVERY entry and verify EVERY
+    //    content backup BEFORE the first rename, write, or removal. The previous version
+    //    ran these checks inline during the restore loop, so a corrupted backup or
+    //    malformed entry at position N was discovered only after the folder and state
+    //    dirs had been renamed back and N-1 files restored - an error that stranded a
+    //    half-recovered filesystem. After this pass, the mutation steps below operate on
+    //    a manifest that is known-good end to end; their inline checks remain only as
+    //    defense against files changing between here and there.
+    const KNOWN_MARKERS: [&str; 3] = ["<dir-rename", "<move-tree", "<merge-dir"];
+    for e in entries {
+        let backup = e["backup"].as_str().ok_or_else(bad_shape)?;
+        let original = e["original"].as_str().ok_or_else(bad_shape)?;
+        if backup.starts_with('<') {
+            // A marker this version does not recognize came from a different or tampered
+            // producer; guessing its semantics mid-restore is how data gets lost.
+            if !KNOWN_MARKERS.iter().any(|m| backup.starts_with(m)) {
+                return Err(AwtError::UnrecognizedFormat(format!(
+                    "unknown marker entry '{backup}' in {}; refusing to guess what it \
+                     means for the restore",
+                    manifest_path.display()
+                )));
+            }
+            continue;
+        }
+        // Content entry: the hash is mandatory (restoring unverified bytes is not a
+        // recovery), and the backup must exist and match it before anything moves.
+        let want = e["sha256"].as_str().unwrap_or_default();
+        if want.is_empty() {
+            return Err(AwtError::UnrecognizedFormat(format!(
+                "content entry for {original} has no sha256; refusing to restore \
+                 unverified bytes"
+            )));
+        }
+        let bytes = fs.read(Path::new(backup))?;
+        let got: String = Sha256::digest(&bytes)
+            .iter()
+            .map(|x| format!("{x:02x}"))
+            .collect();
+        if got != want {
+            return Err(AwtError::VerifyFailed(format!(
+                "backup corrupted: {backup}"
+            )));
+        }
+    }
     // 1. Move the real project FOLDER back, but ONLY if this run actually moved it. A folder
     //    move is recorded as a <move-tree> marker; an `associate` (which re-homes HISTORY via
     //    a merge or a rename but never moves the folder) records none. Without this gate, an
