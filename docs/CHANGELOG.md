@@ -3,6 +3,28 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-07-31 (fourth entry today) - Codex adversarial review: rollback preflight + the last --json holes
+
+A post-closeout Codex adversarial review of the day's diff (base: the AC-61/62 merge)
+returned needs-attention with two findings; both were fixed red-first the same day, plus
+one adjacent gap the review missed. Suite 180 -> 187.
+
+- **Rollback preflight (high).** Rollback checked entry shape and backup hashes inline
+  during the restore loop, AFTER the folder and state-dir renames: a corrupted backup or
+  malformed late entry stranded a half-restored filesystem, and a content entry with an
+  empty `sha256` restored unverified bytes. Now a fail-closed preflight validates every
+  entry (unknown marker prefixes refuse too) and hash-verifies every content backup before
+  the first mutation; four new tests prove the filesystem stays byte-identical on refusal
+  (`crates/awt-core/tests/rollback_preflight.rs`).
+- **The last --json holes (medium + one found here).** `archive --install-hook`,
+  `--uninstall-hook`, `--set-retention` (the review's finding) and `associate` (found
+  while fixing: the fourth mutating mode, missed by both the review and the H9 sweep
+  because it mutates) all printed prose under `--json` after a successful mutation. All
+  four now emit one defined JSON object; three new binary-level tests lock the shapes
+  (`crates/awt-cli/tests/json_mutating_modes.rs`).
+- This closes the --json contract across the entire surface: every command mode that can
+  succeed now emits parseable JSON under the flag.
+
 ## 2026-07-31 (later still) - History rewrite executed (D10 rewrite half); branch protection on
 
 At the maintainer's direction, `git filter-repo` removed from ALL repository history: the

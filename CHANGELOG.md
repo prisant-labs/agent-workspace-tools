@@ -102,6 +102,19 @@ maintainer spec sign-off (S-01) and the fixture-history decision (D10) - see
 
 ### Fixed
 
+- **Rollback now validates the entire manifest and verifies every backup BEFORE touching the
+  filesystem.** Previously the integrity checks ran inline during the restore loop, after the
+  project folder and state directories had already been renamed back: a corrupted backup or
+  malformed entry detected at position N stranded a half-restored filesystem, and a content
+  entry missing its `sha256` restored unverified bytes silently. A fail-closed preflight now
+  refuses (exit 4 for shape problems, exit 3 for a hash mismatch) with the filesystem
+  untouched; unknown marker entries also refuse instead of being guessed at. Found by a Codex
+  adversarial review on 2026-07-31.
+- **Four successful mutating modes printed prose under `--json`:** `archive --install-hook`,
+  `archive --uninstall-hook`, `archive --set-retention`, and `associate`. Each now emits one
+  machine-readable JSON object on stdout (`{"hook_installed":...}`, `{"hook_removed":...}`,
+  `{"cleanup_period_days":...}`, `{"applied":...,"backup_dir":...,"export":...}`); warnings
+  stay on stderr. Same review.
 - **`rollback --report` panicked (exit 101) when handed the `report.json` that `apply` itself
   prints.** The flag is named `--report` and apply's last output line points at `report.json`,
   so the natural invocation crashed with nothing restored. Rollback now accepts either file: a
