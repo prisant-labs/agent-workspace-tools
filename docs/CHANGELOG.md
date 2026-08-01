@@ -3,6 +3,29 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-07-31 (later still) - History rewrite executed (D10 rewrite half); branch protection on
+
+At the maintainer's direction, `git filter-repo` removed from ALL repository history: the
+four real transcript blobs (18.1 MB, published since the repo went public 2026-07-24) and
+the four session logs once committed under `_agent-context/session-log/`. The rewritten
+HEAD tree is byte-identical to the pre-rewrite HEAD (verified by tree hash); nothing in the
+current state changed. Force-pushed with `--force-with-lease`; CI green on the new head.
+Originals and a full pre-rewrite mirror are preserved privately by the maintainer.
+
+- **Every commit SHA changed.** SHAs cited in dated documents (acceptance reports, gate
+  notes) are pre-rewrite IDs, kept as historical record. Key mappings: `9384619` ->
+  `50f6006` (gate (g) merge), `69ace60` -> `f0c0068` (AC-61/62), `e50eba2` -> `fe8b4e1`
+  (07-30 acceptance run), `c1d8969` -> `c96b24b` (awt rename). One commit was pruned
+  entirely (`660bcd4`, session-logs-only). The full map is retained privately.
+- **Honesty note:** GitHub still serves the pre-rewrite objects by SHA from cache, and old
+  PR diffs retain the content, until a GitHub Support request clears them; anyone who
+  cloned before 2026-07-31 holds the old bytes. Rotation decisions (the D10 read) matter
+  more than the deletion. Recorded in `maintainer-todo.md` 1.2.
+- **Branch protection enabled on `main`** immediately after the rewrite, per the approved
+  sequencing: `build` check + PRs required, linear history, no force pushes.
+- Updated to match: `test/fixtures/README.md` provenance, `ROADMAP.md` Section 7 remaining
+  items, `maintainer-todo.md` 1.2 and section 4.
+
 ## 2026-07-31 (later) - Adversarial acceptance run PASS; gate (g) flipped
 
 Phase 17.11, the last technical step of the S-04 safety closeout. Two runs, one report:

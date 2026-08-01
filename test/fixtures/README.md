@@ -29,8 +29,11 @@ Until 2026-07-31 this directory held two REAL session transcripts (18.1 MB total
 before/after pairs) from the manual move that seeded this project. They had been
 credential-pattern scanned but not redacted, and publishing them in a public repository was
 identified as a privacy defect by the 2026-07-30 adversarial audit. They were replaced under
-S-04 AC-62; the originals remain reachable in Git history pending the maintainer's D10
-decision on a history rewrite.
+S-04 AC-62, and on 2026-07-31 the repository history was rewritten with `git filter-repo`
+to remove the original blobs entirely (the current tree was untouched: the rewritten HEAD
+has an identical tree hash). The originals are preserved privately by the maintainer.
+GitHub may continue to serve the pre-rewrite objects from cache until a support request
+clears them; anyone who cloned before the rewrite holds the old bytes.
 
 The synthetic replacements preserve **exactly** the properties the golden tests lock, and
 nothing else from the originals:

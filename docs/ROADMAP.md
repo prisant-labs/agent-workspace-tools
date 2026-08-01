@@ -208,9 +208,12 @@ junction and byte-identical whole-tree rollback. Report:
 `docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-31.md`.
 
 **Remaining before the v1.0 tag (both maintainer-owned):** (1) the maintainer S-01 spec
-sign-off, made against the closed state; (2) the D10 publication decision on the real
-transcripts still reachable in Git history. The earlier claim here that only the sign-off
-remained was wrong: it mistook happy-path coverage for safety coverage.
+sign-off, made against the closed state; (2) the D10 exposure read (emails and URLs in the
+formerly published transcripts; rotate anything sensitive). The history rewrite half of D10
+was executed 2026-07-31: `git filter-repo` removed the real transcripts and the
+once-committed session logs from all history, force-pushed, with the current tree
+byte-identical. The earlier claim here that only the sign-off remained was wrong: it
+mistook happy-path coverage for safety coverage.
 
 **Repair shipped and was folded into v1.0.0 (D9, 2026-07-30).** `awt repair --drive-letter`
 recovers history entries whose drive letter was corrupted, repairing only where exactly one
