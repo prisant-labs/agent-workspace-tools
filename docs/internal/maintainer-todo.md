@@ -53,29 +53,33 @@ at plan AND apply, and verify checks the folder postconditions. Settings writes 
 write atomically. AC-53a closed earlier the same day. Remaining: the Highs (AC-57..AC-62) and
 the adversarial acceptance run; your two calls inside them are 1.2 and 1.3 below.
 
-### 1.2 Decide D10: the real transcripts published in `test/fixtures/` **[HUMAN]**
+### 1.2 D10: transcripts - **REWRITE DONE 2026-07-31; your READ remains [HUMAN]**
 
-Four real session transcripts, 18.1 MB, unredacted by recorded policy, in a public repository
-since 2026-07-24, and present in Git history regardless of future deletion. Two questions only
-you can answer, recorded at
-[D10 in the release plan](release-plans/plan_v1.0.0/plan_v1.0.0.md):
+**Done (2026-07-31, at your direction):** the history rewrite. `git filter-repo` removed
+from ALL history: the four real transcript blobs (18.1 MB) and the four session logs once
+committed under `_agent-context/session-log/`. Force-pushed with `--force-with-lease`; the
+rewritten HEAD tree is byte-identical to the pre-rewrite HEAD (verified by tree hash), CI
+green on the new head `50f6006`. Preserved locally before the rewrite: transcripts at
+`_local/fixture-archive/real-transcripts/`, a full pre-rewrite mirror at
+`_local/pre-rewrite-mirror.git`, and the old-to-new commit map at
+`_local/rewrite-2026-07-31-commit-map.txt` (key mappings: 9384619 -> 50f6006,
+69ace60 -> f0c0068, e50eba2 -> fe8b4e1, c1d8969 -> c96b24b; SHAs cited in dated reports
+are pre-rewrite IDs and stay as historical record).
 
-1. Read them with fresh eyes: does anything in there need rotation or notification?
-2. Removal-going-forward, or coordinated history rewrite (invalidates clones)?
+**Still yours:**
 
-**Your read is now cheap:** the extraction aid at
-`_local/fixture-review/2026-07-30-extraction-aid.md` (local-only, never committed) indexes
-every pattern hit with file and line, pre-triaged: the 60 `sk-` strings are kebab-case task
-IDs, not keys; the 820 base64 runs are dominated by embedded media; the read that matters is
-64 emails and 172 non-well-known URLs. You approved the sequence aid -> read -> rewrite; the
-rewrite happens after your read and after the synthetic fixtures land, and branch protection
-goes on right after the rewrite.
-
-Exposure data, for calibration: 0 forks, 0 stars, 0 views in 14 days, but 60 clones from 28
-unique sources (automated crawlers). The content has left GitHub; rotation, if anything needs
-it, matters more than deletion.
-
-Synthetic replacement fixtures proceed under S-04 AC-62 regardless.
+1. **The read.** The extraction aid at `_local/fixture-review/2026-07-30-extraction-aid.md`
+   (local-only, never committed) is pre-triaged: the 60 `sk-` strings are kebab-case task
+   IDs, not keys; the 820 base64 runs are dominated by embedded media; the read that
+   matters is 64 emails and 172 non-well-known URLs. Decide per item: rotate or accept.
+   Calibration: 0 forks/stars, but 60 clones from 28 unique sources before the rewrite -
+   the content has left GitHub, so rotation matters more than deletion ever could.
+2. **GitHub Support request (optional but recommended).** A force-push makes old objects
+   unreachable but GitHub still serves them by SHA (verified: the old blobs and commits
+   still return via the API) and old PR diffs retain the content. Ask Support to remove
+   cached views and run a GC:
+   https://docs.github.com/en/site-policy/privacy-policies/github-privacy-statement -
+   "remove sensitive data" flow for repository `prisant-labs/agent-workspace-tools`.
 
 ### 1.3 AC-58 surface removals - **CONFIRMED AND DONE 2026-07-30**
 
@@ -143,8 +147,11 @@ own with `scripts/new-scratch-home.ps1`.
 
 ## 4. Not blocking anything
 
-- **Branch protection on `main`** - recommended (require the CI check, require PRs). Repo
-  settings, two minutes, your GitHub admin.
+- **Branch protection on `main` - ENABLED 2026-07-31** (right after the D10 history
+  rewrite, per your approved sequencing): the `build` check and PRs required, linear
+  history required, force pushes and deletions blocked. Note for any future history
+  operation: protection must be temporarily lifted first, which is now deliberate
+  friction.
 - **Dependabot queue processed 2026-07-30** (your call: process now): actions/checkout 4->7,
   actions/cache 4->6, and the grouped cargo minor/patch bumps merged CI-green; the sha2 0.11
   major is rebasing and merges when its fresh CI passes.
