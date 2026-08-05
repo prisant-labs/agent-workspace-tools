@@ -85,10 +85,11 @@ are pre-rewrite IDs and stay as historical record).
      author line on every commit you push), and the third is already the author email on
      156 public GitHub commits by a contributor to the public repo these transcripts
      discuss.
-   - **Two PRIVATE repositories are named** in the published bytes:
-     `product-on-purpose/markdown-project` and `jprisant/jp-library` (visibility verified
-     2026-08-05). That is the one genuine decision left on the page: accept the disclosure,
-     or rename if the name itself reveals something unannounced.
+   - **Two PRIVATE repositories are named** in the published bytes; both were confirmed
+     private on 2026-08-05. They are deliberately NOT named here - repeating them in a
+     public file would republish exactly what the finding is about. The sheet identifies
+     them. That is the one genuine decision left: accept the disclosure, or rename if the
+     name itself reveals something unannounced.
    - **Zero real values survived into the shipping fixtures.** No email or URL from the
      originals appears anywhere under `test/fixtures/` today; the synthetic replacement was
      total.
