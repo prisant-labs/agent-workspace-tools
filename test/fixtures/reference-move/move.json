@@ -1,8 +1,8 @@
 {
-  "src_abs": "E:\\Projects\\Github Repos\\markdown-for-humans",
-  "dst_abs": "E:\\Projects\\prisant-labs\\vs-code-markdown-max",
-  "old_encoded": "E--Projects-Github-Repos-markdown-for-humans",
-  "new_encoded": "E--Projects-prisant-labs-vs-code-markdown-max",
+  "src_abs": "E:\\Projects\\Sample Repos\\demo-notes-editor",
+  "dst_abs": "E:\\Projects\\demo-labs\\demo-notes-editor-pro",
+  "old_encoded": "E--Projects-Sample-Repos-demo-notes-editor",
+  "new_encoded": "E--Projects-demo-labs-demo-notes-editor-pro",
   "expected_counts": {
     "cwd_field": 1467,
     "backslash_prefix": 588,

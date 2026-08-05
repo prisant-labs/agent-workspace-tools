@@ -163,7 +163,7 @@ mod tests {
         // first line is a summary with no cwd (real transcripts start this way)
         let body = format!(
             "{{\"type\":\"last-prompt\",\"leafUuid\":\"z\"}}\n{}",
-            line("E:\\Projects\\Github Repos\\markdown-for-humans")
+            line("E:\\Projects\\Sample Repos\\demo-notes-editor")
         );
         fs.write(
             Path::new("/h/.claude/projects/E--x/22b2.jsonl"),
@@ -173,7 +173,7 @@ mod tests {
         let got = read_stored_cwd(&fs, Path::new("/h/.claude/projects/E--x/22b2.jsonl"));
         assert_eq!(
             got.as_deref(),
-            Some("E:\\Projects\\Github Repos\\markdown-for-humans")
+            Some("E:\\Projects\\Sample Repos\\demo-notes-editor")
         );
     }
 

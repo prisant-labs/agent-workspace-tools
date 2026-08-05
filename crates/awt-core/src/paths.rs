@@ -86,8 +86,8 @@ mod tests {
     #[test]
     fn encodes_like_claude_real_dirs() {
         assert_eq!(
-            encode_project_dir("E:\\Projects\\prisant-labs\\vs-code-markdown-max"),
-            "E--Projects-prisant-labs-vs-code-markdown-max"
+            encode_project_dir("E:\\Projects\\demo-labs\\demo-notes-editor-pro"),
+            "E--Projects-demo-labs-demo-notes-editor-pro"
         );
         // dot collapses (verified real dir): .claude -> -claude, v2.26.0 -> v2-26-0
         assert_eq!(

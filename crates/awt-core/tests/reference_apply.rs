@@ -16,12 +16,12 @@ fn reference_move_end_to_end_leaves_no_old_cwd() {
     // fixture is seeded under /home/.claude-fixture; treat that as home root
     let home = Path::new("/home/.claude-fixture");
     let mv = Move {
-        src_abs: "E:\\Projects\\Github Repos\\markdown-for-humans".into(),
-        dst_abs: "E:\\Projects\\prisant-labs\\vs-code-markdown-max".into(),
+        src_abs: "E:\\Projects\\Sample Repos\\demo-notes-editor".into(),
+        dst_abs: "E:\\Projects\\demo-labs\\demo-notes-editor-pro".into(),
     };
     // seed the source folder so MoveTree has something to move
     fs.write(
-        Path::new("E:/Projects/Github Repos/markdown-for-humans/.keep"),
+        Path::new("E:/Projects/Sample Repos/demo-notes-editor/.keep"),
         b"x",
     )
     .unwrap();
@@ -32,16 +32,16 @@ fn reference_move_end_to_end_leaves_no_old_cwd() {
     let plan = build_plan(&fs, home, &mv, &opts).unwrap();
     apply(&plan, &fs, Path::new("/backup"), "REF").unwrap();
 
-    let new_dir = home.join(".claude/projects/E--Projects-prisant-labs-vs-code-markdown-max");
+    let new_dir = home.join(".claude/projects/E--Projects-demo-labs-demo-notes-editor-pro");
     let mut checked = 0;
     for child in fs.read_dir(&new_dir).unwrap() {
         if child.extension().and_then(|e| e.to_str()) == Some("jsonl") {
             let text = String::from_utf8_lossy(&fs.read(&child).unwrap()).into_owned();
             // The old cwd is gone...
-            assert!(!text.contains(r#""cwd":"E:\\Projects\\Github Repos\\markdown-for-humans""#));
+            assert!(!text.contains(r#""cwd":"E:\\Projects\\Sample Repos\\demo-notes-editor""#));
             // ...and the new one is present, which proves a rewrite actually happened rather
             // than the file being empty or absent (an empty file satisfies the negative alone).
-            assert!(text.contains(r#""cwd":"E:\\Projects\\prisant-labs\\vs-code-markdown-max""#));
+            assert!(text.contains(r#""cwd":"E:\\Projects\\demo-labs\\demo-notes-editor-pro""#));
             checked += 1;
         }
     }

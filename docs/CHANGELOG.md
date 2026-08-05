@@ -27,10 +27,34 @@ scan, and one review artifact was corrected where the code had moved under it.
   source plan. Both now read `E:\demo-org\repo-sync-tool`. Nothing asserts that entry's
   value - `claude_json_escaping.rs` pins only the escaped `OLD` path - so the fixture's
   reason for existing is untouched. Suite still 187 green.
-- **Known gap this exposes.** AC-62 replaced fixture *content* with synthetic data but kept
-  the real project *identity*: the reference-move fixtures are still named for real
-  projects, and `claude-json-variants` lists several real local paths. That is tracked as a
-  follow-up, not closed here.
+- **Fixture identity scrubbed (the gap the above exposed).** AC-62 replaced fixture *content*
+  with synthetic data but kept the real project *identity*. The reference-move fixtures were
+  still named for the real 2026-07-09 projects, the plugin-state directory suffix was
+  `sha256` of a real path, and the same real pair was the worked example in unit tests across
+  `index.rs`, `paths.rs`, `claude_projects.rs`, and `plugin_state.rs`. A content scrub does
+  not remove identity: identity lives in directory names, hash-derived suffixes, and
+  examples, all of which survive it.
+
+  The fixtures now use a fictional pair, `E:\Projects\Sample Repos\demo-notes-editor` moving
+  to `E:\Projects\demo-labs\demo-notes-editor-pro`. 213 replacements across 19 files, plus
+  regenerated transcripts and a renamed plugin-state directory
+  (`demo-notes-editor-fbfa28a2a8a140a8`, recomputed from the new path).
+
+  **Every locked count is unchanged** - 2,082 anchored rewrites (1,467 + 588 + 27), 10
+  `@`-mentions, 55 `_dev-` mentions, line counts 329 and 2,285 - because the golden
+  assertions compare occurrences of the same string before and after a rewrite rather than
+  the string itself. Suite 187 green. The generator now derives the near-miss strings from
+  `OLD` so a future rename cannot leave them stale.
+
+  **One honesty note:** `acceptance-run-2026-07-28.md` is a dated record of a run performed
+  against the original names, and its quoted fixture snippet was scrubbed along with
+  everything else. The run happened as described; only the identifiers in the quotation
+  changed. This mirrors the existing convention that pre-rewrite SHAs in dated reports stay
+  as historical record.
+
+  **What this does not do:** the pre-scrub names remain in git history, exactly as the D10
+  transcripts did. Removing them there would need a second `filter-repo` with branch
+  protection lifted. Deletion is not un-sharing.
 - **Doc-impact:** gate (a) is unchanged and still FAILs by design until the maintainer flips
   `S-01/spec.md` themselves. This entry moves no gate; it only makes the two remaining reads
   smaller and the aid backing one of them accurate.

@@ -69,7 +69,7 @@ Implement the TDD plan task by task using `superpowers:subagent-driven-developme
 
 Phase 4 is the honesty checkpoint. `awt doctor` on the real machine must report exactly the residue found by hand - no more, no less. All write-phase work (phases 5-9) is gated on passing this checkpoint.
 
-The checkpoint is a **procedure, not a fixed number**: re-derive the residue by hand at the time you run it, then compare. The original 2026-07-11 baseline (6 stale `githubRepoPaths`, 11 stale `history.jsonl` values, the `markdown-for-humans-e854827f52137cd9` plugin dir) is a historical record, not a target; by 2026-07-28 ordinary project churn plus this repo's own rename had moved the real counts to 20 / 48 / 5 / 2 by store. A hardcoded expected count in a doc goes stale silently and then reads as a failure when it is only drift.
+The checkpoint is a **procedure, not a fixed number**: re-derive the residue by hand at the time you run it, then compare. The original 2026-07-11 baseline (6 stale `githubRepoPaths`, 11 stale `history.jsonl` values, the `demo-notes-editor-fbfa28a2a8a140a8` plugin dir) is a historical record, not a target; by 2026-07-28 ordinary project churn plus this repo's own rename had moved the real counts to 20 / 48 / 5 / 2 by store. A hardcoded expected count in a doc goes stale silently and then reads as a failure when it is only drift.
 
 ---
 

@@ -191,12 +191,12 @@ mod tests {
 
     #[test]
     fn hash_matches_real_codex_dir_suffix() {
-        // verified: sha256("E:\Projects\Github Repos\markdown-for-humans")[:16]
-        // The fixture dir test/fixtures/plugin-state/markdown-for-humans-e854827f52137cd9
+        // verified: sha256("E:\Projects\Sample Repos\demo-notes-editor")[:16]
+        // The fixture dir test/fixtures/plugin-state/demo-notes-editor-fbfa28a2a8a140a8
         // is a real dir from an actual move and confirms this digest.
         assert_eq!(
-            state_hash("E:\\Projects\\Github Repos\\markdown-for-humans"),
-            "e854827f52137cd9"
+            state_hash("E:\\Projects\\Sample Repos\\demo-notes-editor"),
+            "fbfa28a2a8a140a8"
         );
     }
 
@@ -266,13 +266,13 @@ mod tests {
         // 2. DEAD project: transcript records the pre-move path, which is gone from disk.
         //    Its state dir is the real orphan - the one thing audit must report.
         fs.write(
-            Path::new("/h/.claude/projects/E--Projects-Github-Repos-markdown-for-humans/s.jsonl"),
-            cwd_line("E:\\Projects\\Github Repos\\markdown-for-humans").as_bytes(),
+            Path::new("/h/.claude/projects/E--Projects-Sample-Repos-demo-notes-editor/s.jsonl"),
+            cwd_line("E:\\Projects\\Sample Repos\\demo-notes-editor").as_bytes(),
         )
         .unwrap();
         fs.write(
             Path::new(
-                "/h/.claude/plugins/data/codex/state/markdown-for-humans-e854827f52137cd9/state.json",
+                "/h/.claude/plugins/data/codex/state/demo-notes-editor-fbfa28a2a8a140a8/state.json",
             ),
             b"{}",
         )
@@ -298,7 +298,7 @@ mod tests {
         let refs: Vec<&str> = stale.iter().map(|s| s.reference.as_str()).collect();
         assert_eq!(
             refs,
-            vec!["markdown-for-humans-e854827f52137cd9"],
+            vec!["demo-notes-editor-fbfa28a2a8a140a8"],
             "audit must report exactly the explainable dead project, not the live one and \
              not the broker it cannot explain"
         );

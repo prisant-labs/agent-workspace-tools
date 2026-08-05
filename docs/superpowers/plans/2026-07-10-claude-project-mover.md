@@ -26,15 +26,15 @@
 
 The 2026-07-09 manual move is the golden reference. Backup lives at `E:\tmp\claude-move-backup-20260709-090053\`.
 
-- **Reference move:** old project path `E:\Projects\Github Repos\markdown-for-humans` (the value stored inside the transcripts), new path `E:\Projects\prisant-labs\vs-code-markdown-max`.
-- **Old encoded dir:** `E--Projects-Github-Repos-markdown-for-humans`. **New encoded dir:** `E--Projects-prisant-labs-vs-code-markdown-max`.
+- **Reference move:** old project path `E:\Projects\Sample Repos\demo-notes-editor` (the value stored inside the transcripts), new path `E:\Projects\demo-labs\demo-notes-editor-pro`.
+- **Old encoded dir:** `E--Projects-Sample-Repos-demo-notes-editor`. **New encoded dir:** `E--Projects-demo-labs-demo-notes-editor-pro`.
 - **Two transcripts:** `22b2362e-e4ef-4042-9b01-e3cba5719590.jsonl` (329 lines) and `28fd093e-f5ef-4dc7-af16-ea415c1840f7.jsonl` (2285 lines).
 - **Expected anchored-rewrite counts** (file 22b2362e + file 28fd093e):
   - exact `"cwd":"..."` field: 227 + 1240
-  - backslash prefix (`...markdown-for-humans\\`): 54 + 534
-  - forward prefix (`...markdown-for-humans/`): 0 + 27
-- **Must stay byte-identical:** `markdown-for-humans@` (10 total: 2 + 8 per file), `markdown-for-humans_dev-` (55 total: 6 + 49 per file). Earlier notes recorded the larger file's per-file counts (8/49) as totals; corrected 2026-07-11 against the captured fixtures (see `test/fixtures/README.md`).
-- On disk, the `cwd` field's raw bytes are exactly `"cwd":"E:\\Projects\\Github Repos\\markdown-for-humans"` (each `\\` is two backslash characters).
+  - backslash prefix (`...demo-notes-editor\\`): 54 + 534
+  - forward prefix (`...demo-notes-editor/`): 0 + 27
+- **Must stay byte-identical:** `demo-notes-editor@` (10 total: 2 + 8 per file), `demo-notes-editor_dev-` (55 total: 6 + 49 per file). Earlier notes recorded the larger file's per-file counts (8/49) as totals; corrected 2026-07-11 against the captured fixtures (see `test/fixtures/README.md`).
+- On disk, the `cwd` field's raw bytes are exactly `"cwd":"E:\\Projects\\Sample Repos\\demo-notes-editor"` (each `\\` is two backslash characters).
 
 ---
 
@@ -83,7 +83,7 @@ claude-project-mover/
       move.json                   { src_abs, dst_abs, expected counts }
       README.md                   provenance + sanitization record (never refresh from live files)
     claude-json-variants/         minimized synthetic claude.json: 3 key-variant groups + 6 stale githubRepoPaths
-    plugin-state/                 markdown-for-humans-e854827f52137cd9/state.json (minimized synthetic)
+    plugin-state/                 demo-notes-editor-fbfa28a2a8a140a8/state.json (minimized synthetic)
 ```
 
 Each store file owns exactly one fragile format so a format change is localized to one adapter with its own golden test.
@@ -588,7 +588,7 @@ git commit -m "feat: FileSystem trait with real and in-memory implementations"
 
 **Files:**
 - Create: `test/fixtures/reference-move/before/*`, `test/fixtures/reference-move/after/*`, `test/fixtures/reference-move/move.json`, `test/fixtures/reference-move/README.md`
-- Create: `test/fixtures/claude-json-variants/claude.json`, `test/fixtures/plugin-state/markdown-for-humans-e854827f52137cd9/state.json`
+- Create: `test/fixtures/claude-json-variants/claude.json`, `test/fixtures/plugin-state/demo-notes-editor-fbfa28a2a8a140a8/state.json`
 - Create: `crates/cpm-core/tests/fixtures.rs`
 
 **Interfaces:**
@@ -598,9 +598,9 @@ git commit -m "feat: FileSystem trait with real and in-memory implementations"
 
 Run (bash):
 ```bash
-mkdir -p test/fixtures/reference-move/before/projects/E--Projects-Github-Repos-markdown-for-humans
-cp "E:/tmp/claude-move-backup-20260709-090053/transcripts_markdown-for-humans/"*.jsonl \
-   test/fixtures/reference-move/before/projects/E--Projects-Github-Repos-markdown-for-humans/
+mkdir -p test/fixtures/reference-move/before/projects/E--Projects-Sample-Repos-demo-notes-editor
+cp "E:/tmp/claude-move-backup-20260709-090053/transcripts_demo-notes-editor/"*.jsonl \
+   test/fixtures/reference-move/before/projects/E--Projects-Sample-Repos-demo-notes-editor/
 ```
 No `claude.json` is copied into `before/`: the authoritative `claude.json` fixture is the minimized synthetic file written in Step 4. Never commit the live `~/.claude.json` or its `.bak` (LEAD-09). These transcripts are sanitized in Step 6 before they are committed.
 
@@ -608,14 +608,14 @@ No `claude.json` is copied into `before/`: the authoritative `claude.json` fixtu
 
 Run (bash) - transcripts only (they are sanitized in Step 6):
 ```bash
-mkdir -p test/fixtures/reference-move/after/projects/E--Projects-prisant-labs-vs-code-markdown-max
-cp "C:/Users/jpris/.claude/projects/E--Projects-prisant-labs-vs-code-markdown-max/"*.jsonl \
-   test/fixtures/reference-move/after/projects/E--Projects-prisant-labs-vs-code-markdown-max/
+mkdir -p test/fixtures/reference-move/after/projects/E--Projects-demo-labs-demo-notes-editor-pro
+cp "C:/Users/jpris/.claude/projects/E--Projects-demo-labs-demo-notes-editor-pro/"*.jsonl \
+   test/fixtures/reference-move/after/projects/E--Projects-demo-labs-demo-notes-editor-pro/
 ```
 Then author `test/fixtures/reference-move/after/claude.json` as a minimized synthetic file representing post-move state - the NEW key present, the OLD key absent, nothing else. Do NOT copy the live `~/.claude.json`:
 ```json
 {
-  "projects": { "E:\\Projects\\prisant-labs\\vs-code-markdown-max": {} },
+  "projects": { "E:\\Projects\\demo-labs\\demo-notes-editor-pro": {} },
   "githubRepoPaths": {}
 }
 ```
@@ -625,10 +625,10 @@ Then author `test/fixtures/reference-move/after/claude.json` as a minimized synt
 `test/fixtures/reference-move/move.json`:
 ```json
 {
-  "src_abs": "E:\\Projects\\Github Repos\\markdown-for-humans",
-  "dst_abs": "E:\\Projects\\prisant-labs\\vs-code-markdown-max",
-  "old_encoded": "E--Projects-Github-Repos-markdown-for-humans",
-  "new_encoded": "E--Projects-prisant-labs-vs-code-markdown-max",
+  "src_abs": "E:\\Projects\\Sample Repos\\demo-notes-editor",
+  "dst_abs": "E:\\Projects\\demo-labs\\demo-notes-editor-pro",
+  "old_encoded": "E--Projects-Sample-Repos-demo-notes-editor",
+  "new_encoded": "E--Projects-demo-labs-demo-notes-editor-pro",
   "expected_counts": {
     "cwd_field": 1467,
     "backslash_prefix": 588,
@@ -644,18 +644,18 @@ Then author `test/fixtures/reference-move/after/claude.json` as a minimized synt
 Do NOT copy the live `~/.claude.json` or the live plugin `state.json` (LEAD-09: both hold personal paths, per-project config, and MCP server entries). Author minimal synthetic files carrying only what the tests need.
 
 ```bash
-mkdir -p test/fixtures/claude-json-variants test/fixtures/plugin-state/markdown-for-humans-e854827f52137cd9
+mkdir -p test/fixtures/claude-json-variants test/fixtures/plugin-state/demo-notes-editor-fbfa28a2a8a140a8
 ```
 `test/fixtures/claude-json-variants/claude.json` - ONLY the 3 real key-variant groups (values as empty objects) and the 6 stale `githubRepoPaths` entries; no `mcpServers`, no other keys:
 ```json
 {
   "projects": {
-    "E:\\Projects\\Github Repos\\markdown-for-humans": {},
-    "e:/projects/github repos/markdown-for-humans": {},
+    "E:\\Projects\\Sample Repos\\demo-notes-editor": {},
+    "e:/projects/sample repos/demo-notes-editor": {},
     "D:\\Cloud-Work-PP": {}
   },
   "githubRepoPaths": {
-    "owner/markdown-for-humans": ["E:\\Projects\\Github Repos\\markdown-for-humans"],
+    "owner/demo-notes-editor": ["E:\\Projects\\Sample Repos\\demo-notes-editor"],
     "owner/chrome-bookmark-autosort": ["E:\\Projects\\Chrome - Bookmark Autosort"],
     "owner/pp": ["D:\\Cloud-Work-PP", "d:/cloud-work-pp"],
     "owner/pm-skills": ["E:\\Projects\\pm-skills"],
@@ -664,9 +664,9 @@ mkdir -p test/fixtures/claude-json-variants test/fixtures/plugin-state/markdown-
   }
 }
 ```
-`test/fixtures/plugin-state/markdown-for-humans-e854827f52137cd9/state.json` - reduced to the minimal shape the adapter reads (the adapter keys only on the dir name, so the body just needs to be valid JSON):
+`test/fixtures/plugin-state/demo-notes-editor-fbfa28a2a8a140a8/state.json` - reduced to the minimal shape the adapter reads (the adapter keys only on the dir name, so the body just needs to be valid JSON):
 ```json
-{ "schema": 1, "lastProject": "E:\\Projects\\Github Repos\\markdown-for-humans" }
+{ "schema": 1, "lastProject": "E:\\Projects\\Sample Repos\\demo-notes-editor" }
 ```
 
 - [ ] **Step 5: Write the seed helper and a sanity test**
@@ -692,7 +692,7 @@ pub fn seed_memory_fs_from(dir: &Path) -> MemoryFileSystem {
 fn reference_before_seeds_two_transcripts() {
     let fs = seed_memory_fs_from(Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap()
         .parent().unwrap().join("test/fixtures/reference-move/before").as_path());
-    let dir = Path::new("/home/.claude-fixture/projects/E--Projects-Github-Repos-markdown-for-humans");
+    let dir = Path::new("/home/.claude-fixture/projects/E--Projects-Sample-Repos-demo-notes-editor");
     assert_eq!(fs.read_dir(dir).unwrap().len(), 2);
 }
 ```
@@ -703,7 +703,7 @@ Note: `walkdir` is a dev-usable dependency of `cpm-core`; the integration test c
 
 The transcripts copied in Steps 1-2 are real session logs and may hold plaintext secrets (`.env` contents, tool output with credentials, pasted tokens - see `docs/reference/claude-data-model.md`). Sanitize before the bytes are permanent in git history.
 
-  - [ ] **(a) Redact credentials in both transcript sets.** Grep both `before/` and `after/` transcripts (case-insensitive) for `api[_-]?key`, `token`, `secret`, `password`, `authorization`, `bearer`, `BEGIN [A-Z]+ PRIVATE KEY`, `ghp_`, `sk-`; then skim manually for anything the patterns miss. Redact each hit IN PLACE with a same-length placeholder (replace the secret run with the same number of `X` characters) chosen so it does NOT contain any of the project path strings the golden rules match. Then re-run the reference count assertions to prove redaction left the counted regions intact: exact `"cwd"` fields = 1467, backslash prefixes = 588, forward prefixes = 27, and the preserved non-path mentions `markdown-for-humans@` = 8 and `markdown-for-humans_dev-` = 49. If any count moved, a placeholder disturbed a counted region - fix the placeholder.
+  - [ ] **(a) Redact credentials in both transcript sets.** Grep both `before/` and `after/` transcripts (case-insensitive) for `api[_-]?key`, `token`, `secret`, `password`, `authorization`, `bearer`, `BEGIN [A-Z]+ PRIVATE KEY`, `ghp_`, `sk-`; then skim manually for anything the patterns miss. Redact each hit IN PLACE with a same-length placeholder (replace the secret run with the same number of `X` characters) chosen so it does NOT contain any of the project path strings the golden rules match. Then re-run the reference count assertions to prove redaction left the counted regions intact: exact `"cwd"` fields = 1467, backslash prefixes = 588, forward prefixes = 27, and the preserved non-path mentions `demo-notes-editor@` = 8 and `demo-notes-editor_dev-` = 49. If any count moved, a placeholder disturbed a counted region - fix the placeholder.
   - [ ] **(b) Confirm the `claude.json` fixtures are synthetic** - the `after/` (Step 2) and `claude-json-variants/` (Step 4) files are minimized synthetic; verify no file under `test/fixtures/` is a verbatim copy of `~/.claude.json`.
   - [ ] **(c) Confirm the plugin `state.json` is minimized** - reduced in Step 4 to the minimal valid-JSON shape the adapter reads.
   - [ ] **(d) Document provenance.** Write `test/fixtures/README.md` recording: the source of each fixture (the 2026-07-09 reference-move backup at `E:\tmp\claude-move-backup-20260709-090053`), the sanitization performed (credential redaction; `claude.json`/`state.json` replaced by synthetic minima), and the standing rule that fixtures must NEVER be refreshed from live `~/.claude` files without re-running this step.
@@ -763,8 +763,8 @@ mod tests {
     #[test]
     fn encodes_like_claude_real_dirs() {
         assert_eq!(
-            encode_project_dir("E:\\Projects\\prisant-labs\\vs-code-markdown-max"),
-            "E--Projects-prisant-labs-vs-code-markdown-max"
+            encode_project_dir("E:\\Projects\\demo-labs\\demo-notes-editor-pro"),
+            "E--Projects-demo-labs-demo-notes-editor-pro"
         );
         // dot collapses (verified real dir): .claude -> -claude, v2.26.0 -> v2-26-0
         assert_eq!(
@@ -952,7 +952,7 @@ mod tests {
         // first line is a summary with no cwd (real transcripts start this way)
         let body = format!(
             "{{\"type\":\"last-prompt\",\"leafUuid\":\"z\"}}\n{}",
-            line("E:\\Projects\\Github Repos\\markdown-for-humans")
+            line("E:\\Projects\\Sample Repos\\demo-notes-editor")
         );
         fs.write(
             Path::new("/h/.claude/projects/E--x/22b2.jsonl"),
@@ -962,7 +962,7 @@ mod tests {
         let got = read_stored_cwd(&fs, Path::new("/h/.claude/projects/E--x/22b2.jsonl"));
         assert_eq!(
             got.as_deref(),
-            Some("E:\\Projects\\Github Repos\\markdown-for-humans")
+            Some("E:\\Projects\\Sample Repos\\demo-notes-editor")
         );
     }
 
@@ -1597,17 +1597,17 @@ mod tests {
     fn detect_finds_dir_via_reverse_index_case_insensitive() {
         let fs = MemoryFileSystem::new();
         // dir name uses capital E but stored cwd too; index matches on normalized form
-        fs.write(Path::new("/h/.claude/projects/E--Projects-Github-Repos-markdown-for-humans/s.jsonl"),
-                 cwd_line("E:\\Projects\\Github Repos\\markdown-for-humans").as_bytes()).unwrap();
+        fs.write(Path::new("/h/.claude/projects/E--Projects-Sample-Repos-demo-notes-editor/s.jsonl"),
+                 cwd_line("E:\\Projects\\Sample Repos\\demo-notes-editor").as_bytes()).unwrap();
         let idx = ProjectIndex::build(&fs, Path::new("/h"));
         let ctx = Ctx { fs: &fs, home: PathBuf::from("/h"), index: &idx, scope: crate::model::Scope::Standard };
         let mv = Move {
-            src_abs: "E:\\Projects\\Github Repos\\markdown-for-humans".into(),
-            dst_abs: "E:\\Projects\\prisant-labs\\vs-code-markdown-max".into(),
+            src_abs: "E:\\Projects\\Sample Repos\\demo-notes-editor".into(),
+            dst_abs: "E:\\Projects\\demo-labs\\demo-notes-editor-pro".into(),
         };
         let hits = ClaudeProjects.detect(&ctx, &mv).unwrap();
         assert_eq!(hits.len(), 1);
-        assert!(hits[0].target.ends_with("E--Projects-Github-Repos-markdown-for-humans"));
+        assert!(hits[0].target.ends_with("E--Projects-Sample-Repos-demo-notes-editor"));
     }
 }
 ```
@@ -1875,9 +1875,9 @@ mod tests {
 
     #[test]
     fn hash_matches_real_codex_dir_suffix() {
-        // verified: sha256("E:\Projects\Github Repos\markdown-for-humans")[:16]
-        assert_eq!(state_hash("E:\\Projects\\Github Repos\\markdown-for-humans"),
-                   "e854827f52137cd9");
+        // verified: sha256("E:\Projects\Sample Repos\demo-notes-editor")[:16]
+        assert_eq!(state_hash("E:\\Projects\\Sample Repos\\demo-notes-editor"),
+                   "fbfa28a2a8a140a8");
     }
 
     #[test]
@@ -1885,12 +1885,12 @@ mod tests {
         let fs = MemoryFileSystem::new();
         // an orphan plugin state dir whose 16-hex suffix matches NO live project (the real
         // codex suffix for the pre-move path); no transcripts here -> no known cwd -> stale
-        fs.write(Path::new("/h/.claude/plugins/data/codex/state/markdown-for-humans-e854827f52137cd9/state.json"),
+        fs.write(Path::new("/h/.claude/plugins/data/codex/state/demo-notes-editor-fbfa28a2a8a140a8/state.json"),
                  b"{}").unwrap();
         let idx = ProjectIndex::build(&fs, Path::new("/h"));
         let ctx = Ctx { fs: &fs, home: PathBuf::from("/h"), index: &idx, scope: crate::model::Scope::Standard };
         let stale = PluginState.audit(&ctx).unwrap();
-        assert!(stale.iter().any(|s| s.reference.ends_with("e854827f52137cd9")));
+        assert!(stale.iter().any(|s| s.reference.ends_with("fbfa28a2a8a140a8")));
     }
 }
 ```
@@ -2510,26 +2510,26 @@ fn read(rel: &str) -> String {
 
 #[test]
 fn reproduces_reference_move_counts_and_preserves_non_paths() {
-    let old = "E:\\Projects\\Github Repos\\markdown-for-humans";
-    let new = "E:\\Projects\\prisant-labs\\vs-code-markdown-max";
+    let old = "E:\\Projects\\Sample Repos\\demo-notes-editor";
+    let new = "E:\\Projects\\demo-labs\\demo-notes-editor-pro";
     let rules = build_path_rules(old, new);
 
     let mut total = 0usize;
     for f in ["22b2362e-e4ef-4042-9b01-e3cba5719590.jsonl",
               "28fd093e-f5ef-4dc7-af16-ea415c1840f7.jsonl"] {
         let text = read(&format!(
-            "test/fixtures/reference-move/before/projects/E--Projects-Github-Repos-markdown-for-humans/{f}"));
+            "test/fixtures/reference-move/before/projects/E--Projects-Sample-Repos-demo-notes-editor/{f}"));
         let (out, n) = anchored_rewrite(&text, &rules);
         total += n;
         // non-path mentions preserved
-        assert_eq!(text.matches("markdown-for-humans@").count(),
-                   out.matches("markdown-for-humans@").count());
-        assert_eq!(text.matches("markdown-for-humans_dev-").count(),
-                   out.matches("markdown-for-humans_dev-").count());
+        assert_eq!(text.matches("demo-notes-editor@").count(),
+                   out.matches("demo-notes-editor@").count());
+        assert_eq!(text.matches("demo-notes-editor_dev-").count(),
+                   out.matches("demo-notes-editor_dev-").count());
         // line count unchanged
         assert_eq!(text.lines().count(), out.lines().count());
         // no old path remains where anchored
-        assert!(!out.contains(r#""cwd":"E:\\Projects\\Github Repos\\markdown-for-humans""#));
+        assert!(!out.contains(r#""cwd":"E:\\Projects\\Sample Repos\\demo-notes-editor""#));
     }
     // cwd 1467 + backslash 588 + forward 27 = 2082 anchored replacements
     assert_eq!(total, 1467 + 588 + 27);
@@ -2556,7 +2556,7 @@ pub fn build_path_rules(old_abs: &str, new_abs: &str) -> Vec<RewriteRule> {
     ]
 }
 ```
-Note on the escaped-backslash literal: in Rust source `"\\\\"` is two backslash characters, which is the on-disk JSON escaping of one path separator. So `format!("{oe}\\\\")` yields `E:\\Projects\\...\\markdown-for-humans\\` in real bytes - the path prefix immediately followed by an (escaped) separator.
+Note on the escaped-backslash literal: in Rust source `"\\\\"` is two backslash characters, which is the on-disk JSON escaping of one path separator. So `format!("{oe}\\\\")` yields `E:\\Projects\\...\\demo-notes-editor\\` in real bytes - the path prefix immediately followed by an (escaped) separator.
 
 - [ ] **Step 4: Run to verify pass, then commit**
 
@@ -3247,20 +3247,20 @@ fn reference_move_end_to_end_leaves_no_old_cwd() {
     // fixture is seeded under /home/.claude-fixture; treat that as home root
     let home = Path::new("/home/.claude-fixture");
     let mv = Move {
-        src_abs: "E:\\Projects\\Github Repos\\markdown-for-humans".into(),
-        dst_abs: "E:\\Projects\\prisant-labs\\vs-code-markdown-max".into(),
+        src_abs: "E:\\Projects\\Sample Repos\\demo-notes-editor".into(),
+        dst_abs: "E:\\Projects\\demo-labs\\demo-notes-editor-pro".into(),
     };
     // seed the source folder so MoveTree has something to move
-    fs.write(Path::new("E:/Projects/Github Repos/markdown-for-humans/.keep"), b"x").unwrap();
+    fs.write(Path::new("E:/Projects/Sample Repos/demo-notes-editor/.keep"), b"x").unwrap();
     let opts = PlanOpts { recursive: false, on_collision: Collision::Refuse, force: false, scope: crate::model::Scope::Standard };
     let plan = build_plan(&fs, home, &mv, &opts).unwrap();
     apply(&plan, &fs, Path::new("/backup"), "REF").unwrap();
 
-    let new_dir = home.join(".claude/projects/E--Projects-prisant-labs-vs-code-markdown-max");
+    let new_dir = home.join(".claude/projects/E--Projects-demo-labs-demo-notes-editor-pro");
     for child in fs.read_dir(&new_dir).unwrap() {
         if child.extension().and_then(|e| e.to_str()) == Some("jsonl") {
             let text = String::from_utf8_lossy(&fs.read(&child).unwrap()).into_owned();
-            assert!(!text.contains(r#""cwd":"E:\\Projects\\Github Repos\\markdown-for-humans""#));
+            assert!(!text.contains(r#""cwd":"E:\\Projects\\Sample Repos\\demo-notes-editor""#));
         }
     }
 }
@@ -3721,8 +3721,8 @@ fn plan_writes_nothing_and_exits_zero() {
     // the source transcripts are byte-unchanged afterward.
     let out = Command::new(env!("CARGO_BIN_EXE_cpm"))
         .args(["plan", "--home", "<seeded temp>", "--src",
-               "E:\\Projects\\Github Repos\\markdown-for-humans",
-               "--dst", "E:\\Projects\\prisant-labs\\vs-code-markdown-max"])
+               "E:\\Projects\\Sample Repos\\demo-notes-editor",
+               "--dst", "E:\\Projects\\demo-labs\\demo-notes-editor-pro"])
         .output().unwrap();
     assert!(out.status.success());
 }
@@ -4561,7 +4561,7 @@ Applied the design-stage audit's plan-code fixes. Source: `_local/audit/2026-07-
 
 - **B-01** (hollow backup) - `snapshot` now wholesale-copies every pre-rename `*.jsonl` under each renamed dir, with a red test asserting the transcript and its sha256 land in the manifest.
 - **LEAD-03** (history variants) - `claude_history::plan` emits one rule per distinct stored `project` form via `dst_key`; variant test added.
-- **LEAD-04** (plugin rename + audit stub) - plugin dir named from the DESTINATION basename; `plugin_state::audit` implemented against `ProjectIndex.cwds`; audit test using `e854827f52137cd9`.
+- **LEAD-04** (plugin rename + audit stub) - plugin dir named from the DESTINATION basename; `plugin_state::audit` implemented against `ProjectIndex.cwds`; audit test using `fbfa28a2a8a140a8`.
 - **LEAD-09** (fixture privacy) - Task 1.3 gains a sanitize-and-minimize step (credential redaction, synthetic `claude.json`/`state.json`, `test/fixtures/README.md`).
 - **LEAD-01** (mid-apply rollback) - `apply_verified` rolls back on apply error and names the backup dir in every failure message.
 - **A-01** (rollback sha) - `rollback` sha256-checks each backup before restoring.

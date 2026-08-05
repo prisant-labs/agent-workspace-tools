@@ -39,8 +39,8 @@ Transcripts live under `~/.claude/projects/<encoded-path>/`. The encoding replac
 **every character that is not ASCII `[A-Za-z0-9]` with a hyphen `-`.**
 
 ```
-E:\Projects\prisant-labs\vs-code-markdown-max
-  -> E--Projects-prisant-labs-vs-code-markdown-max
+E:\Projects\demo-labs\demo-notes-editor-pro
+  -> E--Projects-demo-labs-demo-notes-editor-pro
 ```
 
 Verified corner cases on this machine:
