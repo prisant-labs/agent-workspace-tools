@@ -33,7 +33,7 @@ fn reference_before_seeds_two_transcripts() {
         .join("test/fixtures/reference-move/before");
     let fs = seed_memory_fs_from(&fixture_dir);
     let dir = Path::new(
-        "/home/.claude-fixture/.claude/projects/E--Projects-Github-Repos-markdown-for-humans",
+        "/home/.claude-fixture/.claude/projects/E--Projects-Sample-Repos-demo-notes-editor",
     );
     assert_eq!(fs.read_dir(dir).unwrap().len(), 2);
 }

@@ -202,8 +202,8 @@ mod tests {
         let fs = MemoryFileSystem::new();
         // dir name uses capital E but stored cwd too; index matches on normalized form
         fs.write(
-            Path::new("/h/.claude/projects/E--Projects-Github-Repos-markdown-for-humans/s.jsonl"),
-            cwd_line("E:\\Projects\\Github Repos\\markdown-for-humans").as_bytes(),
+            Path::new("/h/.claude/projects/E--Projects-Sample-Repos-demo-notes-editor/s.jsonl"),
+            cwd_line("E:\\Projects\\Sample Repos\\demo-notes-editor").as_bytes(),
         )
         .unwrap();
         let idx = ProjectIndex::build(&fs, Path::new("/h")).unwrap();
@@ -213,14 +213,14 @@ mod tests {
             index: &idx,
         };
         let mv = Move {
-            src_abs: "E:\\Projects\\Github Repos\\markdown-for-humans".into(),
-            dst_abs: "E:\\Projects\\prisant-labs\\vs-code-markdown-max".into(),
+            src_abs: "E:\\Projects\\Sample Repos\\demo-notes-editor".into(),
+            dst_abs: "E:\\Projects\\demo-labs\\demo-notes-editor-pro".into(),
         };
         let hits = ClaudeProjects.detect(&ctx, &mv).unwrap();
         assert_eq!(hits.len(), 1);
         assert!(hits[0]
             .target
-            .ends_with("E--Projects-Github-Repos-markdown-for-humans"));
+            .ends_with("E--Projects-Sample-Repos-demo-notes-editor"));
     }
 
     #[test]
@@ -238,8 +238,8 @@ mod tests {
             index: &idx,
         };
         let mv = Move {
-            src_abs: "E:\\Projects\\Github Repos\\markdown-for-humans".into(),
-            dst_abs: "E:\\Projects\\prisant-labs\\vs-code-markdown-max".into(),
+            src_abs: "E:\\Projects\\Sample Repos\\demo-notes-editor".into(),
+            dst_abs: "E:\\Projects\\demo-labs\\demo-notes-editor-pro".into(),
         };
         let hits = ClaudeProjects.detect(&ctx, &mv).unwrap();
         assert_eq!(hits.len(), 0);

@@ -9,7 +9,7 @@ property the golden tests lock, and nothing else:
     backslash prefix form  588   (file1  54 + file2  534)
     forward-slash form      27   (file2 only)
   => total 2082, asserted by crates/awt-core/tests/anchored_reference.rs
-- preserved non-path mentions: `markdown-for-humans@...` x10, `markdown-for-humans_dev-...` x55
+- preserved non-path mentions: `<project>@...` x10, `<project>_dev-...` x55
   (counts must merely SURVIVE the rewrite; the descriptor in move.json records them)
 - line counts 329 and 2285, every line valid JSON (post-move verification parses each line)
 - file names kept (session-UUID basenames), so the seed tests are unchanged
@@ -29,8 +29,22 @@ import os
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASE = os.path.join(ROOT, "test", "fixtures", "reference-move")
 
-OLD = r"E:\Projects\Github Repos\markdown-for-humans"
-NEW = r"E:\Projects\prisant-labs\vs-code-markdown-max"
+# Fictional project identities. These are NOT real paths, deliberately: the fixtures once
+# carried the real 2026-07-09 reference move, and while AC-62 replaced the file CONTENT with
+# synthetic data it left the real project identity in place. Identity survives a content
+# scrub - directory names, hash-derived suffixes, and worked examples in unit tests all
+# outlive it - so the names themselves are synthetic too.
+#
+# The shape is load-bearing and must be preserved by any future rename:
+#   - a space inside a path segment ("Sample Repos"), which exercises path encoding
+#   - a hyphenated project name, so the lookalike strings below are near-misses
+#   - different parent segments for src and dst, so the move is not a simple leaf rename
+OLD = r"E:\Projects\Sample Repos\demo-notes-editor"
+NEW = r"E:\Projects\demo-labs\demo-notes-editor-pro"
+
+# The bare project name, used for the preserved near-miss strings. Derived rather than
+# repeated so a rename cannot leave the lookalikes pointing at the old identity.
+OLD_NAME = OLD.rsplit("\\", 1)[1]
 
 ESC_OLD = OLD.replace("\\", "\\\\")  # JSON-escaped, as stored in file bytes
 FWD_OLD = OLD.replace("\\", "/")
@@ -60,9 +74,9 @@ def build_file(uuid, n_cwd, n_prefix, n_fwd, n_at, n_dev, n_lines):
     # Preserved near-misses: the project NAME without its path. These must come through the
     # rewrite byte-identical; they are why "surgical" is a testable claim.
     for i in range(n_at):
-        lines.append(jline({"type": "note", "text": f"bump markdown-for-humans@0.2.{i} in package.json"}))
+        lines.append(jline({"type": "note", "text": f"bump {OLD_NAME}@0.2.{i} in package.json"}))
     for i in range(n_dev):
-        lines.append(jline({"type": "note", "text": f"checked out branch markdown-for-humans_dev-{i:03}"}))
+        lines.append(jline({"type": "note", "text": f"checked out branch {OLD_NAME}_dev-{i:03}"}))
     # Filler to the exact historical line count.
     filler = n_lines - len(lines)
     assert filler >= 0, f"{uuid}: over line budget by {-filler}"
@@ -95,8 +109,8 @@ FILES = [
     ("28fd093e-f5ef-4dc7-af16-ea415c1840f7", 1240, 534, 27, 7, 35, 2285),
 ]
 
-OLD_ENC = "E--Projects-Github-Repos-markdown-for-humans"
-NEW_ENC = "E--Projects-prisant-labs-vs-code-markdown-max"
+OLD_ENC = "E--Projects-Sample-Repos-demo-notes-editor"
+NEW_ENC = "E--Projects-demo-labs-demo-notes-editor-pro"
 
 total = 0
 for uuid, c, p, f, at, dev, lines in FILES:

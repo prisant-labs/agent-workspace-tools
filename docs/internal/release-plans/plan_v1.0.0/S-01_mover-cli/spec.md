@@ -160,7 +160,7 @@ cannot be inverted; discovery must build a reverse index from the `cwd` stored i
 transcripts, not compute `encode(src)` and look it up [S4]. Text rewrites must be
 boundary-anchored (exact `cwd` field; abs-path prefixes followed by a separator or
 terminating quote) and must never alter non-path occurrences such as npm package
-names (`markdown-for-humans@0.2.1`), branch names (`markdown-for-humans_dev-*`), or
+names (`demo-notes-editor@0.2.1`), branch names (`demo-notes-editor_dev-*`), or
 prose [S1]. Files must be written back byte-for-byte except at the intended edits
 (line count unchanged, still valid JSON) [S1].
 
@@ -277,20 +277,20 @@ These ACs are out of scope for v1.0.0 and are parked in the backlog.
 ## Behavior / Examples
 
 **Anchored rewrite (AC-10, AC-11, AC-12).** For the markdown move, the engine
-replaced the exact literal `"cwd":"E:\\Projects\\Github Repos\\markdown-for-humans"`
-(227 + 1240 times) and the prefix `E:\\Projects\\Github Repos\\markdown-for-humans\\`
+replaced the exact literal `"cwd":"E:\\Projects\\Sample Repos\\demo-notes-editor"`
+(227 + 1240 times) and the prefix `E:\\Projects\\Sample Repos\\demo-notes-editor\\`
 (54 + 534 times) and the forward-slash prefix (27 times), while leaving
-`markdown-for-humans@0.2.1` (8) and `markdown-for-humans_dev-*` (49) untouched;
+`demo-notes-editor@0.2.1` (8) and `demo-notes-editor_dev-*` (49) untouched;
 line counts stayed 329 and 2285, all lines valid JSON. A conforming tool must
 reproduce these exact counts against the fixture. [S1]
 
 **Ambiguous attribution (AC-7).** The markdown history's stored cwd was the base
-`...\markdown-for-humans` while the folder being moved was
-`markdown-for-humans_jp-updates`, and a separate `markdown-for-humans` clone still
+`...\demo-notes-editor` while the folder being moved was
+`demo-notes-editor_jp-updates`, and a separate `demo-notes-editor` clone still
 existed. The tool must surface this and take the operator's choice (fork / base /
 both), exactly the decision made manually in the move log section 5. [S1]
 
-**Dry-run first (AC-15).** `awt plan --src "E:\Projects\Github Repos\markdown-for-humans_jp-updates" --dst "E:\Projects\prisant-labs\vs-code-markdown-max"` prints the
+**Dry-run first (AC-15).** `awt plan --src "E:\Projects\Sample Repos\demo-notes-editor_jp-updates" --dst "E:\Projects\demo-labs\demo-notes-editor-pro"` prints the
 folder move, the `projects/` rename, the 2 transcript rewrites with counts, the
 `claude.json` key change, and the `history.jsonl` edits, and writes nothing. [S3]
 

@@ -12,8 +12,8 @@ fn read(rel: &str) -> String {
 
 #[test]
 fn reproduces_reference_move_counts_and_preserves_non_paths() {
-    let old = "E:\\Projects\\Github Repos\\markdown-for-humans";
-    let new = "E:\\Projects\\prisant-labs\\vs-code-markdown-max";
+    let old = "E:\\Projects\\Sample Repos\\demo-notes-editor";
+    let new = "E:\\Projects\\demo-labs\\demo-notes-editor-pro";
     let rules = build_path_rules(old, new);
 
     let mut total = 0usize;
@@ -22,22 +22,22 @@ fn reproduces_reference_move_counts_and_preserves_non_paths() {
         "28fd093e-f5ef-4dc7-af16-ea415c1840f7.jsonl",
     ] {
         let text = read(&format!(
-            "test/fixtures/reference-move/before/projects/E--Projects-Github-Repos-markdown-for-humans/{f}"));
+            "test/fixtures/reference-move/before/projects/E--Projects-Sample-Repos-demo-notes-editor/{f}"));
         let (out, n) = anchored_rewrite(&text, &rules);
         total += n;
         // non-path mentions preserved
         assert_eq!(
-            text.matches("markdown-for-humans@").count(),
-            out.matches("markdown-for-humans@").count()
+            text.matches("demo-notes-editor@").count(),
+            out.matches("demo-notes-editor@").count()
         );
         assert_eq!(
-            text.matches("markdown-for-humans_dev-").count(),
-            out.matches("markdown-for-humans_dev-").count()
+            text.matches("demo-notes-editor_dev-").count(),
+            out.matches("demo-notes-editor_dev-").count()
         );
         // line count unchanged
         assert_eq!(text.lines().count(), out.lines().count());
         // no old path remains where anchored
-        assert!(!out.contains(r#""cwd":"E:\\Projects\\Github Repos\\markdown-for-humans""#));
+        assert!(!out.contains(r#""cwd":"E:\\Projects\\Sample Repos\\demo-notes-editor""#));
     }
     // cwd 1467 + backslash 588 + forward 27 = 2082 anchored replacements
     assert_eq!(total, 1467 + 588 + 27);

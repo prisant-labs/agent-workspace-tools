@@ -14,7 +14,7 @@ test/fixtures/
   claude-json-variants/
     claude.json - synthetic minimized file with key-variant and githubRepoPaths groups
   plugin-state/
-    markdown-for-humans-e854827f52137cd9/
+    demo-notes-editor-fbfa28a2a8a140a8/
       state.json - synthetic minimized plugin state file
 ```
 
@@ -35,6 +35,22 @@ has an identical tree hash). The originals are preserved privately by the mainta
 GitHub may continue to serve the pre-rewrite objects from cache until a support request
 clears them; anyone who cloned before the rewrite holds the old bytes.
 
+**Identity scrubbed 2026-08-05.** AC-62 replaced the file *content* with synthetic data but
+left the real project *identity* in place: the directory names, the paths inside, the
+plugin-state hash suffix, and the worked example used by unit tests across the crate were all
+the real 2026-07-09 projects. A content scrub does not remove identity, because identity lives
+in metadata that survives it. The fixtures now use a fictional pair,
+`E:\Projects\Sample Repos\demo-notes-editor` moving to
+`E:\Projects\demo-labs\demo-notes-editor-pro`, and every locked count is unchanged, because
+the assertions compare occurrences of the same string before and after a rewrite rather than
+the string itself.
+
+Anyone renaming these again must preserve three load-bearing shape properties: a space inside
+a path segment (exercises encoding), a hyphenated project name (so the preserved near-miss
+strings are genuine near-misses), and different parent segments for source and destination
+(so the move is not a simple leaf rename). The generator derives the near-miss strings from
+`OLD`, so a rename cannot leave them pointing at a stale identity.
+
 The synthetic replacements preserve **exactly** the properties the golden tests lock, and
 nothing else from the originals:
 
@@ -43,8 +59,8 @@ nothing else from the originals:
 | Anchored `"cwd"`-field rewrites | 1,467 (227 + 1,240) | `tests/anchored_reference.rs` |
 | Anchored backslash-prefix rewrites | 588 (54 + 534) | `tests/anchored_reference.rs` |
 | Anchored forward-slash rewrites | 27 | `tests/anchored_reference.rs` |
-| Preserved `markdown-for-humans@...` mentions | 10 | rewrite-survival assertion + `move.json` |
-| Preserved `markdown-for-humans_dev-...` mentions | 55 | rewrite-survival assertion + `move.json` |
+| Preserved `demo-notes-editor@...` mentions | 10 | rewrite-survival assertion + `move.json` |
+| Preserved `demo-notes-editor_dev-...` mentions | 55 | rewrite-survival assertion + `move.json` |
 | Line counts | 329 and 2,285 | `tests/anchored_reference.rs` |
 | Every line valid JSON | yes | post-move verification parses each line |
 | File basenames (session UUIDs) | kept | seed tests and directory layout |
@@ -69,10 +85,10 @@ escaped-backslash `githubRepoPaths` arrays alongside forward-slash `projects` ke
 shape mix that reproduces the AR-01 escaping defect. Wired to `tests/claude_json_escaping.rs`,
 whose seed asserts the escaped shape is still present so this coverage cannot silently lapse.
 
-### plugin-state/markdown-for-humans-e854827f52137cd9/state.json
+### plugin-state/demo-notes-editor-fbfa28a2a8a140a8/state.json
 
 Synthetic minimized file. The directory NAME is the load-bearing part: it ends in
-`sha256("E:\Projects\Github Repos\markdown-for-humans")[:16]`, verified against a real
+`sha256("E:\Projects\Sample Repos\demo-notes-editor")[:16]`, verified against a real
 on-disk dir at the time of capture and locked by
 `stores/plugin_state.rs::hash_matches_real_codex_dir_suffix`.
 

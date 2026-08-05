@@ -44,8 +44,8 @@ Verified against the live machine:
    - `~/.claude.json -> githubRepoPaths{}`: slug -> array of abs paths (incl.
      case variants). Six entries stale today.
    - `~/.claude/plugins/data/<plugin>/state/<basename>-<sha256(absPath)[:16]>/`.
-     Confirmed: `sha256("E:\Projects\Github Repos\markdown-for-humans")[:16] ==
-     e854827f52137cd9`, the exact stale dir suffix. Third-party plugin => the
+     Confirmed: `sha256("E:\Projects\Sample Repos\demo-notes-editor")[:16] ==
+     fbfa28a2a8a140a8`, the exact stale dir suffix. Third-party plugin => the
      path-keyed surface is open-ended, not a closed set of three CLIs.
 5. **`usage.db` is 15.5 MB, not "15.5 GB-class"** (a 1000x unit error in `02` that
    overstated the SQLite risk).
@@ -205,7 +205,7 @@ Other projects' transcripts are never rewritten at any tier. Hard invariant.
    emits only: exact `"cwd":"<oldEsc>"`; `<oldEsc>\\` (escaped-backslash prefix +
    sep); `<oldFwd>/` (forward-slash prefix + sep). Never a bare prefix. Validated
    to reproduce the reference-move counts (cwd 227+1240, backslash 54+534, forward
-   0+27) while leaving `markdown-for-humans@0.2.1` (2+8) and `markdown-for-humans_dev-*`
+   0+27) while leaving `demo-notes-editor@0.2.1` (2+8) and `demo-notes-editor_dev-*`
    (6+49) byte-identical. (Preserved-mention totals corrected 2026-07-11 against the
    captured fixtures: 10 and 55; earlier notes had recorded the larger file's per-file
    counts as totals. See `test/fixtures/README.md`.)
@@ -244,8 +244,8 @@ Apply is one ordered, backup-first, fully reversible transaction:
 
 - **Destination key collision in `claude.json`**: refuse by default (exit 2);
   `--on-collision=keep-dest|keep-src` to override. No silent config loss.
-- **Nested project keys under the source** (e.g. `E:\Projects\Github Repos` and
-  `...\markdown-for-humans` both live): migrate only the named path; detect and
+- **Nested project keys under the source** (e.g. `E:\Projects\Sample Repos` and
+  `...\demo-notes-editor` both live): migrate only the named path; detect and
   list nested keys as "will break unless `--recursive`"; touch them only with
   `--recursive`. Never silent, never surprising.
 
@@ -276,7 +276,7 @@ Exit codes: `0` success; `1` unexpected I/O error; `2` guard/refusal;
 - **Parity test** (post-GUI) asserts GUI plan model == `awt plan --json`.
 - **Three fixtures captured now** (irreproducible later): the markdown before/after
   move; a `claude.json` with the 3 variant groups + 6 stale `githubRepoPaths`; the
-  `markdown-for-humans-e854827f52137cd9` plugin dir.
+  `demo-notes-editor-fbfa28a2a8a140a8` plugin dir.
 
 ## 9. Phase plan
 

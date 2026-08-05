@@ -18,12 +18,12 @@ use awt_core::plan::{build_plan, PlanOpts};
 use std::path::Path;
 
 const HOME: &str = "/home/.claude-fixture";
-const OLD: &str = r"E:\Projects\Github Repos\markdown-for-humans";
-const NEW: &str = r"E:\Projects\prisant-labs\vs-code-markdown-max";
+const OLD: &str = r"E:\Projects\Sample Repos\demo-notes-editor";
+const NEW: &str = r"E:\Projects\demo-labs\demo-notes-editor-pro";
 
 /// Raw, JSON-escaped forms as they appear in the file's bytes.
-const OLD_RAW: &str = r#""E:\\Projects\\Github Repos\\markdown-for-humans""#;
-const NEW_RAW: &str = r#""E:\\Projects\\prisant-labs\\vs-code-markdown-max""#;
+const OLD_RAW: &str = r#""E:\\Projects\\Sample Repos\\demo-notes-editor""#;
+const NEW_RAW: &str = r#""E:\\Projects\\demo-labs\\demo-notes-editor-pro""#;
 
 fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -53,7 +53,7 @@ fn seed() -> MemoryFileSystem {
     fs.write(Path::new(HOME).join(".claude.json").as_path(), &bytes)
         .unwrap();
     fs.write(
-        Path::new(r"E:\Projects\Github Repos\markdown-for-humans\.keep"),
+        Path::new(r"E:\Projects\Sample Repos\demo-notes-editor\.keep"),
         b"x",
     )
     .unwrap();
@@ -123,7 +123,7 @@ fn rewritten_claude_json_still_parses_with_correct_values() {
 
     let arr = v
         .get("githubRepoPaths")
-        .and_then(|g| g.get("owner/markdown-for-humans"))
+        .and_then(|g| g.get("owner/demo-notes-editor"))
         .and_then(|a| a.as_array())
         .expect("githubRepoPaths entry should survive the rewrite");
     assert!(
