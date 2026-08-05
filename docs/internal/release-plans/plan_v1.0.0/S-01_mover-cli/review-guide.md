@@ -30,6 +30,24 @@ Standing column vocabulary:
   ([spec](../S-04_safety-closeout/spec.md)) has an open finding that cuts into this guarantee.
   Signing before the closeout means signing a promise the code does not currently keep.
 
+## Freshness
+
+This aid was written 2026-07-30, before the AR-05..AR-08 fixes and the Codex review response
+took the suite from 164 to 187 tests. **Re-verified against the tree on 2026-08-05** at
+`25cc094` with all 187 tests passing. Every standing rating below was re-checked against the
+current test files; exactly one had gone stale:
+
+- **AC-23 upgraded from Test-thin to Proven.** The rating said verify and rollback were
+  exercised through the library rather than the binary. That stopped being true when AR-05
+  (rollback panicking on the `report.json` its own `apply` prints) was fixed red-first: the
+  regression test necessarily drives the compiled binary end to end. Rollback now has three
+  binary-level tests and verify one.
+- AC-4, AC-5, AC-8, AC-13, AC-14 re-confirmed as still Test-thin, unchanged. No criterion
+  moved in the other direction.
+
+The general point outlives this entry: a review aid is a snapshot, and the code moves under
+it. Re-check it against the tree on the day you sign, not the day it was written.
+
 ## The criteria
 
 | AC | The promise, in plain words | Evidence | Standing |
@@ -55,7 +73,7 @@ Standing column vocabulary:
 | AC-20 | An unrecognized store shape stops everything before any write | state-untouched test | Proven |
 | AC-21 | A live Claude Code process blocks the run unless you force it | lock-detection test | Proven |
 | AC-22 | Every apply leaves a machine-readable record of what happened | report.json tests | Proven |
-| AC-23 | plan / apply / verify / rollback all exist as commands | CLI tests | Test-thin (verify/rollback tested via library, not binary) |
+| AC-23 | plan / apply / verify / rollback all exist as commands | CLI tests; rollback now runs through the real binary in [`rollback_tree_cli.rs`](../../../../../crates/awt-cli/tests/rollback_tree_cli.rs) and [`acceptance_ar05_ar07.rs`](../../../../../crates/awt-cli/tests/acceptance_ar05_ar07.rs), verify through the binary in [`cli.rs`](../../../../../crates/awt-cli/tests/cli.rs) | Proven (upgraded 2026-08-05; see freshness note) |
 | AC-24 | Exit codes are distinct and scriptable | exit-code mapping test | Proven |
 | AC-26 | Zero LLM and zero network, structurally enforced | lockfile deps-guard test | Proven |
 
