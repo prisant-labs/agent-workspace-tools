@@ -21,6 +21,16 @@ scan, and one review artifact was corrected where the code had moved under it.
   AR-05 regression test drives rollback through the compiled binary end to end, which closed
   the binary-coverage gap the rating described. AC-4, AC-5, AC-8, AC-13, AC-14 re-confirmed
   as still Test-thin. A freshness section now records the check and its date.
+- **Private-organization path removed from a shipping fixture.**
+  `test/fixtures/claude-json-variants/claude.json` carried a real path under a private
+  organization in its `githubRepoPaths` block; the same string was mirrored in the S-01
+  source plan. Both now read `E:\demo-org\repo-sync-tool`. Nothing asserts that entry's
+  value - `claude_json_escaping.rs` pins only the escaped `OLD` path - so the fixture's
+  reason for existing is untouched. Suite still 187 green.
+- **Known gap this exposes.** AC-62 replaced fixture *content* with synthetic data but kept
+  the real project *identity*: the reference-move fixtures are still named for real
+  projects, and `claude-json-variants` lists several real local paths. That is tracked as a
+  follow-up, not closed here.
 - **Doc-impact:** gate (a) is unchanged and still FAILs by design until the maintainer flips
   `S-01/spec.md` themselves. This entry moves no gate; it only makes the two remaining reads
   smaller and the aid backing one of them accurate.
