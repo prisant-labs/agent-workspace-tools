@@ -124,7 +124,7 @@ exercises the byte splice. Three gaps line up to hide it completely:
    ```json
    "githubRepoPaths": {
      "owner/demo-notes-editor": ["E:\\Projects\\Sample Repos\\demo-notes-editor"],
-     "owner/pp": ["D:\\Cloud-Work-PP", "d:/cloud-work-pp"]
+     "owner/pp": ["D:\\Cloud-Work-Demo", "d:/cloud-work-demo"]
    }
    ```
 

@@ -37,7 +37,7 @@ Verified against the live machine:
    `cwd` stored inside transcripts, not compute `encode(src)` and look it up.
 3. **The dir name derives from the launch-time `cwd` string, not a normalized path.**
    Three dirs disagree in drive-letter case with their own stored `cwd`
-   (`d--Cloud-Work-PP` holds `cwd: "D:\Cloud-Work-PP"`). Matching is
+   (`d--Cloud-Work-Demo` holds `cwd: "D:\Cloud-Work-Demo"`). Matching is
    case-insensitive; `encode(storedCwd) != dirname` in general.
 4. **Two path-keyed stores the docs missed** (found by sweeping 25,801 files for
    already-moved paths):

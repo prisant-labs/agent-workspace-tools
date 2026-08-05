@@ -6,10 +6,10 @@
   },
   "githubRepoPaths": {
     "owner/demo-notes-editor": ["E:\\Projects\\Sample Repos\\demo-notes-editor"],
-    "owner/demo-bookmark-sorter": ["E:\\Projects\\Demo - Bookmark Sorter"],
-    "owner/demo-cloud": ["D:\\Cloud-Work-Demo", "d:/cloud-work-demo"],
-    "owner/demo-skills": ["E:\\Projects\\demo-skills"],
-    "owner/demo-toolkit": ["E:\\Projects\\demo-toolkit"],
+    "owner/chrome-bookmark-autosort": ["E:\\Projects\\Chrome - Bookmark Autosort"],
+    "owner/cloud-work": ["D:\\Cloud-Work-Demo", "d:/cloud-work-demo"],
+    "owner/pm-skills": ["E:\\Projects\\pm-skills"],
+    "owner/agent-skills": ["E:\\Projects\\agent-skills-toolkit"],
     "owner/reposync": ["E:\\Projects\\demo-org\\repo-sync-tool"]
   }
 }

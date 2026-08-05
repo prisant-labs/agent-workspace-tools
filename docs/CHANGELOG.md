@@ -55,6 +55,24 @@ scan, and one review artifact was corrected where the code had moved under it.
   **What this does not do:** the pre-scrub names remain in git history, exactly as the D10
   transcripts did. Removing them there would need a second `filter-repo` with branch
   protection lifted. Deletion is not un-sharing.
+- **A vacuous assertion the scrub caused, then closed.**
+  `unrelated_entries_are_byte_identical_after_rewrite` compares an entry's occurrence count
+  before and after a rewrite. That form passes trivially as `0 == 0` when the literal is
+  absent, so renaming those values in the fixture silently emptied two of its three
+  assertions while the suite stayed green. The literals now match the fixture and each is
+  preceded by a presence check that fails loudly with an instruction to update rather than
+  delete it, mirroring the guard already in `seed()`. Proven red first: replacing a literal
+  with an absent value fails with that message. The class is worth naming, because the repo
+  already had one instance of it (`claude-json-variants` sat referenced by no test at all
+  until AR-01) - **a test that asserts equality of two derived counts is only as strong as
+  the guarantee that the counts are non-zero.**
+- **Encoding examples deliberately kept.** `pm-skills`, `agent-skills-toolkit`, and
+  `Chrome - Bookmark Autosort` remain as real observed paths, at the maintainer's decision:
+  they are the evidence behind the encoding rules in `DESIGN.md` and `paths.rs`, and AC-9
+  promises the encoder was verified against real directories. Scrubbing them would leave
+  those rules justified by paths nobody ever observed. One further path, which plausibly
+  named a private organization on a work drive, was scrubbed to `D:\Cloud-Work-Demo`; it is
+  not repeated here, for the same reason the private repository names are not.
 - **Doc-impact:** gate (a) is unchanged and still FAILs by design until the maintainer flips
   `S-01/spec.md` themselves. This entry moves no gate; it only makes the two remaining reads
   smaller and the aid backing one of them accurate.
