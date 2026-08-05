@@ -3,6 +3,28 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-08-05 - Both human gates re-prepared: D10 resolved to 3 emails / 29 URLs, S-01 aid re-verified
+
+No code changed. Two maintainer-owned gates were made ready to decide rather than ready to
+scan, and one review artifact was corrected where the code had moved under it.
+
+- **D10 (fixture publication).** A full re-scan of the four archived original transcripts
+  (18,125,080 bytes, 5,228 lines) reproduces the 2026-07-30 extraction aid's totals exactly
+  and resolves them from occurrence counts to distinct values: **3 emails and 29 URLs**, not
+  64 and 172. Zero URLs carry a credential; zero emails need rotation, each with evidence
+  that it was already public. The one real disclosure is two PRIVATE repository names,
+  visibility verified. A cross-check confirms zero real values survived into the synthetic
+  fixtures shipping today. Findings summarized in `maintainer-todo.md` 1.2; the per-row sheet
+  is local-only at `_local/fixture-review/2026-08-05-d10-decision-sheet.md`.
+- **S-01 (mover CLI) sign-off aid re-verified** against the tree at `25cc094`, 187 tests
+  passing. Of 24 rows, 23 stood; **AC-23 was upgraded from Test-thin to Proven** because the
+  AR-05 regression test drives rollback through the compiled binary end to end, which closed
+  the binary-coverage gap the rating described. AC-4, AC-5, AC-8, AC-13, AC-14 re-confirmed
+  as still Test-thin. A freshness section now records the check and its date.
+- **Doc-impact:** gate (a) is unchanged and still FAILs by design until the maintainer flips
+  `S-01/spec.md` themselves. This entry moves no gate; it only makes the two remaining reads
+  smaller and the aid backing one of them accurate.
+
 ## 2026-07-31 (fourth entry today) - Codex adversarial review: rollback preflight + the last --json holes
 
 A post-closeout Codex adversarial review of the day's diff (base: the AC-61/62 merge)

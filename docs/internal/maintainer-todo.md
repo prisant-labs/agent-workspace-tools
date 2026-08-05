@@ -1,7 +1,7 @@
 ---
 title: "Maintainer to-do - the single human checklist"
 type: checklist
-updated: 2026-07-30
+updated: 2026-08-05
 ---
 
 # Maintainer to-do
@@ -68,12 +68,34 @@ are pre-rewrite IDs and stay as historical record).
 
 **Still yours:**
 
-1. **The read.** The extraction aid at `_local/fixture-review/2026-07-30-extraction-aid.md`
-   (local-only, never committed) is pre-triaged: the 60 `sk-` strings are kebab-case task
-   IDs, not keys; the 820 base64 runs are dominated by embedded media; the read that
-   matters is 64 emails and 172 non-well-known URLs. Decide per item: rotate or accept.
-   Calibration: 0 forks/stars, but 60 clones from 28 unique sources before the rewrite -
-   the content has left GitHub, so rotation matters more than deletion ever could.
+1. **The read - now a decision sheet, not a scan.** Work from
+   `_local/fixture-review/2026-08-05-d10-decision-sheet.md` (local-only, never committed),
+   which supersedes the 2026-07-30 extraction aid. The aid's headline numbers, 64 emails
+   and 172 URLs, are *occurrence* counts; a full re-scan of the archived originals
+   reproduces those totals exactly (64 email hits, 336 URL hits = 172 non-well-known + 164
+   suppressed) and resolves them to **3 distinct emails and 29 distinct URLs**. Transcripts
+   quote the same commit trailer and README dozens of times, which is the whole gap.
+
+   What the re-scan found, each with evidence in the sheet:
+
+   - **Zero URLs carry a credential.** No token, key, signature, or `user:pass@host` in any
+     of the 29. Nothing to revoke.
+   - **Zero of the 3 emails need rotation.** An address is not a credential, and all three
+     are already public: one is a vendor no-reply, one is your own GitHub no-reply (the
+     author line on every commit you push), and the third is already the author email on
+     156 public GitHub commits by a contributor to the public repo these transcripts
+     discuss.
+   - **Two PRIVATE repositories are named** in the published bytes:
+     `product-on-purpose/markdown-project` and `jprisant/jp-library` (visibility verified
+     2026-08-05). That is the one genuine decision left on the page: accept the disclosure,
+     or rename if the name itself reveals something unannounced.
+   - **Zero real values survived into the shipping fixtures.** No email or URL from the
+     originals appears anywhere under `test/fixtures/` today; the synthetic replacement was
+     total.
+
+   Calibration is unchanged: 0 forks/stars, but 60 clones from 28 unique sources before the
+   rewrite. The content has left GitHub, so rotation would matter more than deletion ever
+   could - it just turns out there is nothing here to rotate.
 2. **GitHub Support request (optional but recommended).** A force-push makes old objects
    unreachable but GitHub still serves them by SHA (verified: the old blobs and commits
    still return via the API) and old PR diffs retain the content. Ask Support to remove
