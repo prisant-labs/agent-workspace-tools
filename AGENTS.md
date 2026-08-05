@@ -17,7 +17,7 @@ These rules are load-bearing. Violating any one invalidates correctness guarante
 
 **Parse to validate, never to write.** Call `serde_json::from_str` to confirm the shape of a store file, discard the result, and write by literal boundary-anchored, count-checked byte splice. NEVER re-serialize a store file. Re-serializing reformats whitespace and defeats verification.
 
-**Case-insensitive path matching.** Drive-letter case can differ between a normalized path and the value stored on disk (e.g., `d--Cloud-Work-PP` holds `cwd: "D:\Cloud-Work-PP"`). All path comparisons must be case-insensitive.
+**Case-insensitive path matching.** Drive-letter case can differ between a normalized path and the value stored on disk (e.g., `d--Cloud-Work-Demo` holds `cwd: "D:\Cloud-Work-Demo"`). All path comparisons must be case-insensitive.
 
 **Never touch another project's transcripts.** Other projects' transcripts may mention the old path (confirmed: 26 such transcripts on this machine). The correct postcondition is zero old-path refs in the moved project's own path-keyed state, not zero old-path refs everywhere. Other projects' transcripts are read-only at every rewrite tier.
 

@@ -93,8 +93,8 @@ materially incorrect.
   from the `cwd` spelling recorded in transcripts (via the reverse index), never from the
   caller-typed `--src`. A move invoked with a case or separator variant of the recorded path
   still finds and renames the plugin state dir. *Verified defect:* the hash is computed from
-  `mv.src_abs`, so a `d:/cloud-work-pp` invocation misses state recorded under
-  `D:\Cloud-Work-PP`, and verify repeats the same wrong derivation and passes.
+  `mv.src_abs`, so a `d:/cloud-work-demo` invocation misses state recorded under
+  `D:\Cloud-Work-Demo`, and verify repeats the same wrong derivation and passes.
 
 - **AC-61 (path confinement is semantic, not lexical).** The archive hook's transcript-path
   check canonicalizes before comparing (a `..` under the accepted prefix must not escape), and

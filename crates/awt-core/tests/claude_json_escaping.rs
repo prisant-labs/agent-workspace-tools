@@ -133,8 +133,14 @@ fn rewritten_claude_json_still_parses_with_correct_values() {
 }
 
 /// Unrelated entries must be untouched. A fix that over-escapes or rewrites too broadly
-/// would corrupt neighbours, and the fixture deliberately contains a `D:\\Cloud-Work-PP`
+/// would corrupt neighbours, and the fixture deliberately contains a `D:\\Cloud-Work-Demo`
 /// entry plus a forward-slash variant of it that must both survive verbatim.
+///
+/// The comparison is before-count vs after-count, which passes trivially as `0 == 0` if a
+/// literal is absent from the fixture. That is not hypothetical: renaming these values in
+/// the fixture on 2026-08-05 silently emptied two of the three assertions while the suite
+/// stayed green. The presence check below is what stops a rename from turning this test
+/// into a no-op, mirroring the same guard in `seed()`.
 #[test]
 fn unrelated_entries_are_byte_identical_after_rewrite() {
     let fs = seed();
@@ -143,10 +149,15 @@ fn unrelated_entries_are_byte_identical_after_rewrite() {
     let after = claude_json_text(&fs);
 
     for untouched in [
-        r#""D:\\Cloud-Work-PP""#,
-        r#""d:/cloud-work-pp""#,
+        r#""D:\\Cloud-Work-Demo""#,
+        r#""d:/cloud-work-demo""#,
         r#""E:\\Projects\\Chrome - Bookmark Autosort""#,
     ] {
+        assert!(
+            before.matches(untouched).count() > 0,
+            "fixture no longer contains {untouched}; this assertion would pass vacuously. \
+             Update the literal to match the fixture rather than deleting it."
+        );
         assert_eq!(
             before.matches(untouched).count(),
             after.matches(untouched).count(),

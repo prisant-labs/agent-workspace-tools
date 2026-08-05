@@ -652,12 +652,12 @@ mkdir -p test/fixtures/claude-json-variants test/fixtures/plugin-state/demo-note
   "projects": {
     "E:\\Projects\\Sample Repos\\demo-notes-editor": {},
     "e:/projects/sample repos/demo-notes-editor": {},
-    "D:\\Cloud-Work-PP": {}
+    "D:\\Cloud-Work-Demo": {}
   },
   "githubRepoPaths": {
     "owner/demo-notes-editor": ["E:\\Projects\\Sample Repos\\demo-notes-editor"],
     "owner/chrome-bookmark-autosort": ["E:\\Projects\\Chrome - Bookmark Autosort"],
-    "owner/pp": ["D:\\Cloud-Work-PP", "d:/cloud-work-pp"],
+    "owner/pp": ["D:\\Cloud-Work-Demo", "d:/cloud-work-demo"],
     "owner/pm-skills": ["E:\\Projects\\pm-skills"],
     "owner/agent-skills": ["E:\\Projects\\agent-skills-toolkit"],
     "owner/reposync": ["E:\\Projects\\demo-org\\repo-sync-tool"]
