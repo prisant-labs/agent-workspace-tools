@@ -3,6 +3,30 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-08-06 (second entry) - v2 prework: awt-core contract survey
+
+New: [`docs/internal/v2-core-contract-survey.md`](internal/v2-core-contract-survey.md). Read-only
+prework for the standing directive to freeze a versioned `awt-core` contract before any
+`src-tauri` work. No code changed, no gate moved, and no v2 release plan created - ROADMAP
+section 5 gates that on v1.0.0 passing.
+
+Every JSON emission site was read directly. Thirteen command modes emit JSON, and the structural
+finding is that **only three of them build their shape in `awt-core`** (`plan.rs`, `report.rs`,
+`repair.rs`); the other ten are assembled inline in `crates/awt-cli/src/main.rs`. A GUI linking
+the core crate cannot reach those shapes at all, which makes "one shared model, two front ends"
+currently untrue for most of the surface. That finding subsumes the rest: a contract cannot be
+frozen where it does not live.
+
+Nine further findings, each cited to file and line, including: no payload carries a schema
+version; `list --json` emits a bare top-level array and so can never gain a sibling field
+without a breaking change; two different serialization conventions; no uniform success signal;
+and English prose embedded as data in `repair`'s `reason` fields, which forces a consumer to
+string-match sentences.
+
+The document proposes what a freeze should mean and records the constraints any proposal must
+respect, notably that `awt-core` carries no serde-derive today. It is explicitly a starting
+proposal, not a decision.
+
 ## 2026-08-06 - AC-4 closed: forcing past a git worktree is no longer silent
 
 A behavior change, made at the maintainer's direction after the S-01 read surfaced that AC-4's
