@@ -42,8 +42,18 @@ current test files; exactly one had gone stale:
   (rollback panicking on the `report.json` its own `apply` prints) was fixed red-first: the
   regression test necessarily drives the compiled binary end to end. Rollback now has three
   binary-level tests and verify one.
-- AC-4, AC-5, AC-8, AC-13, AC-14 re-confirmed as still Test-thin, unchanged. No criterion
-  moved in the other direction.
+- AC-5, AC-8, AC-13, AC-14 re-confirmed as still Test-thin, unchanged. No criterion moved in
+  the other direction.
+
+**AC-4 closed 2026-08-06**, after the read surfaced something the rating had understated. The
+missing test was not the whole story: the untested `--force` path also *behaved* differently
+from its neighbour. Forcing past a live IDE lock pushed a warning, so the override appeared in
+the plan and the report; forcing past a git worktree pushed nothing, which made the more
+destructive of the two overrides the silent one - moving a linked worktree breaks the
+`.git`-file link to the parent repository and the parent's `worktrees/<name>/gitdir` link
+back, and nothing recorded that it had happened. The criterion says the tool "flags it", and
+it only flagged in the branch where it refused. Both halves are now covered and the override
+emits a warning naming the path and pointing at `git worktree repair`.
 
 The general point outlives this entry: a review aid is a snapshot, and the code moves under
 it. Re-check it against the tree on the day you sign, not the day it was written.
@@ -54,7 +64,7 @@ it. Re-check it against the tree on the day you sign, not the day it was written
 |---|---|---|---|
 | AC-1 | A same-volume move is a rename: fast, atomic, and the old folder is gone afterwards | cross-volume guard + test; missing-source guard at plan AND apply, folder postcondition in verify (AC-55, closed 2026-07-30) | Proven |
 | AC-3 | If something already exists at the destination, nothing happens at all | guard + exit-2 test; the `keep-dest`/`keep-src` bypass modes were removed, so the guard is unconditional (AC-58, closed 2026-07-30) | Proven |
-| AC-4 | A git worktree is never moved without an explicit override | guard test | Test-thin (the `--force` override path itself is untested) |
+| AC-4 | A git worktree is never moved without an explicit override, and forcing past one is recorded | refusal test + override test asserting the warning reaches both `render_plan` and `plan --json` (2026-08-06) | Proven |
 | AC-5 | The plan lists every store that references the project - nothing is touched that was not listed | per-store tests | Test-thin (no single test seeds all stores at once) |
 | AC-6 | History is matched to a folder by what the transcripts *say*, never by folder-name guessing | index tests | Proven |
 | AC-7 | When history could belong to two projects, the tool stops and makes you choose | fail-closed test (decision 7a) | Proven |
