@@ -151,15 +151,31 @@ pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) 
     if opts.move_folder && !fs.is_dir(Path::new(&mv.src_abs.replace('\\', "/"))) {
         return Err(AwtError::SourceMissing(mv.src_abs.clone()));
     }
-    // Guard: worktree source (.git is a file, not a dir)
+    let mut warnings = Vec::new();
+
+    // Guard: worktree source (.git is a file, not a dir). Moving a linked worktree breaks
+    // the link in BOTH directions - the worktree's .git file points at the parent repo, and
+    // the parent's .git/worktrees/<name>/gitdir points back at the old location - and awt
+    // repairs Claude Code state, not git's bookkeeping.
+    // Without --force this is a hard refusal; with --force we warn and continue.
     let git = format!("{}/.git", mv.src_abs.replace('\\', "/"));
-    if fs.is_file(Path::new(&git)) && !opts.force {
-        return Err(AwtError::WorktreeSource(mv.src_abs.clone()));
+    if fs.is_file(Path::new(&git)) {
+        if !opts.force {
+            return Err(AwtError::WorktreeSource(mv.src_abs.clone()));
+        }
+        // The override must leave a trace, exactly as the live-lock override below does.
+        // Until this existed, the more destructive of the two overrides was the silent one:
+        // nothing in the plan or the report recorded that a worktree had been moved.
+        warnings.push(format!(
+            "proceeding despite a git worktree source: {}. Its .git is a file pointing at \
+             the parent repository, and moving the folder breaks that link in both \
+             directions. Run `git worktree repair` from the parent repository afterwards.",
+            mv.src_abs
+        ));
     }
     // Guard: live IDE lock files signal a running CLI that may be editing the project.
     // Without --force this is a hard refusal; with --force we warn and continue.
     let live_locks = detect_live(fs, home);
-    let mut warnings = Vec::new();
     if !live_locks.is_empty() {
         if !opts.force {
             return Err(AwtError::Locked(format!(
@@ -419,6 +435,51 @@ mod tests {
         };
         let err = build_plan(&fs, Path::new("/h"), &mv, &opts()).unwrap_err();
         assert!(matches!(err, crate::error::AwtError::WorktreeSource(_)));
+    }
+
+    /// The other half of AC-4. The criterion says the tool "flags it and does not proceed
+    /// without an explicit override", and the refusal half was the only half tested.
+    ///
+    /// The override must leave a trace. The live-lock guard below pushes a warning when
+    /// forced, so a user who overrode it sees that in the plan and the report; the worktree
+    /// guard did not, which made the MORE destructive of the two overrides the silent one.
+    /// Moving a linked worktree breaks the link in both directions and nothing else records
+    /// that it happened.
+    #[test]
+    fn proceeds_with_warning_when_worktree_source_and_force_true() {
+        let fs = MemoryFileSystem::new();
+        fs.write(Path::new("E:/Projects/A/.keep"), b"x").unwrap(); // source exists (AC-55 guard)
+        fs.write(Path::new("E:/Projects/A/.git"), b"gitdir: ../real")
+            .unwrap(); // .git is a FILE
+        let mv = Move {
+            src_abs: "E:\\Projects\\A".into(),
+            dst_abs: "E:\\Projects\\B".into(),
+        };
+        let mut o = opts();
+        o.force = true;
+        let plan = build_plan(&fs, Path::new("/h"), &mv, &o)
+            .expect("--force must proceed past a worktree source");
+        assert!(
+            plan.warnings.iter().any(|w| w.contains("worktree")),
+            "forcing past a worktree source must leave a trace in plan.warnings, got {:?}",
+            plan.warnings
+        );
+        // The field is not the guarantee; what the user sees is. Both front ends read from
+        // here - render_plan for text, to_json for --json - so assert the rendered surface.
+        let text = render_plan(&plan);
+        assert!(
+            text.contains("WARNING:") && text.contains("worktree"),
+            "the override must be visible in the rendered plan, got:\n{text}"
+        );
+        assert!(
+            plan.to_json()["warnings"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|w| w.as_str().unwrap_or_default().contains("worktree")),
+            "the override must be visible in plan --json, got: {}",
+            plan.to_json()["warnings"]
+        );
     }
 
     // ---------------------------------------------------------------------------

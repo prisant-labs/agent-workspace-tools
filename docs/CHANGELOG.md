@@ -3,6 +3,32 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-08-06 - AC-4 closed: forcing past a git worktree is no longer silent
+
+A behavior change, made at the maintainer's direction after the S-01 read surfaced that AC-4's
+"test-thin" rating had understated the problem.
+
+- **The asymmetry.** Two guards in `build_plan` accept the same `--force`. The live-IDE-lock
+  guard pushed a warning when overridden, so the override appeared in the rendered plan, in
+  `plan --json`, and in the run's report. The git-worktree guard pushed nothing: the
+  `!opts.force` check simply fell through and planning continued as though the source were an
+  ordinary folder. The more destructive of the two overrides was the silent one. Moving a
+  linked worktree breaks the link in **both** directions - the worktree's `.git` file points
+  at the parent repository, and the parent's `.git/worktrees/<name>/gitdir` points back at the
+  old location - and `awt` repairs Claude Code state, not git's bookkeeping.
+- **Why this was a criterion gap and not only a test gap.** AC-4 promises the tool "flags it
+  and does not proceed without an explicit override". It flagged only in the branch where it
+  refused. On a strict reading the criterion passed; on the reading that matters it did not.
+- **The fix.** The worktree branch now pushes a warning naming the path, explaining the
+  two-way breakage, and pointing at `git worktree repair` from the parent repository.
+  Red-first: the new test failed with `got []`, which confirmed the diagnosis exactly - the
+  force path worked, it just recorded nothing.
+- **What the test asserts.** Not the internal field alone. `plan.warnings` is only a
+  guarantee if it reaches a user, so the test also pins `render_plan`'s `WARNING:` line and
+  the `warnings` array in `plan --json`, the two surfaces both front ends read.
+- **Standing.** `S-01/review-guide.md` moves AC-4 from Test-thin to Proven. AC-5, AC-8,
+  AC-13, AC-14 remain Test-thin and accepted as-is. Suite 187 -> 188, fmt and clippy clean.
+
 ## 2026-08-05 - Both human gates re-prepared: D10 resolved to 3 emails / 29 URLs, S-01 aid re-verified
 
 No code changed. Two maintainer-owned gates were made ready to decide rather than ready to
