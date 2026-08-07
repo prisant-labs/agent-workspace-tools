@@ -55,8 +55,22 @@ back, and nothing recorded that it had happened. The criterion says the tool "fl
 it only flagged in the branch where it refused. Both halves are now covered and the override
 emits a warning naming the path and pointing at `git worktree repair`.
 
-The general point outlives this entry: a review aid is a snapshot, and the code moves under
-it. Re-check it against the tree on the day you sign, not the day it was written.
+**AC-13 and AC-14 corrected 2026-08-06.** Both were rated test-thin for the same stated reason,
+"no apply-then-readback integration test". Checked against the tree, that reason was wrong for
+one and right for the other, which is worse than being wrong for both because it looked
+consistent:
+
+- **AC-13's stated gap does not exist.** `claude_json_escaping.rs` applies a move and reads
+  `.claude.json` back twice: once asserting the raw bytes (`:88`) and once asserting the parsed
+  view (`:107`). What is genuinely unasserted is narrower and was never named: the "entry count
+  unchanged" clause.
+- **AC-14's stated gap is real**, and now says so precisely. There is an apply-then-readback of
+  `history.jsonl`, but it exercises `associate` (`associate_and_duplicates.rs:168`), not a move.
+
+The general point outlives these entries: a review aid is a snapshot, and the code moves under
+it. Re-check it against the tree on the day you sign, not the day it was written. Note also
+that two rows carrying the same rating for the same stated reason is worth distrusting on
+sight - a copied rationale is not two independent judgements.
 
 ## The criteria
 
@@ -73,8 +87,8 @@ it. Re-check it against the tree on the day you sign, not the day it was written
 | AC-10 | After a move, every transcript `cwd` points at the new path and none at the old | golden end-to-end test | Proven |
 | AC-11 | Path rewrites are surgical: anchored, never bare substring | golden counts test | Proven |
 | AC-12 | Things that merely *look* like the project name (package names, branches, prose) come through byte-identical | golden counts test | Proven |
-| AC-13 | Every variant key in `.claude.json` migrates; the file still parses; entry count unchanged | detect/plan tests + escaping suite | Test-thin (no apply-then-readback integration test), though the AR-01/AR-04 regression suite now covers the raw-byte layer |
-| AC-14 | `history.jsonl` entries follow the project to its new path | detect/plan tests | Test-thin (same gap) |
+| AC-13 | Every variant key in `.claude.json` migrates; the file still parses; entry count unchanged | apply-then-readback IS proven, on the raw bytes (`claude_json_escaping.rs:88`) and on the parsed view (`:107`), plus the AR-01/AR-04 regression suite | Test-thin, but narrowly: only the "entry count unchanged" clause is unasserted (corrected 2026-08-06) |
+| AC-14 | `history.jsonl` entries follow the project to its new path | detect/plan tests; `associate` has an apply-then-readback (`associate_and_duplicates.rs:168`), a move does not | Test-thin (no apply-then-readback for the MOVE path specifically) |
 | AC-15 | The dry run shows everything and writes nothing | byte-identical-after-plan test | Proven |
 | AC-16 | Before the first write, a backup exists containing the original of every file the run will modify | recursive snapshot: every file under a renamed directory is captured, so the manifest now covers the affected TREE, not just the touched files (AC-54, closed 2026-07-30) | Proven |
 | AC-17 | Rollback puts everything back the way it was | rename-back rollback + tree-map tests (sidecars, binaries, injected mid-apply failure, real-FS end-to-end) + byte-identity proof (AC-17v) | Proven - and the proof's denominator is now the tree, not the manifest (AC-54, closed 2026-07-30) |
