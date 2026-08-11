@@ -99,6 +99,13 @@ maintainer spec sign-off (S-01) and the fixture-history decision (D10) - see
   unchanged: it is still never rewritten, and it still does not fail the run. Silence was the
   previous behavior only by accident, and it is indistinguishable from a tool that failed to
   look.
+- **Forcing past a git worktree source now warns.** `--force` lifts two guards; the live-lock
+  one already recorded the override in the plan, the report, and `plan --json`, while the
+  worktree one recorded nothing. That made the more destructive of the two the silent one:
+  moving a linked worktree breaks the `.git`-file link to the parent repository and the
+  parent's `worktrees/<name>/gitdir` link back, and `awt` repairs Claude Code state, not git's
+  bookkeeping. The override now emits a warning naming the path and pointing at
+  `git worktree repair` (AC-4). The refusal without `--force` is unchanged.
 
 ### Fixed
 
