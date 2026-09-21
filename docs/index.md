@@ -16,7 +16,7 @@ This index lists every document in the repository, who it is for, and when to re
 | [docs/ROADMAP.md](ROADMAP.md) | Maintainers | Understanding the full program plan for v1 and v2 |
 | [docs/superpowers/plans/2026-07-10-claude-project-mover.md](superpowers/plans/2026-07-10-claude-project-mover.md) | Engineers, AI agents | Executing the TDD implementation plan task by task |
 | [docs/features/v1.1-inventory-retention-reassociate.md](features/v1.1-inventory-retention-reassociate.md) | Engineers | F13-F15 spec: list, archive, associate |
-| [docs/reference/commands.md](reference/commands.md) | Everyone | Per-subcommand reference: all 9 commands, their flags, and the exit-code contract |
+| [docs/reference/commands.md](reference/commands.md) | Everyone | Per-subcommand reference: all 10 commands, their flags, and the exit-code contract |
 | [docs/reference/claude-data-model.md](reference/claude-data-model.md) | Everyone technical, AI agents | How Claude Code stores project state - read before any store adapter work |
 | [docs/reference/existing-solutions.md](reference/existing-solutions.md) | Evaluators, engineers | Prior art survey |
 | [docs/internal/maintainer-todo.md](internal/maintainer-todo.md) | Maintainer | **The single human to-do list.** What is left before the tag, and which items only a human can clear |
