@@ -13,7 +13,7 @@ These flags are accepted by every subcommand.
 | `--home <PATH>` | `USERPROFILE` / `HOME` env var | Home directory that holds `.claude/` and `.claude.json` |
 | `--json` | false | Emit machine-readable JSON to stdout instead of human text. Supported by every subcommand. For `plan` this is the plan model the v2 GUI renders (ROADMAP AC-25 parity); each change carries a `kind` discriminant and a `totals` object gives `changes` and `edits`. Exit codes are unaffected by the format: a failed `verify --json` still exits 3. |
 | `--backup-root <PATH>` | System temp dir | Root directory where backup snapshots are written |
-| `--force` | false | Allow overwriting a destination that already exists |
+| `--force` | false | Proceed despite a git-worktree source or a live IDE lock. Both overrides record a warning that reaches the rendered plan, `plan --json`, and the run's report. **Collisions always refuse**: the destination-exists guard is unconditional since AC-58 removed the `keep-dest`/`keep-src` bypass modes, so `--force` will not overwrite a destination (see [Notes on flags](#notes-on-flags)) |
 | `--no-auto-rollback` | false | Disable the automatic rollback triggered on apply failure |
 
 ---

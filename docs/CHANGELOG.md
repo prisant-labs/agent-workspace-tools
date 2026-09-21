@@ -3,6 +3,44 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-09-21 - reference-doc accuracy: the `--force` row contradicted the shipped binary
+
+Two corrections to reference documentation. No code changed, no gate moved, no acceptance
+criterion affected.
+
+**1. `docs/reference/commands.md` described a `--force` behavior that was removed in July.**
+The global-flag table said `--force` would "allow overwriting a destination that already
+exists". That has not been true since AC-58 (2026-07-30) removed the `keep-dest`/`keep-src`
+bypass modes and made the destination-exists guard unconditional. The row now matches the
+binary: `--force` proceeds past a git-worktree source or a live IDE lock, both overrides record
+a warning, and collisions always refuse.
+
+The failure mode is worth recording because it is a near-repeat. **AR-06**, one of the four
+defects the 2026-07-31 adversarial acceptance run caught, was the same stale claim in the
+`--force` help text compiled into the binary. That fix corrected the help string and missed the
+mirror of the same sentence in this document. One fact lived in two places; only the one a test
+could reach got fixed. The same file's own "Notes on flags" section has said "Collisions always
+refuse" since AC-58, so the document has been self-contradictory for seven weeks.
+
+The defect failed safe. The collision guard is unconditional in code, so a reader who trusted
+the table and passed `--force` got a refusal and exit 2, not an overwritten destination. The
+cost was a wrong expectation, not lost data.
+
+**2. `docs/index.md` undercounted the command reference.** Its row for
+`docs/reference/commands.md` advertised "all 9 commands"; the file documents ten (`doctor`,
+`scan`, `plan`, `apply`, `verify`, `rollback`, `list`, `archive`, `repair`, `associate`). The
+count was not updated when the surface grew.
+
+**Checked and found correct, so left alone:** `docs/troubleshooting.md` (its worktree,
+live-lock, and cross-volume entries all describe the current behavior), `README.md` (its
+command table lists all ten and its safety model states the refusals), and the `--render` flag
+in the `archive` section of `commands.md`, which already says it has no effect in v1.0.
+
+**Structural note for v2.** A doc test that diffs `awt <cmd> --help` against the reference
+tables would have caught both of these at the point they drifted. That belongs with the
+`awt-core` contract work, which is already motivated by the same principle: duplicated truth
+drifts, and the fix is one source rather than diligence.
+
 ## 2026-08-06 (second entry) - v2 prework: awt-core contract survey
 
 New: [`docs/internal/v2-core-contract-survey.md`](internal/v2-core-contract-survey.md). Read-only
