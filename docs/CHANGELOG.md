@@ -3,6 +3,53 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-09-21 (second entry) - AC-5, AC-8, AC-13 and AC-14 closed by test
+
+New: `crates/awt-core/tests/all_stores_move.rs`. Five tests, no production code changed. The
+suite goes from 188 to 193, all green, with `cargo fmt` and `cargo clippy -D warnings` clean.
+
+**This reverses a recorded decision, deliberately and at the maintainer's direction.** The
+2026-08-11 session log recorded all four criteria as accepted-as-is for v1.0 unless the
+maintainer objected during the S-01 read, and instructed that no agent write these tests
+unprompted. They were written on the maintainer's explicit delegation of 2026-09-21. Declining
+the pull request restores the accepted-as-is record at no cost, because nothing else depends on
+these tests.
+
+**One fixture, not four.** AC-5's stated gap is literally "no single test seeds all stores at
+once", so four separate test files would have left it open however thorough each was. The file
+builds one home holding all four writing stores, runs one move through it, and hangs each
+criterion's missing assertion off that single scenario. The fifth registered store,
+`sweep.unknown`, is deliberately absent: it is report-only and structurally incapable of
+emitting a change, so no plan can ever name it.
+
+**No defect was found.** All five tests passed on first run against `847cb20`. This is the
+opposite of what happened with AC-4, where the same exercise exposed a behavioral asymmetry
+rather than a missing assertion. The four criteria really were test-thin rather than
+implementation-thin.
+
+**Each assertion was proven able to fail**, by injecting the specific defect it guards and
+confirming the failure, then restoring the file byte-identically:
+
+| Criterion | Defect injected | Result |
+|---|---|---|
+| AC-5 | plugin state removed from the seed | fails naming `plugin.state` and printing the planned paths |
+| AC-8 | copy-instead-of-rename, old encoded dir left behind | fails on "must NOT still exist under the old encoding" |
+| AC-13 | a rewrite that drops an entry while still parsing | fails `left: 1, right: 2` with the before and after key lists |
+| AC-14 | the history rewrite never landed | fails on "must reference the new path" |
+
+This matters because of the failure mode recorded on 2026-08-11: an assertion comparing
+occurrence counts passed trivially as `0 == 0` when its literal was absent, which silently
+emptied two of three assertions while the suite stayed green. Every postcondition here is
+paired with a precondition asserting the thing it looks for is present before the move.
+
+**Doc impact, deliberately not applied in this change.**
+[`review-guide.md`](internal/release-plans/plan_v1.0.0/S-01_mover-cli/review-guide.md) still
+rates these four rows Test-thin. Those ratings are now stale, and the guide's standing would
+become 24 Proven rather than 20 Proven plus 4 Test-thin. They are left untouched on purpose:
+the maintainer is mid-way through the S-01 sign-off read, and changing four ratings underneath
+an in-progress read is worse than leaving them stale for a day. Update the guide after this
+merges, or discard it with the pull request.
+
 ## 2026-09-21 - reference-doc accuracy: the `--force` row contradicted the shipped binary
 
 Two corrections to reference documentation. No code changed, no gate moved, no acceptance
