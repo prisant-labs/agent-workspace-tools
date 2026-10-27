@@ -1,7 +1,7 @@
 ---
 title: "Maintainer to-do - the single human checklist"
 type: checklist
-updated: 2026-08-05
+updated: 2026-10-27
 ---
 
 # Maintainer to-do
@@ -185,6 +185,40 @@ own with `scripts/new-scratch-home.ps1`.
   passing parity artifact (`plan --json`) exists, but freezing today's ad-hoc JSON as the GUI
   contract would bake in the exact inconsistencies the closeout is fixing. Sequence: closeout,
   then contract, then shell.
+
+---
+
+## 5. Field findings from real use, 2026-10-27
+
+These two gaps came from a real project move. A repository was transferred and renamed on GitHub. It was cloned fresh to a new folder, and `awt associate --from <old> --to <new>` was run to carry its Claude Code state across. The run used the release binary built 2026-07-31. The behavior was then confirmed against the source at `847cb20`. The paths below are invented examples.
+
+Whether either finding blocks the v1.0.0 tag is your call **[HUMAN]**. FF-1 is the stronger candidate, because it is a safety claim that does not hold. That is the same class of finding as the S-04 closeout.
+
+### FF-1 (live-session guard misses terminal sessions) **[DELEGABLE]**
+
+**What happened.** `associate` ran while the Claude Code session that launched it was still running in the source folder. The guard did not refuse, and the run reported success. The session kept writing afterwards. It recreated the old `projects/<encoded-old>/` folder, appended new transcript lines under the same session ID, re-added the old `~/.claude.json` project key on exit, and added new `history.jsonl` lines under the old path. The migration was correct when it ran, then went stale within minutes.
+
+**Why.** `locks::detect_live` (`crates/awt-core/src/locks.rs`) only looks for `~/.claude/ide/*.lock`. Those files come from editor integrations. A plain terminal session never writes one, so the most common way of running Claude Code is invisible to the guard. The docs promise more than that. `docs/recipes.md` says to "close any Claude Code session working in the project first, or the lock guard will refuse". The refusal message says a lock means "a running Claude Code CLI may be editing". The README lists "a live lock" among its fail-closed guards. For a terminal session, the guard will not refuse.
+
+**Possible signal (inferred, not documented by Anthropic).** Each interactive session appears to write `~/.claude/sessions/<pid>.json`. That file holds `pid`, `sessionId`, `cwd`, and `status`, along with other fields. A project-scoped guard could refuse when a live process's `cwd` matches `--src` or `--from`, or `--to`, and warn on any other live session. Verify the format against more than one Claude Code version before relying on it. Also confirm that a stale file whose process has died is ignored.
+
+**Workaround until fixed.** The docs could say this outright: exit every session running in the source folder before `apply` or `associate`, and do not run `awt` from inside such a session.
+
+### FF-2 (associate cannot finish into a destination that is already live) **[DELEGABLE - one design call is yours]**
+
+**What happened.** A second `associate` pass, run to pick up the leftovers from FF-1, refused with exit 2. The message was `destination exists: claude.json already has a key for <new>`, and nothing was written, so the refusal itself was correct. The result, though, is that a half-migrated project has no supported way to finish.
+
+**Why.** Two refusals stack. First, `build_plan` (`crates/awt-core/src/plan.rs`) unconditionally refuses when the destination key exists in `~/.claude.json`. The AC-58 removals made that guard unconditional. Second, if that passed, `MergeDir` in `apply.rs` would refuse on the transcript, because the same `<sessionId>.jsonl` existed under both paths. The code comment there says this "should never fire" because session file names are UUIDs. FF-1 is exactly how it fires: one session, migrated while still live, writing in both places.
+
+**What a fix needs to decide (yours).**
+
+- **Settings key.** Merge the old key into the new one, keeping the new key's values on conflict, or refuse as now but print the manual steps. In this case the old key held only `last*` session statistics, so a rule that "statistics-only keys may be dropped" would have been enough.
+- **Same-UUID transcripts.** Append the old file's lines that the new file lacks, which keeps one file per session ID, or export the old copy as an archive and leave it out of the live state. Any choice must keep the existing guarantee that the destination's own transcript is never altered.
+- **History lines.** These need no new design. The existing `project` field rewrite already handles them.
+
+**What was done by hand this time.** The transcript tail was copied into the destination's `.claude-sessions/` export folder. The other leftovers were left as stale entries, following awt's own rule that stale references are left alone.
+
+**Related, smaller.** `associate`'s default export writes `.claude-sessions/` inside the destination project folder. When that folder is a git repository, nothing stops the exported transcripts from being committed. They are full of local paths and conversation text. Consider printing a warning when the destination is a git work tree and `.claude-sessions/` is not ignored. Another option is to write a `.gitignore` inside the export folder.
 
 ---
 
