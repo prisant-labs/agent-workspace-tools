@@ -3,6 +3,23 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-11-03 (second entry) - S-01 review guide: four criteria to Proven, AC-21 narrowed
+
+`review-guide.md`, the S-01 sign-off reading aid, caught up with two changes. No code changed.
+
+**AC-5, AC-8, AC-13 and AC-14 move from Test-thin to Proven.** PR #28 merged and added
+`all_stores_move.rs`, which closes each criterion's stated gap from one all-stores scenario. Each
+row now cites the test that closes it. The table has no Test-thin row left.
+
+**AC-21 (a live Claude Code process blocks the run) is marked proven for IDE sessions only.** The
+lock-detection test is real, but FF-1 showed the guard sees only IDE lock files, so a terminal
+session passes it. A freshness note explains the gap and points at `maintainer-todo.md` section 5,
+so the sign-off reader decides whether that is the promise to sign. The guide still takes no
+position on the verdict.
+
+`ac-traceability.md` is a dated snapshot that the guide already supersedes on AC-3, AC-4 and
+AC-18, so it was left alone.
+
 ## 2026-11-03 - field findings FF-1 and FF-2 logged and decided; two new tag steps
 
 `docs/internal/maintainer-todo.md` gains section 5, which records two gaps found in a real
