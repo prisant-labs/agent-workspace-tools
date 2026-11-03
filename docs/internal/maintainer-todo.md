@@ -1,7 +1,7 @@
 ---
 title: "Maintainer to-do - the single human checklist"
 type: checklist
-updated: 2026-10-27
+updated: 2026-11-03
 ---
 
 # Maintainer to-do
@@ -122,6 +122,8 @@ AR-06 (stale `--force` help text), AR-07 (`archive --json` emitted text), AR-08
 copy passed every happy-path and adversarial step, including a real junction (plan
 refuses, archive skips) and byte-identical whole-tree rollback. **No technical step
 remains in the closeout; what is left is yours: 1.2 (D10 read) and 1.5 (S-01 sign-off).**
+That stopped being the whole list on 2026-11-03: 1.6 (acceptance re-run) and 1.7 (FF-1 docs
+fix) are two delegable steps that now also block the tag.
 
 ### 1.5 Sign off S-01 **[HUMAN - nobody else can do this]**
 
@@ -140,6 +142,22 @@ Two aids exist now:
 
 The question that matters is not "do the tests pass" (they did, through two release blockers):
 it is **"do these criteria describe the guarantees I actually want?"**
+
+PR #28 merged on 2026-11-03, so AC-5, AC-8, AC-13 and AC-14 are now closed by test. The review
+guide still rates those four as Test-thin until a follow-up change moves them to Proven.
+
+### 1.6 Re-run the adversarial acceptance after the clap bump **[DELEGABLE]**
+
+Decided 2026-11-03. PR #26 merged on 2026-10-24 and moved clap from 4.6.4 to 4.6.7. clap parses
+the command line, which is exactly the surface the 2026-07-31 acceptance run exercised, so that
+run no longer describes the binary that would be tagged. Re-run the full adversarial acceptance
+on a fresh scratch home from `scripts/new-scratch-home.ps1` before the tag. Run it after the
+1.7 documentation fix lands, so one run covers the final tree. PR #30 (serde_json, sha2 and
+insta) stays held until after the tag, so this run does not include it.
+
+### 1.7 Correct the live-lock claims in the docs (FF-1) **[DELEGABLE]**
+
+Decided 2026-11-03: FF-1 blocks the tag on documentation only. See section 5.
 
 ---
 
@@ -177,7 +195,8 @@ own with `scripts/new-scratch-home.ps1`.
   friction.
 - **Dependabot queue processed 2026-07-30** (your call: process now): actions/checkout 4->7,
   actions/cache 4->6, and the grouped cargo minor/patch bumps merged CI-green; the sha2 0.11
-  major is rebasing and merges when its fresh CI passes.
+  major is rebasing and merges when its fresh CI passes. **PR #30** (serde_json, sha2 and
+  insta) is held until after the tag, decided 2026-11-03.
 - **CI-3 signed binary channel** - still not a tag blocker; v1.0 ships source-first.
 - **P10 cross-volume, P11 Codex/Gemini adapters** - parked, promotable.
 - **v2 "Taura" GUI** - deliberately gated behind the closeout plus a frozen, versioned
@@ -204,6 +223,8 @@ Whether either finding blocks the v1.0.0 tag is your call **[HUMAN]**. FF-1 is t
 
 **Workaround until fixed.** The docs could say this outright: exit every session running in the source folder before `apply` or `associate`, and do not run `awt` from inside such a session.
 
+**Decision (2026-11-03): the code fix does not block the tag, and the documentation fix does.** Before the tag, correct `docs/recipes.md`, the README and any other page that promises the guard catches a running session. They must say the guard sees IDE lock files only, and give the workaround above. The guard fix ships in v1.0.1. The reason is that the failure leaves a stale migration rather than lost data, and a v1.0 guarantee should not rest on an undocumented file format. A false safety claim in the shipped docs is not acceptable either way. The refusal message text is compiled into the binary, so it changes with the v1.0.1 code fix.
+
 ### FF-2 (associate cannot finish into a destination that is already live) **[DELEGABLE - one design call is yours]**
 
 **What happened.** A second `associate` pass, run to pick up the leftovers from FF-1, refused with exit 2. The message was `destination exists: claude.json already has a key for <new>`, and nothing was written, so the refusal itself was correct. The result, though, is that a half-migrated project has no supported way to finish.
@@ -215,6 +236,11 @@ Whether either finding blocks the v1.0.0 tag is your call **[HUMAN]**. FF-1 is t
 - **Settings key.** Merge the old key into the new one, keeping the new key's values on conflict, or refuse as now but print the manual steps. In this case the old key held only `last*` session statistics, so a rule that "statistics-only keys may be dropped" would have been enough.
 - **Same-UUID transcripts.** Append the old file's lines that the new file lacks, which keeps one file per session ID, or export the old copy as an archive and leave it out of the live state. Any choice must keep the existing guarantee that the destination's own transcript is never altered.
 - **History lines.** These need no new design. The existing `project` field rewrite already handles them.
+
+**Decisions (2026-11-03).**
+
+- **Settings key: refuse as now, and print the manual steps.** No new write path into `~/.claude.json` is added. Dropping an old key automatically when it holds only `last*` statistics is the later improvement, once "statistics only" has a precise definition.
+- **Same-UUID transcripts: export the old copy as an archive under `.claude-sessions/`, and leave it out of the live state.** This is the only option that keeps the guarantee that the destination's own transcript is never altered. Appending the missing lines would write into that file. It is also what was done by hand on 2026-10-27.
 
 **What was done by hand this time.** The transcript tail was copied into the destination's `.claude-sessions/` export folder. The other leftovers were left as stale entries, following awt's own rule that stale references are left alone.
 

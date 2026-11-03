@@ -3,6 +3,27 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-11-03 - field findings FF-1 and FF-2 logged and decided; two new tag steps
+
+`docs/internal/maintainer-todo.md` gains section 5, which records two gaps found in a real
+`associate` run on 2026-10-27, and the maintainer's decisions on them, made on 2026-11-03. No code
+changed.
+
+**FF-1 (live-session guard misses terminal sessions)** blocks the tag on documentation only. The
+guard sees IDE lock files, so a plain terminal session passes it. `docs/recipes.md`, the README
+and any page that promises more must be corrected before the tag; the guard fix ships in v1.0.1.
+
+**FF-2 (associate cannot finish into a destination that is already live)** keeps the settings-key
+refusal and adds printed manual steps. Transcripts that share a session UUID get exported as an
+archive under `.claude-sessions/`, because appending to the destination's transcript would break
+the guarantee that it is never altered.
+
+**Two steps now block the tag that did not before.** Section 1.6: PR #26 moved clap from 4.6.4 to
+4.6.7 on 2026-10-24, so the 2026-07-31 acceptance run no longer describes the binary to be
+tagged, and the adversarial acceptance must be re-run. Section 1.7: the FF-1 documentation fix.
+Section 1.4's "no technical step remains" line now says so. PR #30 (serde_json, sha2 and insta)
+is held until after the tag.
+
 ## 2026-09-21 (second entry) - AC-5, AC-8, AC-13 and AC-14 closed by test
 
 New: `crates/awt-core/tests/all_stores_move.rs`. Five tests, no production code changed. The
