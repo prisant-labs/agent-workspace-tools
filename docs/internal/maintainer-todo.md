@@ -143,8 +143,9 @@ Two aids exist now:
 The question that matters is not "do the tests pass" (they did, through two release blockers):
 it is **"do these criteria describe the guarantees I actually want?"**
 
-PR #28 merged on 2026-11-03, so AC-5, AC-8, AC-13 and AC-14 are now closed by test. The review
-guide still rates those four as Test-thin until a follow-up change moves them to Proven.
+PR #28 merged on 2026-11-03, so AC-5, AC-8, AC-13 and AC-14 are now closed by test, and the
+review guide rates all four Proven. The guide also now marks AC-21 (live-session guard) as proven
+for IDE sessions only, because of FF-1. Read that row with section 5 open.
 
 ### 1.6 Re-run the adversarial acceptance after the clap bump **[DELEGABLE]**
 

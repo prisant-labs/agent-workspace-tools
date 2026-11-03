@@ -4,7 +4,7 @@ title: "S-01 sign-off reading aid"
 spec: ./spec.md
 evidence: ./ac-traceability.md
 created: 2026-07-30
-updated: 2026-07-30
+updated: 2026-11-03
 ---
 
 # S-01 sign-off reading aid
@@ -72,6 +72,22 @@ it. Re-check it against the tree on the day you sign, not the day it was written
 that two rows carrying the same rating for the same stated reason is worth distrusting on
 sight - a copied rationale is not two independent judgements.
 
+**AC-5, AC-8, AC-13 and AC-14 moved to Proven on 2026-11-03.** PR #28 merged that day and
+added [`all_stores_move.rs`](../../../../../crates/awt-core/tests/all_stores_move.rs). One home
+seeds all four writing stores, one move runs through it, and each criterion's missing assertion
+hangs off that single scenario. Each assertion was proven able to fail by injecting the defect
+it guards. No production code changed, and no defect was found. The table now has no Test-thin
+row.
+
+**AC-21 is narrower than its words, found 2026-10-27.** A real `associate` run showed that the
+live-session guard sees only `~/.claude/ide/*.lock` files, which editor integrations write. A
+plain terminal session writes none, so the guard does not refuse while one is running in the
+source folder. The lock-detection test proves the IDE case and nothing more. The finding is
+FF-1 in [`maintainer-todo.md`](../../../maintainer-todo.md) section 5. The maintainer decided on
+2026-11-03 that the docs get corrected before the tag and the guard fix ships in v1.0.1. The
+question for this read is whether "a live Claude Code process" is the promise you want to sign
+while the code keeps it for IDE sessions only.
+
 ## The criteria
 
 | AC | The promise, in plain words | Evidence | Standing |
@@ -79,23 +95,23 @@ sight - a copied rationale is not two independent judgements.
 | AC-1 | A same-volume move is a rename: fast, atomic, and the old folder is gone afterwards | cross-volume guard + test; missing-source guard at plan AND apply, folder postcondition in verify (AC-55, closed 2026-07-30) | Proven |
 | AC-3 | If something already exists at the destination, nothing happens at all | guard + exit-2 test; the `keep-dest`/`keep-src` bypass modes were removed, so the guard is unconditional (AC-58, closed 2026-07-30) | Proven |
 | AC-4 | A git worktree is never moved without an explicit override, and forcing past one is recorded | refusal test + override test asserting the warning reaches both `render_plan` and `plan --json` (2026-08-06) | Proven |
-| AC-5 | The plan lists every store that references the project - nothing is touched that was not listed | per-store tests | Test-thin (no single test seeds all stores at once) |
+| AC-5 | The plan lists every store that references the project - nothing is touched that was not listed | per-store tests; one all-stores move (`all_stores_move.rs:151`) and an unrelated project left untouched (`:173`) | Proven (upgraded 2026-11-03) |
 | AC-6 | History is matched to a folder by what the transcripts *say*, never by folder-name guessing | index tests | Proven |
 | AC-7 | When history could belong to two projects, the tool stops and makes you choose | fail-closed test (decision 7a) | Proven |
-| AC-8 | The encoded transcript directory is renamed; the old one is gone | apply test | Test-thin (old-dir-gone not asserted) |
+| AC-8 | The encoded transcript directory is renamed; the old one is gone | apply test; old directory asserted gone after apply (`all_stores_move.rs:200`) | Proven (upgraded 2026-11-03) |
 | AC-9 | The tool's path encoding is Claude Code's real one, verified against real directories | encoding test vs real dirs | Proven |
 | AC-10 | After a move, every transcript `cwd` points at the new path and none at the old | golden end-to-end test | Proven |
 | AC-11 | Path rewrites are surgical: anchored, never bare substring | golden counts test | Proven |
 | AC-12 | Things that merely *look* like the project name (package names, branches, prose) come through byte-identical | golden counts test | Proven |
-| AC-13 | Every variant key in `.claude.json` migrates; the file still parses; entry count unchanged | apply-then-readback IS proven, on the raw bytes (`claude_json_escaping.rs:88`) and on the parsed view (`:107`), plus the AR-01/AR-04 regression suite | Test-thin, but narrowly: only the "entry count unchanged" clause is unasserted (corrected 2026-08-06) |
-| AC-14 | `history.jsonl` entries follow the project to its new path | detect/plan tests; `associate` has an apply-then-readback (`associate_and_duplicates.rs:168`), a move does not | Test-thin (no apply-then-readback for the MOVE path specifically) |
+| AC-13 | Every variant key in `.claude.json` migrates; the file still parses; entry count unchanged | apply-then-readback IS proven, on the raw bytes (`claude_json_escaping.rs:88`) and on the parsed view (`:107`), plus the AR-01/AR-04 regression suite; entry count asserted unchanged (`all_stores_move.rs:238`) | Proven (upgraded 2026-11-03) |
+| AC-14 | `history.jsonl` entries follow the project to its new path | detect/plan tests; `associate` has an apply-then-readback (`associate_and_duplicates.rs:168`), and now a move does too (`all_stores_move.rs:278`) | Proven (upgraded 2026-11-03) |
 | AC-15 | The dry run shows everything and writes nothing | byte-identical-after-plan test | Proven |
 | AC-16 | Before the first write, a backup exists containing the original of every file the run will modify | recursive snapshot: every file under a renamed directory is captured, so the manifest now covers the affected TREE, not just the touched files (AC-54, closed 2026-07-30) | Proven |
 | AC-17 | Rollback puts everything back the way it was | rename-back rollback + tree-map tests (sidecars, binaries, injected mid-apply failure, real-FS end-to-end) + byte-identity proof (AC-17v) | Proven - and the proof's denominator is now the tree, not the manifest (AC-54, closed 2026-07-30) |
 | AC-18 | Verify passes only if every promised postcondition actually holds on disk | pass-case test; folder postconditions (AC-55); plan-derived splice checks assert every planned json edit landed, on raw bytes (AC-57); malformed history lines and unreadable dirs are failures, and a verify that ERRORS now rolls the apply back (AC-59) | Proven - the scope caveat closed with AC-58: the tiers are gone, so single-behavior verification is scope-correct by definition |
 | AC-19 | Running apply twice is safe: the second run refuses (exit 2), which is the "already done" signal | behavior + decision 19b | Proven |
 | AC-20 | An unrecognized store shape stops everything before any write | state-untouched test | Proven |
-| AC-21 | A live Claude Code process blocks the run unless you force it | lock-detection test | Proven |
+| AC-21 | A live Claude Code process blocks the run unless you force it | lock-detection test, which covers IDE lock files only | Proven for IDE sessions only; a terminal session is not detected (FF-1, see freshness note) |
 | AC-22 | Every apply leaves a machine-readable record of what happened | report.json tests | Proven |
 | AC-23 | plan / apply / verify / rollback all exist as commands | CLI tests; rollback now runs through the real binary in [`rollback_tree_cli.rs`](../../../../../crates/awt-cli/tests/rollback_tree_cli.rs) and [`acceptance_ar05_ar07.rs`](../../../../../crates/awt-cli/tests/acceptance_ar05_ar07.rs), verify through the binary in [`cli.rs`](../../../../../crates/awt-cli/tests/cli.rs) | Proven (upgraded 2026-08-05; see freshness note) |
 | AC-24 | Exit codes are distinct and scriptable | exit-code mapping test | Proven |
