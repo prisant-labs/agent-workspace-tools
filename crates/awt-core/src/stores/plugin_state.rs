@@ -19,6 +19,18 @@ pub fn state_hash(abs_backslash: &str) -> String {
     hex_lower(&digest)[..16].to_string()
 }
 
+/// The state-dir name for a project at `abs_backslash`: `<basename>-<sha256(abs)[:16]>`
+/// (DESIGN.md Section 2 item 4). BOTH parts derive from the path it is given: a plugin
+/// recomputing state for a new path looks for basename(new)-hash(new), so keeping the OLD
+/// basename would re-orphan the dir (LEAD-04).
+pub fn state_dir_name(abs_backslash: &str) -> String {
+    let basename = abs_backslash
+        .rsplit(['\\', '/'])
+        .next()
+        .unwrap_or(abs_backslash);
+    format!("{basename}-{}", state_hash(abs_backslash))
+}
+
 fn hex_lower(bytes: &[u8]) -> String {
     let mut s = String::with_capacity(bytes.len() * 2);
     for b in bytes {
@@ -137,15 +149,10 @@ impl Store for PluginState {
     }
 
     fn plan(&self, _ctx: &Ctx, mv: &Move, hit: &Hit) -> Result<Vec<Change>> {
-        // Convention <basename>-<sha256(abs)[:16]> (DESIGN.md Section 2 item 4). BOTH parts
-        // derive from the DESTINATION: a plugin recomputing state for the new path looks for
-        // basename(dst)-hash(dst), so keeping the OLD basename would re-orphan the dir (LEAD-04).
-        let basename = |p: &str| p.rsplit(['\\', '/']).next().unwrap_or(p).to_string();
-        let new_name = format!("{}-{}", basename(&mv.dst_abs), state_hash(&mv.dst_abs));
         let parent = hit.target.parent().unwrap().to_path_buf();
         Ok(vec![Change::RenameDir {
             from: hit.target.clone(),
-            to: parent.join(new_name),
+            to: parent.join(state_dir_name(&mv.dst_abs)),
         }])
     }
 

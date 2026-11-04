@@ -24,7 +24,7 @@ These flags are accepted by every subcommand.
 |---|---|
 | 0 | Success |
 | 1 | I/O error (catch-all for file-system failures) |
-| 2 | Guard tripped - nothing was written. Conditions that produce exit 2: destination path already exists, the source folder is missing, nested projects live under the source, source is a worktree, an ambiguous reference was found, or a flag combination leaves nothing to do |
+| 2 | Guard tripped - nothing was written. Conditions that produce exit 2: destination path already exists, a plugin-state folder already occupies its rename destination, the `list --html` target already exists, the source folder is missing, nested projects live under the source, source is a worktree, an ambiguous reference was found, or a flag combination leaves nothing to do |
 | 3 | Verify failed - apply ran but at least one postcondition check failed; auto-rollback was attempted |
 | 4 | Unrecognized format - a store contained a shape the tool does not know how to rewrite; no writes were made |
 
@@ -144,7 +144,7 @@ Restore pre-move state from a backup manifest written by a previous `apply` run.
 |---|---|---|
 | `--report <PATH>` | yes | Path to the backup manifest file written by `apply` |
 
-**Exit codes used:** 0, 1 (I/O error reading or restoring files), 2 (locked - manifest conflicts with current state).
+**Exit codes used:** 0, 1 (I/O error reading or restoring files), 3 (a backup failed its hash, a folder exists at both its old and new name, or a post-rollback check failed), 4 (the file is not a manifest or a report). A backup failure or a folder at both names refuses before anything changes.
 
 ---
 
@@ -158,7 +158,7 @@ Enumerate every project Claude has state for, with session counts, sizes, oldest
 
 | Flag | Required | Description |
 |---|---|---|
-| `--html <PATH>` | no | Write a self-contained HTML inventory page to this path in addition to (not instead of) the table |
+| `--html <PATH>` | no | Write a self-contained HTML inventory page to this path in addition to (not instead of) the table. Refuses with exit 2 if the path already exists, so it never replaces a file |
 
 **Output (text):** a table with columns: cwd, sessions, bytes, oldest age (days), newest age (days), history lines, json keys, github paths, plugin dirs, health.
 
@@ -166,7 +166,7 @@ Enumerate every project Claude has state for, with session counts, sizes, oldest
 
 Health values: `ok`, `stale` (contains stale references), `unresolved` (transcripts with no resolvable `cwd`).
 
-**Exit codes used:** 0, 1.
+**Exit codes used:** 0, 1, 2 (the `--html` path already exists).
 
 ---
 

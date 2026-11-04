@@ -171,7 +171,9 @@ For a browsable inventory instead:
 awt list --html "E:\claude-inventory.html"
 ```
 
-The HTML page is written **in addition to** the terminal table, and is self-contained.
+The HTML page is written **in addition to** the terminal table, and is self-contained. If a file
+already exists at that path, `awt` refuses with exit 2 and leaves the file alone. To refresh an
+inventory, delete the old page first or choose a new name.
 
 ---
 

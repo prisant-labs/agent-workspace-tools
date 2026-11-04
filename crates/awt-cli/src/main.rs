@@ -281,6 +281,16 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
             Ok(())
         }
         Cmd::List { html } => {
+            // `list` reads; the report is the one thing it writes. Replacing whatever a mistyped
+            // path names would make a read command destroy a file (F-2). Checked first, because
+            // a first scan of a large home takes minutes and should not end in a refusal.
+            if let Some(path) = html.as_deref().filter(|p| fs.exists(p)) {
+                return Err(AwtError::DestinationExists(format!(
+                    "{} (list --html never replaces a file; choose a new path, or delete this \
+                     one first)",
+                    path.display()
+                )));
+            }
             let now_secs = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()

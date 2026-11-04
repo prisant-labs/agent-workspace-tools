@@ -4,13 +4,36 @@ use crate::model::VerifyResult;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
+/// Where a `<dir-rename>` entry's directory went (F-1).
+///
+/// The manifest records this. A manifest written before it did has no `to`, so the destination
+/// is rebuilt from the same two naming rules that planned the rename. Those manifests are the
+/// recovery path for moves already made, so they must keep working. The rule is chosen by where
+/// the folder lives, not by searching its name for `encode(src)`: a plugin-state folder is named
+/// by a hash, and a transcript folder's stored spelling need not equal `encode(src)`.
+fn rename_destination(original: &str, recorded: Option<&str>, dst_abs: &str) -> PathBuf {
+    if let Some(to) = recorded {
+        return PathBuf::from(to);
+    }
+    let old = Path::new(original);
+    let parent = old.parent().unwrap_or(old);
+    let name = if parent.ends_with("projects") {
+        crate::paths::encode_project_dir(dst_abs)
+    } else {
+        crate::stores::plugin_state::state_dir_name(dst_abs)
+    };
+    parent.join(name)
+}
+
 /// Re-read every file named in a manifest's content entries and confirm that each is
 /// byte-identical to the pre-migration original recorded in the manifest. Call this AFTER
 /// `rollback` to produce a proof that the restore succeeded.
 ///
-/// Returns one `VerifyResult` per content entry (non-empty sha256) plus one result for the
-/// project folder if a move-tree occurred. Never short-circuits: all checks run regardless of
-/// individual failures so the caller gets a complete picture.
+/// Returns one `VerifyResult` per content entry (non-empty sha256), one for the project folder
+/// if a move-tree occurred, and one per renamed directory. The last set exists because
+/// byte-identical originals say nothing about a copy left at the new name: that is how F-1 kept
+/// passing this proof. Never short-circuits: all checks run regardless of individual failures so
+/// the caller gets a complete picture.
 pub fn verify_rollback(manifest_path: &Path, fs: &dyn FileSystem) -> Result<Vec<VerifyResult>> {
     let m = crate::backup::Manifest::load(fs, manifest_path)?;
     let mut out = Vec::new();
@@ -32,6 +55,30 @@ pub fn verify_rollback(manifest_path: &Path, fs: &dyn FileSystem) -> Result<Vec<
                 format!(
                     "expected src {src} present ({src_present}) and dst {dst} absent ({})",
                     !dst_absent
+                )
+            },
+        });
+    }
+
+    // Renamed-directory checks: the old name is back and the new name is gone.
+    for e in &m.entries {
+        if !e.backup.starts_with("<dir-rename") {
+            continue;
+        }
+        let to = rename_destination(&e.original, e.rename_to.as_deref(), &m.mv.dst_abs);
+        let old_present = fs.is_dir(Path::new(&e.original));
+        let new_absent = !fs.exists(&to);
+        let ok = old_present && new_absent;
+        out.push(VerifyResult {
+            check: format!("directory restored {}", e.original),
+            ok,
+            detail: if ok {
+                format!("{} present, {} absent", e.original, to.display())
+            } else {
+                format!(
+                    "expected {} present ({old_present}) and {} absent ({new_absent})",
+                    e.original,
+                    to.display()
                 )
             },
         });
@@ -128,10 +175,8 @@ pub fn rollback(manifest_path: &Path, fs: &dyn FileSystem) -> Result<()> {
         .as_str()
         .ok_or_else(bad_shape)?
         .replace('\\', "/");
-    let dst = v["dst_abs"]
-        .as_str()
-        .ok_or_else(bad_shape)?
-        .replace('\\', "/");
+    let dst_abs_raw = v["dst_abs"].as_str().ok_or_else(bad_shape)?.to_string();
+    let dst = dst_abs_raw.replace('\\', "/");
     let entries = v["entries"].as_array().ok_or_else(bad_shape)?;
     // 0. Preflight (2026-07-31 adversarial review). Validate EVERY entry and verify EVERY
     //    content backup BEFORE the first rename, write, or removal. The previous version
@@ -177,6 +222,27 @@ pub fn rollback(manifest_path: &Path, fs: &dyn FileSystem) -> Result<()> {
             )));
         }
     }
+    // A live session can recreate an old folder after apply. Merging blind could clobber either
+    // side, so refuse, and refuse here: discovering this in step 1.5 would come after the project
+    // folder had already moved back, stranding a half-recovered filesystem.
+    for e in entries {
+        if !e["backup"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("<dir-rename")
+        {
+            continue;
+        }
+        let old_dir = e["original"].as_str().ok_or_else(bad_shape)?;
+        let new_dir = rename_destination(old_dir, e["to"].as_str(), &dst_abs_raw);
+        if fs.exists(&new_dir) && fs.exists(Path::new(old_dir)) {
+            return Err(AwtError::VerifyFailed(format!(
+                "rollback: both {old_dir} and {} exist; refusing to merge them - resolve \
+                 manually, then re-run rollback. Nothing was changed",
+                new_dir.display()
+            )));
+        }
+    }
     // 1. Move the real project FOLDER back, but ONLY if this run actually moved it. A folder
     //    move is recorded as a <move-tree> marker; an `associate` (which re-homes HISTORY via
     //    a merge or a rename but never moves the folder) records none. Without this gate, an
@@ -201,10 +267,6 @@ pub fn rollback(manifest_path: &Path, fs: &dyn FileSystem) -> Result<()> {
     //      undo. Order matters: the restore in step 2 writes into the old paths, so the old
     //      dir must exist again first, and creating it by restore-then-delete is exactly the
     //      bug this replaces.
-    let (old_enc, new_enc) = (
-        crate::paths::encode_project_dir(v["src_abs"].as_str().ok_or_else(bad_shape)?),
-        crate::paths::encode_project_dir(v["dst_abs"].as_str().ok_or_else(bad_shape)?),
-    );
     for e in entries {
         if !e["backup"]
             .as_str()
@@ -214,23 +276,20 @@ pub fn rollback(manifest_path: &Path, fs: &dyn FileSystem) -> Result<()> {
             continue;
         }
         let old_dir = e["original"].as_str().ok_or_else(bad_shape)?;
-        if !old_dir.contains(&old_enc) {
-            continue;
-        }
-        let new_dir = old_dir.replace(&old_enc, &new_enc);
-        let new_exists = fs.exists(Path::new(&new_dir));
+        let new_dir = rename_destination(old_dir, e["to"].as_str(), &dst_abs_raw);
+        let new_exists = fs.exists(&new_dir);
         let old_exists = fs.exists(Path::new(old_dir));
         match (new_exists, old_exists) {
             // The normal post-apply state: rename the whole tree back.
-            (true, false) => fs.rename(Path::new(&new_dir), Path::new(old_dir))?,
+            (true, false) => fs.rename(&new_dir, Path::new(old_dir))?,
             // Apply failed before this dir was renamed: nothing to undo here.
             (false, true) | (false, false) => {}
-            // Both exist: someone recreated the old dir since apply. Merging blind could
-            // clobber either side; refuse loudly rather than guess.
+            // The preflight refused this. Reaching it means the folder appeared since then.
             (true, true) => {
                 return Err(AwtError::VerifyFailed(format!(
-                    "rollback: both {old_dir} and {new_dir} exist; refusing to merge them - \
-                     resolve manually, then re-run rollback"
+                    "rollback: both {old_dir} and {} exist; refusing to merge them - \
+                     resolve manually, then re-run rollback",
+                    new_dir.display()
                 )));
             }
         }
@@ -261,8 +320,10 @@ pub fn rollback(manifest_path: &Path, fs: &dyn FileSystem) -> Result<()> {
         fs.write(Path::new(original), &bytes)?;
     }
     // (The old step 3 - remove_dir_all on the new-encoded dir - is gone. Step 1.5's
-    //  rename-back both restores the tree and leaves nothing to remove: the same operation
-    //  that guarantees completeness also guarantees no orphan.)
+    //  rename-back both restores the tree and leaves nothing to remove. That holds for every
+    //  renamed directory only because step 1.5 reads each one's recorded destination: while it
+    //  derived them from encode(src), plugin-state folders were skipped and stayed (F-1).
+    //  verify_rollback now checks this rather than trusting it.)
     // 4. Un-merge (the merge counterpart of the dir handling above). For a merge into an existing B, step 2
     //    already restored A's files to their pre-merge paths under E--A; here we remove EXACTLY
     //    the copies that were merged into B, addressed by RELATIVE path, and nothing else. B's
@@ -285,6 +346,7 @@ pub fn rollback(manifest_path: &Path, fs: &dyn FileSystem) -> Result<()> {
             .ok_or_else(bad_shape)?
             .replace('\\', "/");
         // B's projects dir is A's sibling, named for the destination encoding.
+        let new_enc = crate::paths::encode_project_dir(&dst_abs_raw);
         let to = match Path::new(&from).parent() {
             Some(parent) => parent.join(&new_enc),
             None => PathBuf::from(&new_enc),

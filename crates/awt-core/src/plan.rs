@@ -271,6 +271,19 @@ pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) 
         }
     }
 
+    // Guard: a rename cannot land on a folder that is already there, and the OS only says so
+    // when apply tries it (OS error 145). Without this, `plan` passed and `apply` failed, which
+    // falsified the promise that the dry run shows what apply will do. A leftover from a
+    // rollback by a binary older than the F-1 fix is the known way to reach this. Transcript
+    // folders never trip it, because their store plans a MergeDir when the destination exists.
+    if let Some(to) = occupied_rename_destination(fs, &changes) {
+        return Err(AwtError::DestinationExists(format!(
+            "{} (a state folder is already there, possibly left over from an earlier rollback; \
+             check it, move it aside or delete it, then re-run)",
+            to.display()
+        )));
+    }
+
     // AR-04: the same literal can be reached by more than one hit. `.claude.json` may hold
     // one path under two `githubRepoPaths` slugs, and each hit plans its own change. But a
     // change's count check scans the WHOLE file, so N separate changes of `expected: 1`
@@ -294,6 +307,18 @@ pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) 
         warnings,
         nested,
         home: home.to_path_buf(),
+    })
+}
+
+/// The first directory-rename destination that already exists, if any. `build_plan` refuses on
+/// it, and `apply` re-checks it because the snapshot between the two can take a while.
+pub(crate) fn occupied_rename_destination<'a>(
+    fs: &dyn FileSystem,
+    changes: &'a [Change],
+) -> Option<&'a Path> {
+    changes.iter().find_map(|c| match c {
+        Change::RenameDir { to, .. } if fs.exists(to) => Some(to.as_path()),
+        _ => None,
     })
 }
 

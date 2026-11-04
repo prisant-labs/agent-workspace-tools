@@ -88,15 +88,17 @@ FF-1 in [`maintainer-todo.md`](../../../maintainer-todo.md) section 5. The maint
 question for this read is whether "a live Claude Code process" is the promise you want to sign
 while the code keeps it for IDE sessions only.
 
-**AC-17 is narrower than its words, found 2026-11-03.** A full move test on a synthetic home ran
+**AC-17 was narrower than its words until 2026-11-03.** A full move test on a synthetic home ran
 `plan`, `apply`, `verify` and `awt rollback`. Every original file came back byte-identical, but
 the renamed plugin-state folder stayed behind under its new name. A retry of the same move then
 passed `plan` and failed at `apply` with OS error 145, then rolled itself back. No data was lost
-in the test. `rollback.rs` skips any renamed folder whose path lacks the encoded project name,
+in the test. `rollback.rs` skipped any renamed folder whose path lacked the encoded project name,
 and a plugin-state folder is named by a hash, so it never has that name. The tree-level tests
-never seed a plugin store and roll it back, so their proof missed this. The finding is F-1
-(rollback leaves a plugin folder behind). The maintainer decided on 2026-11-03 that the fix lands
-before the tag. Treat this row as unproven for plugin state until that fix merges.
+never seeded a plugin store and rolled it back, and the byte-identity proof read only original
+files, so both missed it. The finding is F-1 (rollback leaves a plugin folder behind). The
+maintainer decided on 2026-11-03 that the fix lands before the tag, and it has. The manifest now
+records each rename's destination, and the proof now fails if a renamed folder is still there.
+The rating was wrong for a while, which is worth weighing when you read the other Proven rows.
 
 ## The criteria
 
@@ -117,7 +119,7 @@ before the tag. Treat this row as unproven for plugin state until that fix merge
 | AC-14 | `history.jsonl` entries follow the project to its new path | detect/plan tests; `associate` has an apply-then-readback (`associate_and_duplicates.rs:168`), and now a move does too (`all_stores_move.rs:278`) | Proven (upgraded 2026-11-03) |
 | AC-15 | The dry run shows everything and writes nothing | byte-identical-after-plan test | Proven |
 | AC-16 | Before the first write, a backup exists containing the original of every file the run will modify | recursive snapshot: every file under a renamed directory is captured, so the manifest now covers the affected TREE, not just the touched files (AC-54, closed 2026-07-30) | Proven |
-| AC-17 | Rollback puts everything back the way it was | rename-back rollback + tree-map tests (sidecars, binaries, injected mid-apply failure, real-FS end-to-end) + byte-identity proof (AC-17v) | Proven for original files, and the proof's denominator is the tree, not the manifest (AC-54, closed 2026-07-30). Not proven for plugin state: a renamed folder stays behind (F-1, see freshness note) |
+| AC-17 | Rollback puts everything back the way it was | rename-back rollback + tree-map tests (sidecars, binaries, injected mid-apply failure, real-FS end-to-end) + byte-identity proof (AC-17v); plugin state and a real-filesystem retry in [`rollback_rename_destination.rs`](../../../../../crates/awt-core/tests/rollback_rename_destination.rs) and [`f1_f2_real_fs.rs`](../../../../../crates/awt-cli/tests/f1_f2_real_fs.rs) | Proven (F-1 fixed 2026-11-03, see freshness note). The proof's denominator is the tree, and it now also checks that every renamed folder left its new name |
 | AC-18 | Verify passes only if every promised postcondition actually holds on disk | pass-case test; folder postconditions (AC-55); plan-derived splice checks assert every planned json edit landed, on raw bytes (AC-57); malformed history lines and unreadable dirs are failures, and a verify that ERRORS now rolls the apply back (AC-59) | Proven - the scope caveat closed with AC-58: the tiers are gone, so single-behavior verification is scope-correct by definition |
 | AC-19 | Running apply twice is safe: the second run refuses (exit 2), which is the "already done" signal | behavior + decision 19b | Proven |
 | AC-20 | An unrecognized store shape stops everything before any write | state-untouched test | Proven |

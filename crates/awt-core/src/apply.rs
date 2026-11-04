@@ -15,6 +15,15 @@ pub struct ApplyOpts {
 
 pub fn apply(plan: &Plan, fs: &dyn FileSystem, backup_root: &Path, run_id: &str) -> Result<Report> {
     let _m = snapshot(plan, fs, backup_root, run_id)?;
+    // Re-check after the snapshot and before the first change. A destination that appeared since
+    // `plan` is not ours, so failing at its rename would leave rollback unable to tell that
+    // folder from one this run put there. Refusing here means there is nothing to undo.
+    if let Some(to) = crate::plan::occupied_rename_destination(fs, &plan.changes) {
+        return Err(AwtError::DestinationExists(format!(
+            "{} appeared between plan and apply; nothing was changed",
+            to.display()
+        )));
+    }
     let mut applied = Vec::new();
 
     // 1. rename dirs first (so post-rename RewriteFile paths resolve), except MoveTree.

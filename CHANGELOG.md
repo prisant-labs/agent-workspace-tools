@@ -109,6 +109,23 @@ maintainer spec sign-off (S-01) and the fixture-history decision (D10) - see
 
 ### Fixed
 
+- **Rollback left a renamed plugin-state folder behind, and the same move then could not be
+  retried.** Original files came back byte-identical, so the post-rollback proof passed, but
+  rollback worked out each rename's destination from the encoded project name. A plugin-state
+  folder never contains that name, and a transcript folder stored in another case does not
+  match it, so rollback skipped both. A retry then passed `plan` and failed at `apply` with OS
+  error 145. The manifest now records each rename's destination, and rollback uses it.
+  Manifests written before this fix still restore. The post-rollback proof now fails if a
+  renamed folder is still there (F-1).
+- **`plan` passed when a plugin-state folder already occupied the destination.** `plan` now
+  refuses with exit 2 and names the folder, and `apply` re-checks before its first change. A
+  leftover from a rollback by an older build is the known way to reach this (F-1).
+- **Rollback could refuse halfway when a folder existed at both its old and new name.** The
+  project folder had already moved back by then. The check now runs in the preflight, so the
+  refusal changes nothing (F-1).
+- **`awt list --html <path>` silently replaced an existing file**, from a command that otherwise
+  only reads. It now refuses with exit 2 and leaves the file alone (F-2). To refresh an
+  inventory, delete the old page first or choose a new name.
 - **Rollback now validates the entire manifest and verifies every backup BEFORE touching the
   filesystem.** Previously the integrity checks ran inline during the restore loop, after the
   project folder and state directories had already been renamed back: a corrupted backup or

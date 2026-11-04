@@ -9,6 +9,9 @@ pub struct ManifestEntry {
     pub original: String,
     pub backup: String,
     pub sha256: String,
+    /// Where a `<dir-rename>` marker's directory went. None on every other entry, and on
+    /// markers in manifests written before this field existed.
+    pub rename_to: Option<String>,
 }
 pub struct Manifest {
     pub run_id: String,
@@ -32,7 +35,7 @@ pub fn snapshot(
     let mut entries = Vec::new();
     for (i, c) in plan.changes.iter().enumerate() {
         match c {
-            Change::RenameDir { from, .. } => {
+            Change::RenameDir { from, to } => {
                 // Snapshot runs BEFORE any rename, so `from` is the PRE-rename dir. Copy EVERY
                 // file under it recursively - transcripts AND sidecars (AC-54). Two reasons:
                 // the plan's RewriteFile paths are POST-rename and do not exist yet, so this
@@ -51,6 +54,10 @@ pub fn snapshot(
                     original: from.to_string_lossy().into_owned(),
                     backup: format!("<dir-rename {i}>"),
                     sha256: String::new(),
+                    // Recorded, not derived later: a plugin-state folder is named by a hash, and
+                    // a transcript folder's stored spelling need not equal encode(src), so
+                    // rollback cannot work this out from the old path (F-1).
+                    rename_to: Some(to.to_string_lossy().into_owned()),
                 });
             }
             Change::MergeDir { from, .. } => {
@@ -70,6 +77,7 @@ pub fn snapshot(
                     original: from.to_string_lossy().into_owned(),
                     backup: format!("<merge-dir {i}>"),
                     sha256: String::new(),
+                    rename_to: None,
                 });
             }
             Change::RewriteFile { path, .. } => {
@@ -83,6 +91,7 @@ pub fn snapshot(
                     original: from.to_string_lossy().into_owned(),
                     backup: format!("<move-tree {i}>"),
                     sha256: String::new(),
+                    rename_to: None,
                 });
             }
         }
@@ -116,6 +125,7 @@ fn backup_one(
             original: orig.to_string_lossy().into_owned(),
             backup: bpath.to_string_lossy().into_owned(),
             sha256: hexd(&bytes),
+            rename_to: None,
         });
     }
     Ok(())
@@ -125,9 +135,15 @@ fn write_manifest(fs: &dyn FileSystem, dir: &Path, m: &Manifest) -> Result<()> {
     let json = serde_json::json!({
         "run_id": m.run_id,
         "src_abs": m.mv.src_abs, "dst_abs": m.mv.dst_abs,
-        "entries": m.entries.iter().map(|e| serde_json::json!({
-            "original": e.original, "backup": e.backup, "sha256": e.sha256
-        })).collect::<Vec<_>>(),
+        "entries": m.entries.iter().map(|e| {
+            let mut entry = serde_json::json!({
+                "original": e.original, "backup": e.backup, "sha256": e.sha256
+            });
+            if let Some(to) = &e.rename_to {
+                entry["to"] = serde_json::json!(to);
+            }
+            entry
+        }).collect::<Vec<_>>(),
     });
     fs.write(
         &dir.join("manifest.json"),
@@ -150,6 +166,7 @@ impl Manifest {
                 original: e["original"].as_str().unwrap_or_default().to_string(),
                 backup: e["backup"].as_str().unwrap_or_default().to_string(),
                 sha256: e["sha256"].as_str().unwrap_or_default().to_string(),
+                rename_to: e["to"].as_str().map(str::to_string),
             })
             .collect();
         Ok(Manifest {
