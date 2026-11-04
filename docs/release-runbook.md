@@ -85,6 +85,8 @@ Source distribution requires no binary signing, no certificate, and no submissio
 A signed binary channel is a planned future step, tracked as CI-3 in `docs/ROADMAP.md`. CI-3 is not a v1.0.0 blocker. When it is scheduled, the following work is required:
 
 - Release workflow: matrix build for each target platform.
+- Build-machine paths: build with `--remap-path-prefix` for the workspace and the Cargo home. A default release `awt.exe` checked on 2026-11-03 held 48 strings naming the build user's home folder, and a public binary would publish them. Search the built file for the username before release.
+- Windows C runtime: build with `-C target-feature=+crt-static`. A default MSVC build needs `vcruntime140.dll`, and a clean Windows Sandbox checked on 2026-11-03 does not have it.
 - Checksum file: `sha256sums.txt` signed with `minisign`.
 - Windows SmartScreen posture: either an Extended Validation (EV) code-signing certificate, or a documented reputation-building plan (SmartScreen clears after sufficient download volume for Authenticode-signed builds).
 - winget manifest: `winget-pkgs` pull request with the manifest for the new version.

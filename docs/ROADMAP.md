@@ -54,7 +54,7 @@ Progressive hardening; each stage lands with the phase that makes it meaningful.
 | CI-0 | Phase 1 Task 1.1 | windows-latest: `cargo fmt --check`, `clippy -D warnings`, `cargo test --workspace`, dependency-hygiene gate (awt-core must not depend on tauri/clap), no-network gate (no reqwest/ureq/hyper/curl in tree), `cargo audit` |
 | CI-1 | Phase 1 Task 1.3 | Golden-fixture tests run in CI (sanitized fixtures committed; counts locked) |
 | CI-2 | macOS scope opens (post-v1.0.0 unless promoted) | macos-latest matrix entry + POSIX-path encoding/normalization test cases; same_volume device-id fix; iCloud-path cloud-sync detection |
-| CI-3 | First binary distribution (may follow the v1.0.0 tag) | Release workflow: matrix build, minisign checksums, winget manifest, code signing or a documented SmartScreen/Gatekeeper posture; release runbook executed, not improvised |
+| CI-3 | First binary distribution (may follow the v1.0.0 tag) | Release workflow: matrix build, minisign checksums, winget manifest, code signing or a documented SmartScreen/Gatekeeper posture; `--remap-path-prefix` so no build-machine paths ship in the binary; a static C runtime on Windows (`+crt-static`); release runbook executed, not improvised |
 | CI-4 | v2.0.0 | tauri-specta stale-bindings gate, Tauri bundle matrix (.msi/NSIS, .dmg/.app), updater with signature verification, notarization for macOS |
 
 Note: v1.0.0 itself may ship source-first (`cargo install` / clone-and-build), which
