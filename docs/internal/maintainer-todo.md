@@ -123,7 +123,8 @@ copy passed every happy-path and adversarial step, including a real junction (pl
 refuses, archive skips) and byte-identical whole-tree rollback. **No technical step
 remains in the closeout; what is left is yours: 1.2 (D10 read) and 1.5 (S-01 sign-off).**
 That stopped being the whole list on 2026-11-03: 1.6 (acceptance re-run) and 1.7 (FF-1 docs
-fix) are two delegable steps that now also block the tag.
+fix) are two delegable steps that now also block the tag. 1.8 (F-1 and F-2 engine fixes) also
+blocked it, and is done.
 
 ### 1.5 Sign off S-01 **[HUMAN - nobody else can do this]**
 
@@ -145,7 +146,8 @@ it is **"do these criteria describe the guarantees I actually want?"**
 
 PR #28 merged on 2026-11-03, so AC-5, AC-8, AC-13 and AC-14 are now closed by test, and the
 review guide rates all four Proven. The guide also now marks AC-21 (live-session guard) as proven
-for IDE sessions only, because of FF-1. Read that row with section 5 open.
+for IDE sessions only, because of FF-1. Read that row with section 5 open. Its AC-17 (rollback
+puts everything back) row was wrongly Proven until F-1 was fixed, and a freshness note says so.
 
 ### 1.6 Re-run the adversarial acceptance after the clap bump **[DELEGABLE]**
 
@@ -156,9 +158,18 @@ on a fresh scratch home from `scripts/new-scratch-home.ps1` before the tag. Run 
 1.7 documentation fix lands, so one run covers the final tree. PR #30 (serde_json, sha2 and
 insta) stays held until after the tag, so this run does not include it.
 
+The run must also cover the 1.8 fixes, because rollback and `list` both changed. Seed a plugin
+state folder, then run `apply`, `rollback`, and the same `apply` again. Also confirm that
+`list --html` refuses an existing file. The 2026-07-31 run passed with F-1 live, because its
+rollback step compared original files and hashes and never retried the move.
+
 ### 1.7 Correct the live-lock claims in the docs (FF-1) **[DELEGABLE]**
 
 Decided 2026-11-03: FF-1 blocks the tag on documentation only. See section 5.
+
+### 1.8 Fix F-1 and F-2 in the engine - **DONE 2026-11-03, PR #32**
+
+Decided 2026-11-03: both are fixed before the tag. See section 5.
 
 ---
 
@@ -198,7 +209,8 @@ own with `scripts/new-scratch-home.ps1`.
   actions/cache 4->6, and the grouped cargo minor/patch bumps merged CI-green; the sha2 0.11
   major is rebasing and merges when its fresh CI passes. **PR #30** (serde_json, sha2 and
   insta) is held until after the tag, decided 2026-11-03.
-- **CI-3 signed binary channel** - still not a tag blocker; v1.0 ships source-first.
+- **CI-3 signed binary channel** - still not a tag blocker; v1.0 ships source-first. Two build
+  requirements were added on 2026-11-03: see the CI-3 list in `docs/release-runbook.md`.
 - **P10 cross-volume, P11 Codex/Gemini adapters** - parked, promotable.
 - **v2 "Taura" GUI** - deliberately gated behind the closeout plus a frozen, versioned
   `awt-core` contract (typed plan/verify/report models, stable ordering, schema version). The
@@ -208,11 +220,13 @@ own with `scripts/new-scratch-home.ps1`.
 
 ---
 
-## 5. Field findings from real use, 2026-10-27
+## 5. Field findings
 
-These two gaps came from a real project move. A repository was transferred and renamed on GitHub. It was cloned fresh to a new folder, and `awt associate --from <old> --to <new>` was run to carry its Claude Code state across. The run used the release binary built 2026-07-31. The behavior was then confirmed against the source at `847cb20`. The paths below are invented examples.
+FF-1 and FF-2 came from real use on 2026-10-27. F-1 and F-2, at the end of this section, came from a packaging test on 2026-11-03, and both are fixed.
 
-Whether either finding blocks the v1.0.0 tag is your call **[HUMAN]**. FF-1 is the stronger candidate, because it is a safety claim that does not hold. That is the same class of finding as the S-04 closeout.
+FF-1 and FF-2 came from a real project move. A repository was transferred and renamed on GitHub. It was cloned fresh to a new folder, and `awt associate --from <old> --to <new>` was run to carry its Claude Code state across. The run used the release binary built 2026-07-31. The behavior was then confirmed against the source at `847cb20`. The paths below are invented examples.
+
+Whether FF-1 or FF-2 blocks the v1.0.0 tag is your call **[HUMAN]**. FF-1 is the stronger candidate, because it is a safety claim that does not hold. That is the same class of finding as the S-04 closeout.
 
 ### FF-1 (live-session guard misses terminal sessions) **[DELEGABLE]**
 
@@ -246,6 +260,35 @@ Whether either finding blocks the v1.0.0 tag is your call **[HUMAN]**. FF-1 is t
 **What was done by hand this time.** The transcript tail was copied into the destination's `.claude-sessions/` export folder. The other leftovers were left as stale entries, following awt's own rule that stale references are left alone.
 
 **Related, smaller.** `associate`'s default export writes `.claude-sessions/` inside the destination project folder. When that folder is a git repository, nothing stops the exported transcripts from being committed. They are full of local paths and conversation text. Consider printing a warning when the destination is a git work tree and `.claude-sessions/` is not ignored. Another option is to write a `.gitignore` inside the export folder.
+
+### F-1 (rollback leaves a plugin folder behind) - **FIXED 2026-11-03, PR #32**
+
+**What happened.** A packaging test ran `plan`, `apply`, `verify` and `awt rollback` on a synthetic home. Every original file came back byte-identical, but `.claude/plugins/data/<plugin>/state/<name>-<hash>` stayed behind under its new name. A retry of the same move passed `plan` and failed at `apply` with OS error 145 (exit 3), then rolled itself back. No data was lost in the test. The repository's own debug build reproduced it, so packaging did not cause it.
+
+**Why.** `rollback.rs` worked out where each renamed folder went by swapping the encoded project name inside the old path, and it skipped any path without that name. A plugin-state folder is named by a hash, so it never has that name. A transcript folder stored in another case missed the same case-sensitive match, and that second shape was found by reading the code, not in the test. Rollback then restored the backed-up files into the old location, so the byte-identity proof passed. It read only original files, so it could not see the leftover. The review guide rated AC-17 (rollback puts everything back) Proven throughout.
+
+**Decision (2026-11-03): fix it before the tag.** Rollback is the promise this tool makes about irreplaceable data, and the 1.6 re-run was already scheduled to cover the result.
+
+**The fix.**
+
+- The manifest records each rename's destination, and rollback uses it. Manifests written earlier still restore, because rollback rebuilds the destination from the two naming rules.
+- `verify_rollback` now fails if a renamed folder is still there.
+- `plan` refuses with exit 2 when a folder already occupies a rename destination, or when two folders holding state for two spellings of the source path would share one. `apply` re-checks before its first change.
+- The refusal for a folder at both names moved into the rollback preflight. It used to fire after the project folder had already moved back.
+- A refused automatic rollback is now reported. `apply_verified` used to drop that error, so a half-applied move read as cleaned up.
+
+**What you may still find on disk.** A rollback run by an older build may have left a `<name>-<hash>` folder. `plan` now names it and refuses. Check first whether it holds a live project's state, then move it aside or delete it.
+
+**Accepted as rare, not fixed (inferred by a review, not reproduced).**
+
+- A manifest from an older build, from a failed apply whose destination already existed, could rename that foreign folder into place if the original folder was later deleted.
+- A renamed folder that vanishes between the snapshot and the apply makes a correct rollback exit 3. The snapshot normally catches this, so it needs a race.
+
+### F-2 (`list --html` replaces an existing file) - **FIXED 2026-11-03, PR #32**
+
+**What happened.** `awt list --html <path>` overwrote whatever was at that path, with exit 0 and no warning. `list` otherwise only reads, so a mistyped path could destroy a file from a command nobody would expect to be dangerous.
+
+**Decision (2026-11-03): the engine refuses.** It exits 2, before the scan, and leaves the file alone. There is no override flag, so refreshing an inventory now takes a delete or a new name. Add a flag later only if that proves annoying.
 
 ---
 

@@ -3,6 +3,21 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-11-03 (fourth entry) - F-1 and F-2 recorded; two CI-3 build requirements
+
+No code changed in this entry.
+
+**`maintainer-todo.md`.** Section 5 records F-1 (rollback leaves a plugin folder behind) and F-2
+(`list --html` replaces an existing file), with their decisions and fixes. Its heading loses the
+2026-10-27 date, because it now holds findings from two dates. Section 1.8 records the fixes as
+done. Section 1.6 now says what the acceptance re-run must add: a plugin-state rollback and retry,
+and the `list --html` refusal.
+
+**`ROADMAP.md` and `release-runbook.md`: CI-3 (the signed binary channel) gains two build
+requirements.** A default release binary holds strings naming the build user's home folder, so
+the release workflow needs `--remap-path-prefix`. A clean Windows Sandbox has no
+`vcruntime140.dll`, so the workflow also needs a static C runtime. CI-3 is still not a tag blocker.
+
 ## 2026-11-03 (third entry) - F-1 and F-2 fixed; AC-17 back to Proven, on a wider proof
 
 The code changed in this entry. The documents below follow it.
