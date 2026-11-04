@@ -3,6 +3,25 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-11-03 (third entry) - F-1 and F-2 fixed; AC-17 back to Proven, on a wider proof
+
+The code changed in this entry. The documents below follow it.
+
+**`review-guide.md`: AC-17 (rollback puts everything back) returns to Proven.** The row now cites
+`rollback_rename_destination.rs` and `f1_f2_real_fs.rs`. `verify_rollback` now also checks that
+every renamed folder left its new name, so the proof covers what F-1 (rollback leaves a plugin
+folder behind) slipped past. The freshness note stays, in the past tense, because it explains why
+a Proven rating was wrong for a while.
+
+**`docs/reference/commands.md`.** Exit 2 gains two conditions. `list` gains exit 2. The `rollback`
+exit codes were wrong, and they now match `exit.rs`: a conflict exits 3, not 2.
+
+**`docs/recipes.md` and the root `CHANGELOG.md`.** Both describe the F-2 (`list --html` replaces an
+existing file) refusal. Refreshing an inventory now takes a delete or a new name.
+
+**S-02 AC-33 is unchanged.** "`--html` writes a self-contained file and mutates nothing else" holds
+more strongly now.
+
 ## 2026-11-03 (second entry) - S-01 review guide: four criteria to Proven, AC-21 narrowed
 
 `review-guide.md`, the S-01 sign-off reading aid, caught up with two changes. No code changed.
