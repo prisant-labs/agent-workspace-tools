@@ -93,7 +93,7 @@ awt plan --home "C:\Temp\claude-acceptance" --src "<test-src>" --dst "<test-dst>
 ```
 Expect: exit 0 and a change list - the folder move, the `projects/` directory rename, each
 transcript rewrite with its edit count, the `~/.claude.json` key change, and the `history.jsonl`
-edits. If a guard fires (destination exists, worktree source, cross-volume, a live lock, an
+edits. If a guard fires (destination exists, worktree source, cross-volume, an IDE lock file, an
 ambiguous history), the plan refuses with exit 2 and a plain-language message; resolve it per
 [troubleshooting.md](troubleshooting.md) and re-run.
 
@@ -130,6 +130,21 @@ Confirm the copy is truly back to its pre-apply state by re-running verify - it 
 awt verify --home "C:\Temp\claude-acceptance" --src "<test-src>" --dst "<test-dst>"
 ```
 Expect: a non-zero exit with FAIL lines. That failure is success for this step.
+
+**Prove that the move can be repeated.** Use a project with a plugin-state folder under
+`.claude/plugins/data/<plugin>/state/`, and seed one in the scratch home if none exists. Run
+`apply`, `rollback`, and the same `apply` again.
+
+Expect: exit 0 each time, and no `<name>-<hash>` folder left behind after the rollback. Comparing
+original files is not enough here. F-1 (rollback leaves a plugin folder behind) passed that
+comparison in the 2026-07-31 run, because it only showed up as a leftover and a failed retry.
+
+**Prove that `list --html` refuses an existing file:**
+
+```
+awt list --home "C:\Temp\claude-acceptance" --html "<a file that exists>"
+```
+Expect: exit 2, and the file's hash unchanged.
 
 ## 5. Retention commands
 

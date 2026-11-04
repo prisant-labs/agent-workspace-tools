@@ -24,7 +24,7 @@ These flags are accepted by every subcommand.
 |---|---|
 | 0 | Success |
 | 1 | I/O error (catch-all for file-system failures) |
-| 2 | Guard tripped - nothing was written. Conditions that produce exit 2: destination path already exists, a plugin-state folder already occupies its rename destination, the `list --html` target already exists, the source folder is missing, nested projects live under the source, source is a worktree, an ambiguous reference was found, or a flag combination leaves nothing to do |
+| 2 | Guard tripped - nothing was written. Conditions that produce exit 2: destination path already exists, a plugin-state folder already occupies its rename destination, the `list --html` target already exists, the source folder is missing, nested projects live under the source, source is a worktree, an IDE lock file exists under `~/.claude/ide/`, an ambiguous reference was found, or a flag combination leaves nothing to do |
 | 3 | Verify failed - apply ran but at least one postcondition check failed; auto-rollback was attempted |
 | 4 | Unrecognized format - a store contained a shape the tool does not know how to rewrite; no writes were made |
 
@@ -277,6 +277,9 @@ Passing both `--no-reassociate` and `--no-export` is an error (exit 2 - nothing 
 ## Notes on flags
 
 - `--no-auto-rollback` is intended for debugging. In normal use, leave auto-rollback enabled.
+- `--force` lifts the IDE lock guard, which only sees `*.lock` files under `~/.claude/ide/`. A
+  session in a plain terminal writes none, so that guard never fires for one. Exit every session
+  running in the source folder yourself before `apply` or `associate`.
 - `--recursive`, `--on-collision`, and `--scope` existed in pre-release builds and were
   **removed** (AC-58, 2026-07-30). None was implemented behind its help text, and two of them
   silently weakened guards: `keep-dest`/`keep-src` bypassed the collision check while changing

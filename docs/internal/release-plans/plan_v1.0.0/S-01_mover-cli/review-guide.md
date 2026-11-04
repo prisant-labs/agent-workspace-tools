@@ -84,7 +84,8 @@ live-session guard sees only `~/.claude/ide/*.lock` files, which editor integrat
 plain terminal session writes none, so the guard does not refuse while one is running in the
 source folder. The lock-detection test proves the IDE case and nothing more. The finding is
 FF-1 in [`maintainer-todo.md`](../../../maintainer-todo.md) section 5. The maintainer decided on
-2026-11-03 that the docs get corrected before the tag and the guard fix ships in v1.0.1. The
+2026-11-03 that the docs get corrected before the tag and the guard fix ships in v1.0.1. The docs
+were corrected the same day, and this spec's wording was left for you to judge. The
 question for this read is whether "a live Claude Code process" is the promise you want to sign
 while the code keeps it for IDE sessions only.
 

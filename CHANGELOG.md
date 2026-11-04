@@ -18,9 +18,10 @@ into v1.0.0 on 2026-07-30 (decision D9 in the release plan) because v1 is define
 the CLI does and no v1.0.0 tag existed yet to freeze against.
 
 The dating of this section is deferred to the tag. The v1 safety closeout (S-04) completed
-2026-07-31, including a passing adversarial acceptance run; the tag now waits on the
-maintainer spec sign-off (S-01) and the fixture-history decision (D10) - see
-`docs/release-runbook.md` and the release plan.
+2026-07-31, including a passing adversarial acceptance run. The tag now waits on three things:
+a repeat of that run, because clap and the rollback engine changed after it; the maintainer
+spec sign-off (S-01); and the fixture-history decision (D10). See
+`docs/internal/maintainer-todo.md` section 1.
 
 ### Added
 
@@ -48,8 +49,9 @@ maintainer spec sign-off (S-01) and the fixture-history decision (D10) - see
 - **`doctor` warnings channel** - shapes an adapter recognized and deliberately declined to act
   on. Distinct from stale references and from report-only findings. Included in `--json` output.
 - **Fail-closed safety guards**, each with a plain-language situation/why/next-step message:
-  destination-exists, git-worktree source, cross-volume move, live-lock, and ambiguous-history
-  detection.
+  destination-exists, git-worktree source, cross-volume move, IDE lock file, and
+  ambiguous-history detection. The lock-file guard cannot see a session in a plain terminal;
+  see Known issues.
 - **Machine-readable output everywhere** - `apply` writes a `report.json` on every run;
   `rollback` performs a verifiable revert, re-hashing every restored file against the
   pre-migration snapshot and writing a `rollback-report.json`; `plan --json` emits the full plan
@@ -213,15 +215,15 @@ maintainer spec sign-off (S-01) and the fixture-history decision (D10) - see
 
 ### Known issues
 
-- **A v1 safety closeout (S-04) is in progress and blocks the tag.** An external adversarial
-  code audit (2026-07-30) found data-loss and false-success paths the happy-path acceptance run
-  did not exercise. The three Critical findings (rollback tree loss, missing-source false
-  success, settings fail-open) are **fixed** - see Fixed above. Still open: verification is not
-  yet derived from the plan (a green verify does not check everything promised), several
-  advertised flags are inert (`--on-collision keep-dest`/`keep-src`, `--recursive`, the
-  `minimal`/`full` scopes), some I/O failures read as absence, plugin-state hashing uses the
-  caller's path spelling, path confinement is lexical, and real transcripts remain published as
-  fixtures. Until the closeout completes, prefer running against a copy of `~/.claude`.
+- **The live-session guard does not see terminal sessions (FF-1).** The guard only finds IDE
+  lock files under `~/.claude/ide/`, and a session in a plain terminal writes none. If such a
+  session is running in the source folder, `apply` and `associate` do not refuse, and they
+  report success. The session then keeps writing under the old path, so the migration goes
+  stale within minutes. No data is lost. Exit every session running in the source folder first,
+  and do not run `awt` from inside one. The guard fix is planned for v1.0.1.
+- **`associate` cannot finish into a destination that is already live (FF-2).** It refuses with
+  exit 2 and writes nothing, so a half-migrated project has no supported way to finish. The
+  planned fix prints the manual steps, and exports same-session transcripts as an archive.
 
 ### Notes
 

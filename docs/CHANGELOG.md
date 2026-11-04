@@ -3,6 +3,30 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-11-03 (fifth entry) - FF-1 documentation fix
+
+No code changed in this entry.
+
+**FF-1 (live-session guard misses terminal sessions) blocked the tag on documentation only, and
+this entry closes that half.** `README.md`, `docs/recipes.md`, `docs/faq.md`,
+`docs/troubleshooting.md`, `docs/quickstart.md`, `docs/glossary.md`, `docs/acceptance-run.md`,
+`docs/reference/commands.md` and `docs/DESIGN.md` now say the guard sees IDE lock files only, and
+the user-facing pages give the workaround. `docs/troubleshooting.md` also gains a section for the
+symptom, and its quoted refusal now matches the compiled message. `AGENTS.md` warns agents, because
+running `awt` from inside a session is exactly how FF-1 was found.
+
+**The root `CHANGELOG.md` stated things that were no longer true.** Its preamble said the tag
+waited only on S-01 (spec sign-off) and D10 (fixture publication), and the README said the same.
+Both now add the acceptance re-run. Its Known issues section still described the S-04 safety
+closeout as in progress, although that finished on 2026-07-31. It now lists FF-1 and FF-2.
+
+**`docs/acceptance-run.md` and `docs/release-runbook.md` section 2 gain two steps:** repeat a move
+after rolling it back, and confirm that `list --html` refuses an existing file. Section 1.6 of
+`maintainer-todo.md` already required both.
+
+**The S-01 spec is unchanged.** AC-21 still says "a running CLI process", because the maintainer
+signs that text. `review-guide.md` flags the gap.
+
 ## 2026-11-03 (fourth entry) - F-1 and F-2 recorded; two CI-3 build requirements
 
 No code changed in this entry.

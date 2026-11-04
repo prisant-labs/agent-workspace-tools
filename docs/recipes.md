@@ -27,7 +27,10 @@ redirects the Claude state. When practicing, use a throwaway folder as `--src`.
 
 ## Move or rename a project
 
-Close any Claude Code session working in the project first, or the lock guard will refuse.
+Exit every Claude Code session running in the project first, and do not run `awt` from inside
+one. The lock guard refuses only when it finds an IDE lock file under `~/.claude/ide/`. A session
+in a plain terminal writes none, so the guard will not catch it. That session would keep writing
+under the old path after the move.
 
 ```powershell
 awt plan  --src "E:\Projects\old-name" --dst "E:\Projects\new-name"
@@ -66,6 +69,9 @@ failure is the confirmation.
 
 This is the common case: you renamed a repo, moved a directory in Explorer, or cloned to a new
 location, and Claude Code lost the thread.
+
+Exit every Claude Code session running in the old folder first, for the same reason as a move:
+the lock guard cannot see a session in a plain terminal.
 
 ```powershell
 awt scan --src "E:\Projects\old-name"                                    # confirm state exists

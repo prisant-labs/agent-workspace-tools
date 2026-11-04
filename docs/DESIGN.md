@@ -235,8 +235,10 @@ Apply is one ordered, backup-first, fully reversible transaction:
   core (determinism). Rollback reads only the manifest.
 - **Idempotency is free**: re-run finds no source dir/keys -> empty plan -> no-op.
 - **Guards** (each its own exit code): destination exists -> refuse (2); worktree
-  source (`.git` is a file) -> refuse without `--force` (2); live process/IDE lock
-  -> warn, require `--force` (2); unknown store shape -> hard-fail pre-write (4).
+  source (`.git` is a file) -> refuse without `--force` (2); IDE lock file under
+  `~/.claude/ide/` -> refuse without `--force` (2); unknown store shape -> hard-fail
+  pre-write (4). The lock guard does not detect live processes, so a terminal session
+  passes it (FF-1 in `docs/internal/maintainer-todo.md` section 5; fix planned for v1.0.1).
 - **verify is an independent read path**, not asserts inside apply, so it catches
   writes that never reached disk.
 
