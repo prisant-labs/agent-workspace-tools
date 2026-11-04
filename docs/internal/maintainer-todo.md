@@ -122,9 +122,9 @@ AR-06 (stale `--force` help text), AR-07 (`archive --json` emitted text), AR-08
 copy passed every happy-path and adversarial step, including a real junction (plan
 refuses, archive skips) and byte-identical whole-tree rollback. **No technical step
 remains in the closeout; what is left is yours: 1.2 (D10 read) and 1.5 (S-01 sign-off).**
-That stopped being the whole list on 2026-11-03: 1.6 (acceptance re-run) and 1.7 (FF-1 docs
-fix) are two delegable steps that now also block the tag. 1.8 (F-1 and F-2 engine fixes) also
-blocked it, and is done.
+That stopped being the whole list on 2026-11-03: 1.6 (acceptance re-run), 1.7 (FF-1 docs fix)
+and 1.8 (F-1 and F-2 engine fixes) also blocked the tag, and all three are done. The re-run then
+raised 1.9 (AR-09, `archive` copies less than it promises), which needs your decision.
 
 ### 1.5 Sign off S-01 **[HUMAN - nobody else can do this]**
 
@@ -149,7 +149,11 @@ review guide rates all four Proven. The guide also now marks AC-21 (live-session
 for IDE sessions only, because of FF-1. Read that row with section 5 open. Its AC-17 (rollback
 puts everything back) row was wrongly Proven until F-1 was fixed, and a freshness note says so.
 
-### 1.6 Re-run the adversarial acceptance after the clap bump **[DELEGABLE]**
+### 1.6 Re-run the adversarial acceptance after the clap bump - **DONE 2026-11-04**
+
+Every planned step passed on `main` at `df6985f`, including the F-1 and F-2 additions below. It
+found one new issue, recorded at 1.9. Report:
+[acceptance-run-2026-11-04.md](release-plans/plan_v1.0.0/acceptance-run-2026-11-04.md).
 
 Decided 2026-11-03. PR #26 merged on 2026-10-24 and moved clap from 4.6.4 to 4.6.7. clap parses
 the command line, which is exactly the surface the 2026-07-31 acceptance run exercised, so that
@@ -173,6 +177,19 @@ spec's AC-21 wording is unchanged, because you sign that text. The review guide 
 ### 1.8 Fix F-1 and F-2 in the engine - **DONE 2026-11-03, PR #32**
 
 Decided 2026-11-03: both are fixed before the tag. See section 5.
+
+### 1.9 Decide whether AR-09 blocks the tag **[HUMAN]**
+
+`awt archive` does not copy subagent transcripts or most session artifacts, which AC-35 (archive
+includes session artifacts) promises in part. See section 5.
+
+- **A: fix it before the tag (recommended).** `archive` exists to protect session history from
+  auto-delete, and 5.8 GB of subagent transcripts on this machine have no protection. The change
+  looks small and confined to `archive.rs`, so only the archive steps should need repeating
+  (inferred; the fix is not written). The docs would then go back to the full claim.
+- **B: tag now and fix it in v1.0.1.** The docs already state the limit, so nobody is misled, and
+  a move and a rollback are unaffected. You would also need to narrow AC-35 in the S-02 spec, or
+  accept that it ships unmet.
 
 ---
 
@@ -225,7 +242,7 @@ own with `scripts/new-scratch-home.ps1`.
 
 ## 5. Field findings
 
-FF-1 and FF-2 came from real use on 2026-10-27. F-1 and F-2, at the end of this section, came from a packaging test on 2026-11-03, and both are fixed.
+FF-1 and FF-2 came from real use on 2026-10-27. F-1 and F-2 came from a packaging test on 2026-11-03, and both are fixed. AR-09, at the end of this section, came from the acceptance re-run on 2026-11-04.
 
 FF-1 and FF-2 came from a real project move. A repository was transferred and renamed on GitHub. It was cloned fresh to a new folder, and `awt associate --from <old> --to <new>` was run to carry its Claude Code state across. The run used the release binary built 2026-07-31. The behavior was then confirmed against the source at `847cb20`. The paths below are invented examples.
 
@@ -292,6 +309,14 @@ Whether FF-1 or FF-2 blocks the v1.0.0 tag is your call **[HUMAN]**. FF-1 is the
 **What happened.** `awt list --html <path>` overwrote whatever was at that path, with exit 0 and no warning. `list` otherwise only reads, so a mistyped path could destroy a file from a command nobody would expect to be dangerous.
 
 **Decision (2026-11-03): the engine refuses.** It exits 2, before the scan, and leaves the file alone. There is no override flag, so refreshing an inventory now takes a delete or a new name. Add a flag later only if that proves annoying.
+
+### AR-09 (`archive` copies less than it promises) **[HUMAN decision at 1.9]**
+
+**What happened.** The 2026-11-04 re-run checked a first sweep against the scratch copy. All 3,957 top-level transcripts and 24,683 of 24,689 file-history files were copied. The six others are likely orphans of sessions with no surviving transcript (inferred). The sweep did not copy 10,405 subagent transcripts (5.8 GB), 3,666 `tool-results` files (837 MB), or anything from `session-env/`, `tasks/` or `todos/`.
+
+**Why.** `archive_project_dir` in `crates/awt-core/src/archive.rs` copies only `*.jsonl` directly inside a project folder, plus `file-history/<sessionId>/`. AC-35 in the S-02 spec also names session-env, tasks and todos, and the design's layout names `tool-results` and `subagents`. Only file-history has a test, so the gap never showed.
+
+**Effect.** Nothing is lost by running `archive`, and a move and a rollback are unaffected. Files it skips remain exposed to auto-delete, and it does not say so. The pages that overstated the scope are corrected. The S-02 spec is unchanged, because narrowing a criterion is your call.
 
 ---
 

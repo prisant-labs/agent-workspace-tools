@@ -101,7 +101,7 @@ It exits non-zero (3) if any file did not come back byte-identical.
 awt archive --archive-dir "E:\claude-archive"
 ```
 
-Copies transcripts and session artifacts to a durable folder before Claude Code auto-deletes them.
+Copies top-level session transcripts and file history to a durable folder before Claude Code auto-deletes them. It does not yet copy subagent transcripts or other session artifacts.
 Incremental and deduplicated by content hash, so re-running only copies what changed.
 
 ## Next

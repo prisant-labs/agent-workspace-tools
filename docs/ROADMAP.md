@@ -207,10 +207,12 @@ Run 2 on a fresh scratch copy passed the full happy-path and hostile matrix, inc
 junction and byte-identical whole-tree rollback. Report:
 `docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-31.md`.
 
-**Update 2026-11-03: `docs/internal/maintainer-todo.md` section 1 is the current list.** It adds
-a repeat of the adversarial acceptance run, because clap and the rollback engine changed after
-2026-07-31. FF-1 (the live-session guard misses terminal sessions) blocked the tag on
-documentation only, and that fix is done; the guard fix itself ships in v1.0.1.
+**Update 2026-11-04: `docs/internal/maintainer-todo.md` section 1 is the current list.** FF-1 (the
+live-session guard misses terminal sessions) blocked the tag on documentation only, and that fix
+is done; the guard fix itself ships in v1.0.1. The adversarial acceptance run was repeated,
+because clap and the rollback engine changed after 2026-07-31. Every planned step passed
+(`docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-11-04.md`). It found AR-09 (`archive`
+copies less than it promises), and whether that blocks the tag is a maintainer decision.
 
 **Remaining before the v1.0 tag (both maintainer-owned):** (1) the maintainer S-01 spec
 sign-off, made against the closed state; (2) the D10 exposure read (emails and URLs in the

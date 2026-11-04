@@ -172,7 +172,9 @@ Health values: `ok`, `stale` (contains stale references), `unresolved` (transcri
 
 ### `awt archive`
 
-Copy transcripts and session artifacts to a durable folder before Claude's 30-day auto-delete removes them. Archives are incremental and deduplicated by content hash.
+Copy top-level session transcripts and file history to a durable folder before Claude's 30-day auto-delete removes them. Archives are incremental and deduplicated by content hash.
+
+**It does not yet copy** subagent transcripts, `tool-results/`, `session-env/`, `tasks/` or `todos/`, so those files are not protected from auto-delete (AR-09 in `docs/internal/maintainer-todo.md` section 5).
 
 **Purpose:** preserve session history. Can be run manually, on a schedule, or wired into Claude Code as a `SessionEnd` hook so every session is archived automatically when it closes.
 
