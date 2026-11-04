@@ -18,10 +18,10 @@ into v1.0.0 on 2026-07-30 (decision D9 in the release plan) because v1 is define
 the CLI does and no v1.0.0 tag existed yet to freeze against.
 
 The dating of this section is deferred to the tag. The v1 safety closeout (S-04) completed
-2026-07-31, including a passing adversarial acceptance run. The tag now waits on three things:
-a repeat of that run, because clap and the rollback engine changed after it; the maintainer
-spec sign-off (S-01); and the fixture-history decision (D10). See
-`docs/internal/maintainer-todo.md` section 1.
+2026-07-31, including a passing adversarial acceptance run. That run was repeated on 2026-11-04,
+because clap and the rollback engine changed after it. The tag now waits on the maintainer spec
+sign-off (S-01), the fixture-history decision (D10), and a decision on AR-09 (`archive` copies
+less than it promises). See `docs/internal/maintainer-todo.md` section 1.
 
 ### Added
 
@@ -221,6 +221,10 @@ spec sign-off (S-01); and the fixture-history decision (D10). See
   report success. The session then keeps writing under the old path, so the migration goes
   stale within minutes. No data is lost. Exit every session running in the source folder first,
   and do not run `awt` from inside one. The guard fix is planned for v1.0.1.
+- **`archive` copies less than it promises (AR-09).** It copies top-level session transcripts and
+  file history. It does not copy subagent transcripts, `tool-results/`, `session-env/`, `tasks/`
+  or `todos/`, and it does not say so when it runs. Those files are not protected from auto-delete.
+  A move and a rollback are not affected.
 - **`associate` cannot finish into a destination that is already live (FF-2).** It refuses with
   exit 2 and writes nothing, so a half-migrated project has no supported way to finish. The
   planned fix prints the manual steps, and exports same-session transcripts as an archive.

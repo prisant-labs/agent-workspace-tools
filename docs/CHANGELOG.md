@@ -3,6 +3,23 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-11-04 - Adversarial acceptance repeated; AR-09 recorded
+
+No code changed in this entry.
+
+**`acceptance-run-2026-11-04.md` is new.** It repeats the 2026-07-31 matrix on `df6985f` and adds
+the F-1 and F-2 steps. Every planned step passed. `maintainer-todo.md` 1.6 is done, and gate (g)
+in `plan_v1.0.0.md` records the repeat.
+
+**AR-09 (`archive` copies less than it promises) is new, and it changes what the docs claim.**
+`README.md`, `docs/reference/commands.md`, `docs/quickstart.md`, `docs/faq.md` and the root
+`CHANGELOG.md` said `archive` copied session artifacts. They now state what it copies and what it
+leaves out. `docs/features/v1.1-inventory-retention-reassociate.md` marks its layout as the design.
+`maintainer-todo.md` 1.9 holds the decision, and the tag row in `plan_v1.0.0.md` names it.
+
+**The S-02 spec is unchanged.** AC-35 still names session-env, tasks and todos, because narrowing a
+criterion is the maintainer's call.
+
 ## 2026-11-03 (fifth entry) - FF-1 documentation fix
 
 No code changed in this entry.
