@@ -17,6 +17,11 @@ session passes it. A freshness note explains the gap and points at `maintainer-t
 so the sign-off reader decides whether that is the promise to sign. The guide still takes no
 position on the verdict.
 
+**AC-17 (rollback puts everything back) is marked proven for original files only.** F-1 (rollback
+leaves a plugin folder behind) was found on 2026-11-03. Originals return byte-identical, but the
+renamed plugin-state folder stays, and a retry of the same move fails at `apply`. The maintainer
+decided that the fix lands before the tag, and a freshness note explains the gap until it does.
+
 `ac-traceability.md` is a dated snapshot that the guide already supersedes on AC-3, AC-4 and
 AC-18, so it was left alone.
 
