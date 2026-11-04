@@ -19,11 +19,12 @@
 use awt_core::apply::{apply, apply_verified, ApplyOpts};
 use awt_core::error::AwtError;
 use awt_core::fs::{FileSystem, MemoryFileSystem};
-use awt_core::model::Move;
+use awt_core::model::{Change, Move};
 use awt_core::plan::{build_plan, Plan, PlanOpts};
 use awt_core::rollback::{rollback, verify_rollback};
 use awt_core::stores::plugin_state::state_hash;
-use std::path::Path;
+use std::io;
+use std::path::{Path, PathBuf};
 
 const HOME: &str = "/h";
 const OLD: &str = r"E:\Projects\A";
@@ -287,6 +288,11 @@ fn plan_refuses_when_a_state_folder_already_holds_the_destination() {
         err.to_string().contains(&format!("B-{}", state_hash(NEW))),
         "the refusal must name the folder to deal with: {err}"
     );
+    assert!(
+        err.to_string().contains("live project"),
+        "the folder may hold a live project's state, so the refusal must not read as safe to \
+         delete: {err}"
+    );
     assert_eq!(fs.read(Path::new(&leftover)).unwrap(), b"someone else's");
 }
 
@@ -306,8 +312,15 @@ fn apply_refuses_before_any_rename_when_a_destination_appears_after_plan() {
         auto_rollback: true,
         force: false,
     };
-    assert!(apply_verified(&plan, &fs, Path::new("/backup"), &opts).is_err());
+    let err = match apply_verified(&plan, &fs, Path::new("/backup"), &opts) {
+        Err(e) => e,
+        Ok(_) => panic!("apply must refuse a destination that appeared after plan"),
+    };
 
+    // A guard refusal, not a failed apply. Nothing changed, so no rollback may run: it would
+    // rewrite every backed-up file, and a live session may have appended to one since the
+    // snapshot.
+    assert!(matches!(err, AwtError::DestinationExists(_)), "{err:?}");
     assert!(
         fs.exists(Path::new("/h/.claude/projects/E--Projects-A/s.jsonl")),
         "no store may have been renamed"
@@ -349,4 +362,132 @@ fn rollback_refuses_before_any_change_when_both_folders_exist() {
             .unwrap(),
         b"recreated by a live session"
     );
+}
+
+/// Behaves like a memory filesystem, except that a live session recreates the old plugin-state
+/// folder at the moment apply reads the renamed transcript.
+struct LiveSessionFs {
+    inner: MemoryFileSystem,
+}
+
+impl FileSystem for LiveSessionFs {
+    fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
+        if path.to_string_lossy().contains("E--Projects-B") {
+            self.inner.write(
+                Path::new(&format!("{}/state.json", old_plugin_dir())),
+                b"recreated by a live session",
+            )?;
+        }
+        self.inner.read(path)
+    }
+    fn write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
+        self.inner.write(path, data)
+    }
+    fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+        self.inner.rename(from, to)
+    }
+    fn exists(&self, path: &Path) -> bool {
+        self.inner.exists(path)
+    }
+    fn is_file(&self, path: &Path) -> bool {
+        self.inner.is_file(path)
+    }
+    fn is_dir(&self, path: &Path) -> bool {
+        self.inner.is_dir(path)
+    }
+    fn read_dir(&self, path: &Path) -> io::Result<Vec<PathBuf>> {
+        self.inner.read_dir(path)
+    }
+    fn create_dir_all(&self, path: &Path) -> io::Result<()> {
+        self.inner.create_dir_all(path)
+    }
+    fn copy(&self, from: &Path, to: &Path) -> io::Result<()> {
+        self.inner.copy(from, to)
+    }
+    fn remove_file(&self, path: &Path) -> io::Result<()> {
+        self.inner.remove_file(path)
+    }
+    fn remove_dir_all(&self, path: &Path) -> io::Result<()> {
+        self.inner.remove_dir_all(path)
+    }
+    fn mtime_secs(&self, path: &Path) -> io::Result<u64> {
+        self.inner.mtime_secs(path)
+    }
+}
+
+/// A failed apply whose rollback refused is half-applied. The person must be told, because
+/// "backup at ..." alone reads as if the failure had been cleaned up.
+#[test]
+fn a_refused_automatic_rollback_is_reported_not_swallowed() {
+    let fs = LiveSessionFs { inner: seed() };
+    let mut plan = plan_of(&fs.inner);
+    // An impossible count makes apply fail after its renames, on the rewrite of the transcript.
+    let mut injected = false;
+    for c in &mut plan.changes {
+        if let Change::RewriteFile { expected, .. } = c {
+            *expected += 999;
+            injected = true;
+        }
+    }
+    assert!(
+        injected,
+        "the fixture must produce a RewriteFile to corrupt"
+    );
+
+    let opts = ApplyOpts {
+        run_id: "T".into(),
+        auto_rollback: true,
+        force: false,
+    };
+    let err = match apply_verified(&plan, &fs, Path::new("/backup"), &opts) {
+        Err(e) => e,
+        Ok(_) => panic!("the corrupted plan must fail"),
+    };
+
+    let text = err.to_string();
+    assert!(matches!(err, AwtError::VerifyFailed(_)), "{err:?}");
+    assert!(
+        text.contains("rollback did not complete"),
+        "the refused rollback must be reported: {text}"
+    );
+    assert!(
+        text.contains("both"),
+        "the report must carry rollback's own reason: {text}"
+    );
+}
+
+/// The plugin store looks for state under the recorded spelling of the path and under the
+/// caller's spelling (AC-60). When a folder exists for each, both plan the same destination. The
+/// second rename cannot succeed, so `plan` must say so. Left to `apply`, the failure reaches a
+/// rollback that sees the first folder's destination and the second folder's old name, and
+/// refuses, stranding a half-applied move.
+#[test]
+fn plan_refuses_when_two_state_folders_would_land_on_one_destination() {
+    let fs = seed();
+    let other_spelling = r"e:\projects\a";
+    let second = format!(
+        "/h/.claude/plugins/data/codex/state/a-{}/state.json",
+        state_hash(other_spelling)
+    );
+    fs.write(Path::new(&second), b"second spelling").unwrap();
+
+    let opts = PlanOpts {
+        force: false,
+        move_folder: true,
+    };
+    let typed_differently = Move {
+        src_abs: other_spelling.into(),
+        dst_abs: NEW.into(),
+    };
+    let err = match build_plan(&fs, Path::new(HOME), &typed_differently, &opts) {
+        Err(e) => e,
+        Ok(_) => panic!("plan must refuse two renames onto one destination"),
+    };
+
+    assert!(matches!(err, AwtError::DestinationExists(_)), "{err:?}");
+    assert!(
+        err.to_string().contains(&format!("B-{}", state_hash(NEW))),
+        "the refusal must name the destination: {err}"
+    );
+    assert_eq!(fs.read(Path::new(&second)).unwrap(), b"second spelling");
 }

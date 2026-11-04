@@ -18,10 +18,9 @@ pub fn apply(plan: &Plan, fs: &dyn FileSystem, backup_root: &Path, run_id: &str)
     // Re-check after the snapshot and before the first change. A destination that appeared since
     // `plan` is not ours, so failing at its rename would leave rollback unable to tell that
     // folder from one this run put there. Refusing here means there is nothing to undo.
-    if let Some(to) = crate::plan::occupied_rename_destination(fs, &plan.changes) {
+    if let Some(conflict) = crate::plan::rename_conflict(fs, &plan.changes) {
         return Err(AwtError::DestinationExists(format!(
-            "{} appeared between plan and apply; nothing was changed",
-            to.display()
+            "{conflict}. This appeared after plan, and nothing was changed"
         )));
     }
     let mut applied = Vec::new();
@@ -173,12 +172,24 @@ pub fn apply_verified(
     let manifest_path = backup_dir.join("manifest.json");
     let mut report = match apply(plan, fs, backup_root, &opts.run_id) {
         Ok(r) => r,
+        // The re-check refused before the first change, so there is nothing to undo. A rollback
+        // here would rewrite every backed-up file, and a live session may have appended to one
+        // since the snapshot.
+        Err(e @ AwtError::DestinationExists(_)) => return Err(e),
         Err(e) => {
-            if opts.auto_rollback {
-                let _ = crate::rollback::rollback(&manifest_path, fs);
+            // A refused rollback leaves the move half-applied, so it must not be swallowed. No
+            // manifest means the snapshot itself failed, and nothing has changed.
+            let mut rollback_outcome = String::new();
+            if opts.auto_rollback && fs.exists(&manifest_path) {
+                if let Err(refused) = crate::rollback::rollback(&manifest_path, fs) {
+                    rollback_outcome = format!(
+                        "; automatic rollback did not complete ({refused}), so the move may be \
+                         half-applied: resolve that, then run awt rollback on this backup"
+                    );
+                }
             }
             return Err(AwtError::VerifyFailed(format!(
-                "apply failed ({e:?}); backup at {}",
+                "apply failed ({e:?}){rollback_outcome}; backup at {}",
                 backup_dir.display()
             )));
         }
