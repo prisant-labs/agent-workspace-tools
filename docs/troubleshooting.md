@@ -48,16 +48,31 @@ Each of these stops the run before any change is made and tells you what to do.
   from destination ... Cross-volume moves are not supported in v1.0 (spec AC-2, deferred).
   Move within the same volume instead." v1.0 moves are same-volume renames; cross-volume
   copy-verify-delete is a v1.x feature.
-- **Live lock.** "live IDE lock detected - a running CLI instance may be editing this
-  project. Close the running CLI first, or pass --force to proceed anyway." Editing state
-  a running CLI also holds can conflict. Close the other instance, or pass `--force` (which
-  proceeds with a warning).
+- **Live IDE lock.** "live IDE lock detected - a running Claude Code CLI may be editing your
+  Claude state. Lock(s): .... Close the running CLI first, or pass --force to proceed anyway."
+  Editing state a running session also holds can conflict. The guard fires on any `*.lock` file
+  under `~/.claude/ide/`, whichever project that editor has open. Close the editor session, or
+  pass `--force` (which proceeds with a warning). **No refusal does not mean no session is
+  running.** A session in a plain terminal writes no lock file, so the guard cannot see it. See
+  [the old folder came back](#the-old-folder-came-back-after-a-move).
 - **Ambiguous history.** "the project dir ... could belong to more than one live path
   (...). The tool will not guess which path is correct - resolve this manually. The
   --attribute resolver is planned for v1.x." Two or more still-existing paths are recorded
   for the same transcript history (a rename plus a surviving clone). The tool refuses
   rather than attribute the history to the wrong project. Resolving this automatically via
   an `--attribute fork|base|both` flag is planned for v1.x.
+
+## The old folder came back after a move
+
+**A Claude Code session was probably still running in the source folder.** The live-session
+guard only sees IDE lock files, so a session in a plain terminal passes it, and the move reports
+success. The session then keeps writing under the old path. It recreates the old `projects/`
+folder, adds `history.jsonl` lines, and restores the old `~/.claude.json` key when it exits.
+
+No data is lost, because the moved state is intact. The leftovers are stale entries. A second
+`associate` to finish the job refuses with exit 2, because the destination is already live.
+Avoid this by exiting every session in the source folder first, and by not running `awt` from
+inside one. A guard that sees terminal sessions is planned for v1.0.1.
 
 ## Re-running `apply` is idempotent (by refusal)
 

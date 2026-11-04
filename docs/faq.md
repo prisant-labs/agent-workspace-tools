@@ -38,9 +38,18 @@ the migration path.
 
 ### Do I need to close Claude Code first?
 
-Yes, close any session working in the project you are about to move. `awt` detects a live lock
-and refuses with exit 2 rather than editing state another process is holding. You can override
-with `--force`, but the refusal exists for a reason.
+Yes. Exit every session running in the project you are about to move, and do not run `awt` from
+inside one. **Do this yourself, because `awt` cannot see every session.**
+
+`awt` looks for IDE lock files under `~/.claude/ide/`. If it finds one, it refuses with exit 2,
+whichever project that editor has open. You can override that with `--force`, but the refusal
+exists for a reason.
+
+A session in a plain terminal writes no lock file, so `awt` will not refuse and will report
+success. That session then keeps writing under the old path. It recreates the old `projects/`
+folder, adds new `history.jsonl` lines, and restores the old `~/.claude.json` key when it exits.
+No data is lost, but the migration goes stale within minutes. A guard that sees terminal sessions
+is planned for v1.0.1.
 
 ### Will it touch my other projects' transcripts?
 

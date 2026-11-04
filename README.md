@@ -22,7 +22,8 @@ No LLM, no network, backup-before-write, verify-after, single-command rollback.
 > The [safety closeout](docs/internal/release-plans/plan_v1.0.0/S-04_safety-closeout/spec.md)
 > that an adversarial audit opened on 2026-07-30 **completed on 2026-07-31**: every finding
 > closed test-first, and an adversarial acceptance run passed on real data (fresh scratch
-> copy, hostile matrix, byte-identical rollback). The tag now waits only on the maintainer's
+> copy, hostile matrix, byte-identical rollback). The tag now waits on a repeat of that run,
+> because the argument parser and the rollback engine changed after it, and on the maintainer's
 > spec sign-off and a fixture-history decision.
 >
 > Because `awt` edits Claude Code state under `~/.claude`, read the
@@ -109,9 +110,14 @@ Every `apply` and `rollback` also writes an always-on machine-readable record (`
   postcondition triggers automatic rollback from the snapshot.
 - **Verifiable revert.** `rollback` re-hashes every restored file against the snapshot and proves
   byte-identity (exit 3 on any mismatch).
-- **Fail closed.** Destination exists, git-worktree source, cross-volume move, a live lock, or an
-  ambiguous history each stop the run with a plain-language message and a documented exit code -
-  never a silent surprise.
+- **Fail closed.** Destination exists, git-worktree source, cross-volume move, an IDE lock file,
+  or an ambiguous history each stop the run with a plain-language message and a documented exit
+  code - never a silent surprise.
+- **Exit your sessions first, because `awt` cannot see them all.** The live-session guard only
+  finds IDE lock files under `~/.claude/ide/`. A Claude Code session in a plain terminal writes
+  none, so the guard will not refuse while one is running. Exit every session running in the
+  source folder before `apply` or `associate`, and do not run `awt` from inside one. A guard that
+  sees terminal sessions is planned for v1.0.1.
 - **Deterministic and offline.** Zero LLM and zero network calls in the migration path, enforced
   by a dependency-guard test.
 
@@ -122,7 +128,7 @@ Every `apply` and `rollback` also writes an always-on machine-readable record (`
 | Release | Contents | Status |
 |---|---|---|
 | v0.1.0 | `awt doctor` and `awt scan` - read-only | Internal milestone (not tagged) |
-| **v1.0.0** | Full CLI: mover (`plan`/`apply`/`verify`/`rollback`) plus `list`, `archive`, `associate`, `repair` | **Feature-complete; safety closeout done.** Happy-path acceptance passed 2026-07-30; the adversarial audit's closeout completed 2026-07-31 with a passing adversarial acceptance run. Tag blocked only on the maintainer spec sign-off and the fixture-history (D10) decision. |
+| **v1.0.0** | Full CLI: mover (`plan`/`apply`/`verify`/`rollback`) plus `list`, `archive`, `associate`, `repair` | **Feature-complete; safety closeout done.** Happy-path acceptance passed 2026-07-30; the adversarial audit's closeout completed 2026-07-31 with a passing adversarial acceptance run. Tag blocked on a repeat of that run, the maintainer spec sign-off and the fixture-history (D10) decision. |
 | v1.x (parked) | Cross-volume move; Codex and Gemini adapters | Behind the existing adapter boundary; promotable when scheduled |
 | v2.0.0 | Tauri 2 + React GUI over the identical core | Deferred; security and native-parity baselines first |
 

@@ -163,9 +163,12 @@ state folder, then run `apply`, `rollback`, and the same `apply` again. Also con
 `list --html` refuses an existing file. The 2026-07-31 run passed with F-1 live, because its
 rollback step compared original files and hashes and never retried the move.
 
-### 1.7 Correct the live-lock claims in the docs (FF-1) **[DELEGABLE]**
+### 1.7 Correct the live-lock claims in the docs (FF-1) - **DONE 2026-11-03**
 
-Decided 2026-11-03: FF-1 blocks the tag on documentation only. See section 5.
+Decided 2026-11-03: FF-1 blocks the tag on documentation only. See section 5. Every page that
+promised more now says the guard sees IDE lock files only, and gives the workaround. The refusal
+message is compiled into the binary, so it stays as it is until the v1.0.1 code fix. The S-01
+spec's AC-21 wording is unchanged, because you sign that text. The review guide flags the gap.
 
 ### 1.8 Fix F-1 and F-2 in the engine - **DONE 2026-11-03, PR #32**
 

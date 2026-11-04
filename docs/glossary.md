@@ -75,7 +75,8 @@ against the snapshot and proves byte-identity, failing with exit 3 on any mismat
 
 **Guard / fail closed.** A precondition that stops a run before anything is written: destination
 exists, missing source, nested projects under the source, worktree source, cross-volume
-move, live lock, ambiguous history. All produce exit 2.
+move, IDE lock file, ambiguous history. All produce exit 2. The IDE lock guard cannot see a
+session in a plain terminal, so it does not prove that no session is running.
 "Fail closed" means the default on uncertainty is to refuse.
 
 **Idempotent by refusal.** Re-running `apply` on an already-migrated project exits 2 with a

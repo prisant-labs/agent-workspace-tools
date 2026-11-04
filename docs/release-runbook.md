@@ -35,6 +35,8 @@ This test must be run on the real machine against a COPY of `~/.claude`. Never r
 - [ ] `awt apply --home <scratch> --src <test-src> --dst <test-dst>` applies the move in the scratch copy; reports applied count and backup path; exit 0.
 - [ ] `awt verify --home <scratch> --src <test-src> --dst <test-dst>` reports all checks `[ok]`; exit 0.
 - [ ] `awt rollback --home <scratch> --report <backup-manifest-from-apply>` restores the scratch copy; exit 0. Confirm the scratch copy is back to its pre-apply state by re-running `awt verify` (expect it to fail, confirming rollback succeeded).
+- [ ] On a project with a plugin-state folder, `apply`, `rollback`, and the same `apply` again each exit 0, and the rollback leaves no `<name>-<hash>` folder behind.
+- [ ] `awt list --home <scratch> --html <a file that exists>` refuses with exit 2 and leaves the file unchanged.
 - [ ] `awt archive --home <scratch> --archive-dir <scratch-archive>` completes; exit 0.
 - [ ] `awt associate --home <scratch> --from <old-path> --to <new-path>` completes; exit 0.
 

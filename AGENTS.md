@@ -50,6 +50,8 @@ These rules are load-bearing. Violating any one invalidates correctness guarante
 
 Platform: Windows 11, PowerShell primary. Rust stable (cargo 1.96.0) is installed.
 
+**The live-session guard cannot see you.** It only finds IDE lock files, so a Claude Code or terminal agent session passes it (FF-1 in `docs/internal/maintainer-todo.md` section 5). Never run `awt apply` or `awt associate` against the folder your own session is running in. A passing guard does not prove that no session is live.
+
 Shell commands can hang in some harnesses on this machine. For file operations, prefer `Glob`, `Grep`, and `Read` tools over shell commands. For `cargo` and `git` commands, use generous timeouts or run in background, then verify results by reading files or checking exit codes. Do not assume a shell command completed successfully without confirming its output.
 
 ---

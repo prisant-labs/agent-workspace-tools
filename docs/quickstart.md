@@ -58,8 +58,12 @@ awt plan --src "E:\Projects\old-name" --dst "E:\Projects\new-name"
 
 Read the plan. It lists the folder move, the `projects/` directory rename, each transcript rewrite
 with its edit count, the `~/.claude.json` key change, and the `history.jsonl` edits. If a guard
-fires (destination exists, missing or nested source, worktree source, cross-volume move, a
-live lock, or an ambiguous history), the plan refuses and tells you what to do - see `docs/troubleshooting.md`.
+fires (destination exists, missing or nested source, worktree source, cross-volume move, an
+IDE lock file, or an ambiguous history), the plan refuses and tells you what to do - see `docs/troubleshooting.md`.
+
+**Exit every Claude Code session running in the source folder before you apply.** The lock guard
+only sees IDE lock files, so it cannot catch a session in a plain terminal. Do not run `awt` from
+inside such a session either. See [the FAQ](faq.md#do-i-need-to-close-claude-code-first).
 
 When the plan looks right, apply it:
 
