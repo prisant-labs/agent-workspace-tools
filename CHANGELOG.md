@@ -117,9 +117,13 @@ maintainer spec sign-off (S-01) and the fixture-history decision (D10) - see
   error 145. The manifest now records each rename's destination, and rollback uses it.
   Manifests written before this fix still restore. The post-rollback proof now fails if a
   renamed folder is still there (F-1).
-- **`plan` passed when a plugin-state folder already occupied the destination.** `plan` now
-  refuses with exit 2 and names the folder, and `apply` re-checks before its first change. A
-  leftover from a rollback by an older build is the known way to reach this (F-1).
+- **`plan` passed when a plugin-state rename could not succeed.** A folder could already occupy
+  the destination, or two folders holding state for two spellings of the source path could share
+  one. `plan` now refuses with exit 2 and names the folder, and `apply` re-checks before its first
+  change. A leftover from a rollback by an older build is the known way to reach this (F-1).
+- **A failed `apply` hid a refused automatic rollback.** The message said only where the backup
+  was, which read as if the failure had been cleaned up. It now says that the rollback did not
+  complete, and why, so the half-applied move is visible (F-1).
 - **Rollback could refuse halfway when a folder existed at both its old and new name.** The
   project folder had already moved back by then. The check now runs in the preflight, so the
   refusal changes nothing (F-1).

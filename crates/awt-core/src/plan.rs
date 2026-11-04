@@ -276,12 +276,8 @@ pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) 
     // falsified the promise that the dry run shows what apply will do. A leftover from a
     // rollback by a binary older than the F-1 fix is the known way to reach this. Transcript
     // folders never trip it, because their store plans a MergeDir when the destination exists.
-    if let Some(to) = occupied_rename_destination(fs, &changes) {
-        return Err(AwtError::DestinationExists(format!(
-            "{} (a state folder is already there, possibly left over from an earlier rollback; \
-             check it, move it aside or delete it, then re-run)",
-            to.display()
-        )));
+    if let Some(conflict) = rename_conflict(fs, &changes) {
+        return Err(AwtError::DestinationExists(conflict));
     }
 
     // AR-04: the same literal can be reached by more than one hit. `.claude.json` may hold
@@ -310,16 +306,38 @@ pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) 
     })
 }
 
-/// The first directory-rename destination that already exists, if any. `build_plan` refuses on
-/// it, and `apply` re-checks it because the snapshot between the two can take a while.
-pub(crate) fn occupied_rename_destination<'a>(
-    fs: &dyn FileSystem,
-    changes: &'a [Change],
-) -> Option<&'a Path> {
-    changes.iter().find_map(|c| match c {
-        Change::RenameDir { to, .. } if fs.exists(to) => Some(to.as_path()),
-        _ => None,
-    })
+/// Why these directory renames cannot all succeed, if they cannot. `build_plan` refuses on this,
+/// and `apply` re-checks it because the snapshot between the two can take a while.
+///
+/// Two shapes qualify. A destination can already exist. Two renames can also share a destination,
+/// because the plugin store looks under both the recorded and the typed spelling of a path
+/// (AC-60), and a folder can exist for each. Rollback cannot untangle either one after the fact:
+/// it would see a folder at both names, and it cannot tell a folder this run put there from one
+/// that was already there.
+pub(crate) fn rename_conflict(fs: &dyn FileSystem, changes: &[Change]) -> Option<String> {
+    let mut seen = std::collections::HashSet::new();
+    for c in changes {
+        let Change::RenameDir { to, .. } = c else {
+            continue;
+        };
+        if fs.exists(to) {
+            return Some(format!(
+                "{} (a state folder is already there. It may hold a live project's state, or be \
+                 left over from an earlier rollback. Check which before you move it aside or \
+                 delete it, then re-run)",
+                to.display()
+            ));
+        }
+        if !seen.insert(normalize_path(&to.to_string_lossy())) {
+            return Some(format!(
+                "{} (two state folders would both be renamed to this, because they hold state \
+                 for two spellings of the source path; keep one, move the other aside, then \
+                 re-run)",
+                to.display()
+            ));
+        }
+    }
+    None
 }
 
 /// Merge text-splice changes that target the same file with the same `from` and `to`
