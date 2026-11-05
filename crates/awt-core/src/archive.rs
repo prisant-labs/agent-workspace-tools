@@ -27,6 +27,11 @@ pub struct ArchiveReport {
     /// continues past them (AR-09): one locked file of a live session must not stop the
     /// protection of every other session.
     pub failed: usize,
+    /// The part of `failed` that is a failure to WRITE to the archive folder (a full disk,
+    /// a locked destination). A read failure is a live session holding its own file, which is
+    /// expected. A write failure means the archive folder itself is not working, so the CLI
+    /// exits 1 for it on a full sweep or a `--session` run.
+    pub write_failed: usize,
     pub failures: Vec<ArchiveFailure>,
 }
 
@@ -63,6 +68,57 @@ fn is_under(child: &Path, root_key: &str) -> bool {
 /// Store folders that hold one subfolder per session id, copied under `session-artifacts/`.
 const SESSION_DIR_STORES: [&str; 3] = ["file-history", "session-env", "tasks"];
 
+/// Every session-keyed store under `.claude`, copied whole by a full sweep.
+const WHOLE_STORES: [&str; 4] = ["file-history", "session-env", "tasks", "todos"];
+
+/// Folders under `.claude` that the archive reads. An archive folder that contains any of
+/// them would exclude its own sources from the copy. The empty name is `.claude` itself.
+const SOURCE_FOLDERS: [&str; 6] = [
+    "",
+    "projects",
+    "file-history",
+    "session-env",
+    "tasks",
+    "todos",
+];
+
+/// Refuse an archive folder that contains the folders the archive reads from. The sweep
+/// skips everything under the archive folder so it cannot copy itself, so such a folder
+/// would make the run copy nothing, report success, and leave the data unprotected.
+/// An archive folder deeper inside the home, such as `.claude/backups/x`, stays allowed.
+pub fn check_archive_dir(home: &Path, archive_dir: &Path) -> Result<()> {
+    let key = path_key(archive_dir);
+    if key.is_empty() {
+        return Err(AwtError::Locked(format!(
+            "archive folder '{}' is a filesystem root, which contains the Claude folders              that are archived; choose a folder that holds only the archive",
+            archive_dir.display()
+        )));
+    }
+    let claude = home.join(".claude");
+    for rel in SOURCE_FOLDERS {
+        let source = if rel.is_empty() {
+            claude.clone()
+        } else {
+            claude.join(rel)
+        };
+        if is_under(&source, &key) {
+            return Err(AwtError::Locked(format!(
+                "archive folder '{}' contains '{}', which is archived; the run would copy                  nothing. Choose a folder that is not above or equal to the Claude data",
+                archive_dir.display(),
+                source.display()
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// A session id becomes a path component under `.claude/<store>/` and beside the
+/// transcript. `.` and `..` would resolve to a folder above the store, so they are refused,
+/// along with the empty id. A transcript named `...jsonl` has the stem `..`.
+fn is_safe_session_id(id: &str) -> bool {
+    !id.is_empty() && id != "." && id != ".."
+}
+
 /// Mutable state of one archive run: the manifest entries, the report, and the filesystem.
 struct Sweep<'a> {
     fs: &'a dyn FileSystem,
@@ -89,6 +145,12 @@ impl<'a> Sweep<'a> {
             path: path.to_path_buf(),
             reason,
         });
+    }
+
+    /// Record a failure to write into the archive folder. Counted apart from read failures.
+    fn fail_write(&mut self, path: &Path, reason: String) {
+        self.report.write_failed += 1;
+        self.fail(path, reason);
     }
 
     /// Every FILE under `dir`. Never follows a junction or symlink (AC-61), and never
@@ -161,7 +223,7 @@ impl<'a> Sweep<'a> {
             .and_then(|_| self.fs.rename(&tmp, dst));
         if let Err(e) = written {
             let _ = self.fs.remove_file(&tmp);
-            self.fail(src, format!("cannot write {}: {e}", dst.display()));
+            self.fail_write(src, format!("cannot write {}: {e}", dst.display()));
             return;
         }
         self.entries.push(entry);
@@ -184,9 +246,16 @@ impl<'a> Sweep<'a> {
     fn copy_stores(&mut self, claude_root: &Path, session_ids: &[String]) {
         let base = self.opts.archive_dir.join("session-artifacts");
         let todos_dir = claude_root.join("todos");
-        let todos = self.fs.read_dir(&todos_dir).unwrap_or_default();
+        let todos = match self.fs.read_dir(&todos_dir) {
+            Ok(t) => t,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+            Err(e) => {
+                self.fail(&todos_dir, format!("cannot list folder: {e}"));
+                Vec::new()
+            }
+        };
         for sid in session_ids {
-            if sid.is_empty() {
+            if !is_safe_session_id(sid) {
                 continue;
             }
             for store in SESSION_DIR_STORES {
@@ -214,16 +283,32 @@ impl<'a> Sweep<'a> {
         }
     }
 
-    /// Archive one project folder: top-level transcripts, every session subfolder except
-    /// `memory`, and the session-keyed stores of every session id found by either route.
-    fn project_dir(&mut self, home: &Path, project_dir: &Path) {
+    /// Copy each session-keyed store whole, under `session-artifacts/`. A full sweep uses
+    /// this instead of the per-id copy so that files whose session has no transcript or
+    /// session folder left are archived too. A store that is a link is skipped (AC-61). A
+    /// store that does not exist is skipped; one that cannot be listed is a failure.
+    fn copy_whole_stores(&mut self, claude_root: &Path) {
+        let base = self.opts.archive_dir.join("session-artifacts");
+        for store in WHOLE_STORES {
+            let dir = claude_root.join(store);
+            if self.fs.is_reparse_point(&dir) {
+                continue;
+            }
+            self.copy_tree(claude_root, &dir, &base);
+        }
+    }
+
+    /// Archive one project folder: top-level transcripts and every session subfolder except
+    /// `memory`. Returns the session ids found by either route, so a caller that archives a
+    /// single project can copy the session-keyed stores for those ids.
+    fn project_dir(&mut self, home: &Path, project_dir: &Path) -> Vec<String> {
         let dir_rel = project_rel(home, project_dir);
         let dst_base = self.opts.archive_dir.join("projects").join(&dir_rel);
         let children = match self.fs.read_dir(project_dir) {
             Ok(c) => c,
             Err(e) => {
                 self.fail(project_dir, format!("cannot list folder: {e}"));
-                return;
+                return Vec::new();
             }
         };
         let mut session_ids: Vec<String> = Vec::new();
@@ -241,18 +326,23 @@ impl<'a> Sweep<'a> {
                 if name.to_string_lossy().eq_ignore_ascii_case("memory") {
                     continue;
                 }
-                session_ids.push(name.to_string_lossy().into_owned());
+                let id = name.to_string_lossy().into_owned();
+                if is_safe_session_id(&id) {
+                    session_ids.push(id);
+                }
                 self.copy_tree(project_dir, &child, &dst_base);
             } else if child.extension().and_then(|e| e.to_str()) == Some("jsonl") {
                 if let Some(stem) = child.file_stem().and_then(|s| s.to_str()) {
-                    session_ids.push(stem.to_string());
+                    if is_safe_session_id(stem) {
+                        session_ids.push(stem.to_string());
+                    }
                 }
                 self.copy(&child, &dst_base.join(&name));
             }
         }
         session_ids.sort();
         session_ids.dedup();
-        self.copy_stores(&home.join(".claude"), &session_ids);
+        session_ids
     }
 
     /// Write the manifest (and optionally the index) and hand back the report.
@@ -343,6 +433,7 @@ pub fn archive_project(
     opts: &ArchiveOpts,
 ) -> Result<ArchiveReport> {
     use crate::paths::normalize_path;
+    check_archive_dir(home, &opts.archive_dir)?;
     let index = ProjectIndex::build(fs, home)?;
     let key = normalize_path(from_abs);
     let dirs = index.by_cwd.get(&key).ok_or_else(|| {
@@ -353,9 +444,13 @@ pub fn archive_project(
     })?;
     fs.create_dir_all(&opts.archive_dir)?;
     let mut sweep = Sweep::new(fs, opts);
+    let mut session_ids: Vec<String> = Vec::new();
     for dir in dirs {
-        sweep.project_dir(home, dir);
+        session_ids.extend(sweep.project_dir(home, dir));
     }
+    session_ids.sort();
+    session_ids.dedup();
+    sweep.copy_stores(&home.join(".claude"), &session_ids);
     sweep.finish(true)
 }
 
@@ -368,6 +463,7 @@ pub fn archive_session(
     transcript: &Path,
     opts: &ArchiveOpts,
 ) -> Result<ArchiveReport> {
+    check_archive_dir(home, &opts.archive_dir)?;
     if !fs.exists(transcript) {
         return Err(AwtError::Io(std::io::Error::new(
             std::io::ErrorKind::NotFound,
@@ -389,7 +485,7 @@ pub fn archive_session(
     }
 
     if let Some(session_id) = transcript.file_stem().and_then(|s| s.to_str()) {
-        if !session_id.is_empty() {
+        if is_safe_session_id(session_id) {
             let session_dir = project_dir.join(session_id);
             if fs.is_dir(&session_dir) && !fs.is_reparse_point(&session_dir) {
                 sweep.copy_tree(project_dir, &session_dir, &dst_base);
@@ -402,8 +498,10 @@ pub fn archive_session(
 }
 
 /// Archive all Claude project session state to the archive directory.
-/// Covers resolved, unresolved, and ambiguous project dirs so nothing is silently dropped.
+/// Covers resolved, unresolved, and ambiguous project dirs so nothing is silently dropped,
+/// and copies `file-history/`, `session-env/`, `tasks/` and `todos/` whole.
 pub fn archive_all(fs: &dyn FileSystem, home: &Path, opts: &ArchiveOpts) -> Result<ArchiveReport> {
+    check_archive_dir(home, &opts.archive_dir)?;
     let index = ProjectIndex::build(fs, home)?;
     fs.create_dir_all(&opts.archive_dir)?;
     let mut sweep = Sweep::new(fs, opts);
@@ -419,6 +517,9 @@ pub fn archive_all(fs: &dyn FileSystem, home: &Path, opts: &ArchiveOpts) -> Resu
     for dir in all_dirs {
         sweep.project_dir(home, dir);
     }
+    // The stores are copied whole, not per session id, so files whose session has no
+    // transcript or session folder left are archived too.
+    sweep.copy_whole_stores(&home.join(".claude"));
     sweep.finish(true)
 }
 
@@ -763,7 +864,9 @@ mod tests {
         assert!(fs.exists(Path::new("/arch/projects/E--A/s1.jsonl")));
     }
 
-    /// AC-35: session-env, tasks and todos are archived under session-artifacts.
+    /// AC-35: a full sweep copies session-env, tasks, todos and file-history WHOLE, so files
+    /// whose session has no transcript or session folder left are archived too. Nothing is
+    /// copied twice (`skipped` stays 0), which shows the per-id copy did not also run.
     #[test]
     fn ac35_archives_session_env_tasks_and_todos() {
         let fs = MemoryFileSystem::new();
@@ -776,18 +879,31 @@ mod tests {
             .unwrap();
         fs.write(Path::new("/h/.claude/todos/s1-agent-s1.json"), b"[]")
             .unwrap();
+        // No transcript and no session folder exist for these ids.
         fs.write(Path::new("/h/.claude/todos/other-agent.json"), b"[]")
             .unwrap();
         fs.write(Path::new("/h/.claude/session-env/other/hook.sh"), b"x")
             .unwrap();
+        fs.write(Path::new("/h/.claude/file-history/ghost/f@v1"), b"f")
+            .unwrap();
         let r = archive_all(&fs, Path::new("/h"), &opts_at("/arch")).unwrap();
         assert_eq!(r.failed, 0);
-        assert!(fs.exists(Path::new("/arch/session-artifacts/session-env/s1/hook.sh")));
-        assert!(fs.exists(Path::new("/arch/session-artifacts/tasks/s1/.lock")));
-        assert!(fs.exists(Path::new("/arch/session-artifacts/tasks/s1/1.json")));
-        assert!(fs.exists(Path::new("/arch/session-artifacts/todos/s1-agent-s1.json")));
-        assert!(!fs.exists(Path::new("/arch/session-artifacts/todos/other-agent.json")));
-        assert!(!fs.exists(Path::new("/arch/session-artifacts/session-env/other")));
+        assert_eq!(r.copied, 8, "the transcript plus seven store files");
+        assert_eq!(r.skipped, 0, "no file may be copied twice");
+        for p in [
+            "/arch/session-artifacts/session-env/s1/hook.sh",
+            "/arch/session-artifacts/tasks/s1/.lock",
+            "/arch/session-artifacts/tasks/s1/1.json",
+            "/arch/session-artifacts/todos/s1-agent-s1.json",
+            "/arch/session-artifacts/todos/other-agent.json",
+            "/arch/session-artifacts/session-env/other/hook.sh",
+            "/arch/session-artifacts/file-history/ghost/f@v1",
+        ] {
+            assert!(fs.exists(Path::new(p)), "missing {p}");
+        }
+        let m: serde_json::Value =
+            serde_json::from_slice(&fs.read(Path::new("/arch/manifest.json")).unwrap()).unwrap();
+        assert_eq!(m["files"].as_array().unwrap().len(), 8);
     }
 
     /// AC-35: an unchanged re-run copies nothing and keeps the manifest complete.
@@ -922,7 +1038,9 @@ mod tests {
         seed_session(&fs, "s1");
         fs.write(Path::new("/h/.claude/projects/E--A/s1/subagents/x"), b"a")
             .unwrap();
-        // Different casing on purpose: path comparison is case-insensitive.
+        // The archive folder is spelled with different casing than the source folder. The
+        // in-memory filesystem ignores case too, so this checks the run end to end, but it is
+        // `path_keys_ignore_case_and_separator` that pins the case folding of the guard.
         let opts = opts_at("/h/.claude/projects/E--A/S1/ARCH");
         archive_all(&fs, Path::new("/h"), &opts).unwrap();
         let r2 = archive_all(&fs, Path::new("/h"), &opts).unwrap();
@@ -958,5 +1076,360 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, crate::error::AwtError::Io(_)), "{err:?}");
+    }
+
+    // --- Review follow-up: destination faults, guards and path keys ---
+
+    fn seed_task(fs: &dyn FileSystem, bytes: &[u8]) {
+        fs.write(Path::new("/h/.claude/tasks/s1/1.json"), bytes)
+            .unwrap();
+    }
+
+    fn manifest_srcs(fs: &dyn FileSystem) -> Vec<String> {
+        let m: serde_json::Value =
+            serde_json::from_slice(&fs.read(Path::new("/arch/manifest.json")).unwrap()).unwrap();
+        m["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| e["src"].as_str().unwrap().to_string())
+            .collect()
+    }
+
+    /// A read failure is counted in `failed` only; a write failure is also in `write_failed`.
+    #[test]
+    fn write_failures_are_counted_apart_from_read_failures() {
+        let fs = FaultyFileSystem::new(&["tasks/s1/.lock"], &["session-artifacts/tasks/s1/bad"]);
+        seed_session(&fs, "s1");
+        fs.write(Path::new("/h/.claude/tasks/s1/.lock"), b"")
+            .unwrap();
+        fs.write(Path::new("/h/.claude/tasks/s1/bad"), b"t")
+            .unwrap();
+        let r = archive_all(&fs, Path::new("/h"), &opts_at("/arch")).unwrap();
+        assert_eq!(r.failed, 2);
+        assert_eq!(r.write_failed, 1);
+    }
+
+    /// A failed rename leaves the older destination bytes untouched and removes the temp file.
+    #[test]
+    fn failed_rename_keeps_the_old_destination_and_removes_the_temp_file() {
+        let fs = FaultyFileSystem::new(&[], &[])
+            .with_fail_rename(&["session-artifacts/tasks/s1/1.json"]);
+        seed_session(&fs, "s1");
+        seed_task(&fs, b"new bytes");
+        fs.write(
+            Path::new("/arch/session-artifacts/tasks/s1/1.json"),
+            b"old bytes",
+        )
+        .unwrap();
+        let r = archive_all(&fs, Path::new("/h"), &opts_at("/arch")).unwrap();
+        assert_eq!(r.write_failed, 1);
+        assert_eq!(
+            fs.read(Path::new("/arch/session-artifacts/tasks/s1/1.json"))
+                .unwrap(),
+            b"old bytes"
+        );
+        assert!(
+            !fs.exists(Path::new(
+                "/arch/session-artifacts/tasks/s1/1.json.t.awt-tmp"
+            )),
+            "the temp file must be removed"
+        );
+        assert!(!manifest_srcs(&fs).iter().any(|s| s.ends_with("1.json")));
+    }
+
+    /// A write that tears (stores part of the bytes, then fails) must not reach the old copy.
+    /// Writing straight to the destination, instead of a temp file, would fail this test.
+    #[test]
+    fn torn_write_never_reaches_the_old_destination() {
+        let fs =
+            FaultyFileSystem::new(&[], &[]).with_torn_write(&["session-artifacts/tasks/s1/1.json"]);
+        seed_session(&fs, "s1");
+        seed_task(&fs, b"new bytes!");
+        fs.inner
+            .write(
+                Path::new("/arch/session-artifacts/tasks/s1/1.json"),
+                b"old bytes",
+            )
+            .unwrap();
+        let r = archive_all(&fs, Path::new("/h"), &opts_at("/arch")).unwrap();
+        assert_eq!(r.write_failed, 1);
+        assert_eq!(
+            fs.read(Path::new("/arch/session-artifacts/tasks/s1/1.json"))
+                .unwrap(),
+            b"old bytes"
+        );
+        assert!(
+            !fs.exists(Path::new(
+                "/arch/session-artifacts/tasks/s1/1.json.t.awt-tmp"
+            )),
+            "the torn temp file must be removed"
+        );
+    }
+
+    /// Case and separator differences must not defeat the self-copy guard.
+    #[test]
+    fn path_keys_ignore_case_and_separator() {
+        assert_eq!(path_key(Path::new("C:\\Users\\X\\")), "c:/users/x");
+        assert_eq!(path_key(Path::new("/")), "");
+        assert_eq!(path_key(Path::new("C:\\")), "c:");
+        let root = path_key(Path::new("c:/USERS/x/Arch"));
+        assert!(is_under(Path::new("C:\\Users\\X\\arch"), &root));
+        assert!(is_under(Path::new("C:\\users\\x\\ARCH\\a\\b.txt"), &root));
+        assert!(!is_under(Path::new("C:\\Users\\X\\archive"), &root));
+        assert!(!is_under(Path::new("C:\\Users\\X"), &root));
+        assert!(!is_under(Path::new("/anything"), ""));
+    }
+
+    /// The folder name `memory` is matched without regard to case.
+    #[test]
+    fn memory_folder_is_excluded_whatever_its_case() {
+        let fs = MemoryFileSystem::new();
+        seed_session(&fs, "s1");
+        fs.write(Path::new("/h/.claude/projects/E--A/MeMoRy/MEMORY.md"), b"m")
+            .unwrap();
+        let r = archive_all(&fs, Path::new("/h"), &opts_at("/arch")).unwrap();
+        assert_eq!(r.copied, 1);
+        assert!(!fs.exists(Path::new("/arch/projects/E--A/MeMoRy")));
+    }
+
+    /// A folder that cannot be listed is recorded in `failed` and the rest is still archived.
+    #[test]
+    fn unlistable_folder_is_recorded_in_failed() {
+        let fs = FaultyFileSystem::new(&[], &[]).with_fail_list(&["s1/subagents"]);
+        seed_session(&fs, "s1");
+        fs.write(Path::new("/h/.claude/projects/E--A/s1/subagents/x"), b"a")
+            .unwrap();
+        fs.write(Path::new("/h/.claude/projects/E--A/s1/other"), b"o")
+            .unwrap();
+        let r = archive_all(&fs, Path::new("/h"), &opts_at("/arch")).unwrap();
+        assert_eq!(r.failed, 1);
+        assert_eq!(r.write_failed, 0);
+        assert!(r.failures[0].reason.contains("cannot list folder"));
+        assert!(fs.exists(Path::new("/arch/projects/E--A/s1/other")));
+    }
+
+    /// A store folder that cannot be listed is a failure, in a sweep and in the per-id copy.
+    /// A store folder that does not exist is not.
+    #[test]
+    fn unlistable_store_is_a_failure_and_a_missing_store_is_not() {
+        let fs = FaultyFileSystem::new(&[], &[]).with_fail_list(&["/h/.claude/tasks"]);
+        seed_session(&fs, "s1");
+        let r = archive_all(&fs, Path::new("/h"), &opts_at("/arch")).unwrap();
+        assert_eq!(r.failed, 1, "{:?}", r.failures);
+        assert!(r.failures[0].path.ends_with("tasks"));
+
+        let fs = FaultyFileSystem::new(&[], &[]).with_fail_list(&["/h/.claude/todos"]);
+        seed_session(&fs, "s1");
+        let r = archive_session(
+            &fs,
+            Path::new("/h"),
+            Path::new("/h/.claude/projects/E--A/s1.jsonl"),
+            &opts_at("/arch"),
+        )
+        .unwrap();
+        assert_eq!(r.failed, 1, "{:?}", r.failures);
+        assert!(r.failures[0].path.ends_with("todos"));
+
+        let fs = MemoryFileSystem::new();
+        seed_session(&fs, "s1");
+        let r = archive_session(
+            &fs,
+            Path::new("/h"),
+            Path::new("/h/.claude/projects/E--A/s1.jsonl"),
+            &opts_at("/arch"),
+        )
+        .unwrap();
+        assert_eq!(r.failed, 0, "no stores at all is not a failure");
+    }
+
+    /// A store folder that is a link is skipped by the whole-store copy (AC-61).
+    #[test]
+    fn linked_store_folder_is_skipped_by_the_sweep() {
+        let fs = MemoryFileSystem::new();
+        seed_session(&fs, "s1");
+        fs.write(Path::new("/h/.claude/tasks/s1/1.json"), b"t")
+            .unwrap();
+        fs.write(Path::new("/h/.claude/todos/s1-a.json"), b"[]")
+            .unwrap();
+        fs.mark_reparse(Path::new("/h/.claude/tasks"));
+        archive_all(&fs, Path::new("/h"), &opts_at("/arch")).unwrap();
+        assert!(!fs.exists(Path::new("/arch/session-artifacts/tasks")));
+        assert!(fs.exists(Path::new("/arch/session-artifacts/todos/s1-a.json")));
+    }
+
+    /// `archive_session` matches a todos file that holds the session id in the MIDDLE of its
+    /// name. Changing `contains` to `starts_with` would fail this test.
+    #[test]
+    fn archive_session_matches_a_todos_file_with_the_id_in_the_middle() {
+        let fs = MemoryFileSystem::new();
+        seed_session(&fs, "s1");
+        fs.write(Path::new("/h/.claude/todos/agent-s1-x.json"), b"[]")
+            .unwrap();
+        fs.write(Path::new("/h/.claude/todos/agent-s2-x.json"), b"[]")
+            .unwrap();
+        archive_session(
+            &fs,
+            Path::new("/h"),
+            Path::new("/h/.claude/projects/E--A/s1.jsonl"),
+            &opts_at("/arch"),
+        )
+        .unwrap();
+        assert!(fs.exists(Path::new("/arch/session-artifacts/todos/agent-s1-x.json")));
+        assert!(!fs.exists(Path::new("/arch/session-artifacts/todos/agent-s2-x.json")));
+    }
+
+    /// `archive_project` stays per id: it copies the stores of its own sessions only.
+    #[test]
+    fn archive_project_copies_stores_per_session_id_only() {
+        let fs = MemoryFileSystem::new();
+        seed_session(&fs, "s1");
+        fs.write(Path::new("/h/.claude/tasks/s1/1.json"), b"t")
+            .unwrap();
+        fs.write(Path::new("/h/.claude/tasks/other/1.json"), b"t")
+            .unwrap();
+        let r = archive_project(&fs, Path::new("/h"), "E:\\A", &opts_at("/arch")).unwrap();
+        assert_eq!(r.failed, 0);
+        assert!(fs.exists(Path::new("/arch/session-artifacts/tasks/s1/1.json")));
+        assert!(!fs.exists(Path::new("/arch/session-artifacts/tasks/other")));
+    }
+
+    fn assert_refused_by_all_three(dir: &str) {
+        let fs = MemoryFileSystem::new();
+        seed_session(&fs, "s1");
+        fs.write(Path::new("/h/.claude/tasks/s1/1.json"), b"t")
+            .unwrap();
+        let opts = opts_at(dir);
+        let transcript = Path::new("/h/.claude/projects/E--A/s1.jsonl");
+        let errs = [
+            archive_all(&fs, Path::new("/h"), &opts).unwrap_err(),
+            archive_session(&fs, Path::new("/h"), transcript, &opts).unwrap_err(),
+            archive_project(&fs, Path::new("/h"), "E:\\A", &opts).unwrap_err(),
+        ];
+        for e in errs {
+            assert!(matches!(e, AwtError::Locked(_)), "{dir}: {e:?}");
+        }
+        assert!(
+            !fs.exists(&Path::new(dir).join("manifest.json")),
+            "{dir}: nothing may be written"
+        );
+    }
+
+    /// An archive folder at or above the Claude data would exclude its own sources.
+    #[test]
+    fn archive_folder_containing_the_sources_is_refused() {
+        for dir in [
+            "/",
+            "/h",
+            "/H/.CLAUDE",
+            "/h/.claude",
+            "/h/.claude/projects",
+            "/h/.claude/file-history",
+            "/h/.claude/session-env",
+            "/h/.claude/tasks",
+            "/h/.claude/todos",
+        ] {
+            assert_refused_by_all_three(dir);
+        }
+    }
+
+    /// An archive folder that does not contain the Claude data stays allowed, even when it
+    /// sits inside the home or inside a project folder.
+    #[test]
+    fn archive_folder_deeper_inside_the_home_is_allowed() {
+        for dir in [
+            "/h/.claude/backups/x",
+            "/h/.claude/projects/E--A/s1/arch",
+            "/h/.claude-sessions",
+            "/h2",
+        ] {
+            let fs = MemoryFileSystem::new();
+            seed_session(&fs, "s1");
+            let opts = opts_at(dir);
+            archive_all(&fs, Path::new("/h"), &opts).unwrap_or_else(|e| panic!("{dir}: {e:?}"));
+            check_archive_dir(Path::new("/h"), &opts.archive_dir).unwrap();
+        }
+    }
+
+    // --- Dot-named transcripts must not become path traversal ---
+
+    fn real_home_with_secret() -> (tempfile::TempDir, tempfile::TempDir) {
+        let home = tempfile::tempdir().unwrap();
+        let arch = tempfile::tempdir().unwrap();
+        let claude = home.path().join(".claude");
+        let proj = claude.join("projects").join("E--A");
+        std::fs::create_dir_all(&proj).unwrap();
+        std::fs::write(proj.join("s1.jsonl"), b"{\"cwd\":\"E:\\\\A\"}\n").unwrap();
+        std::fs::create_dir_all(claude.join("tasks")).unwrap();
+        std::fs::create_dir_all(claude.join("todos")).unwrap();
+        std::fs::write(claude.join(".credentials.json"), b"SECRET").unwrap();
+        (home, arch)
+    }
+
+    fn assert_no_secret_copied(arch: &Path) {
+        for entry in walkdir::WalkDir::new(arch) {
+            let entry = entry.unwrap();
+            assert_ne!(
+                entry.file_name().to_string_lossy(),
+                ".credentials.json",
+                "a credential file was copied to {}",
+                entry.path().display()
+            );
+        }
+    }
+
+    /// `...jsonl` has the stem `..`, and `..jsonl` has the stem `.`. Joining the stem onto a
+    /// store folder would resolve to the folder above it, which holds the credentials. The
+    /// transcript file itself is still copied.
+    #[test]
+    fn dot_named_transcripts_do_not_escape_the_stores() {
+        for name in ["...jsonl", "..jsonl"] {
+            let (home, arch) = real_home_with_secret();
+            let proj = home.path().join(".claude/projects/E--A");
+            std::fs::write(proj.join(name), b"{\"cwd\":\"E:\\\\A\"}\n").unwrap();
+            let opts = ArchiveOpts {
+                archive_dir: arch.path().to_path_buf(),
+                render: false,
+                run_token: "t".into(),
+            };
+            let real = crate::fs::RealFileSystem;
+            let r = archive_session(&real, home.path(), &proj.join(name), &opts).unwrap();
+            assert_eq!(r.failed, 0, "{name}");
+            assert_eq!(r.copied, 1, "{name}: only the transcript is copied");
+            assert!(arch.path().join("projects/E--A").join(name).is_file());
+            assert_no_secret_copied(arch.path());
+
+            let (home, arch) = real_home_with_secret();
+            let proj = home.path().join(".claude/projects/E--A");
+            std::fs::write(proj.join(name), b"{\"cwd\":\"E:\\\\A\"}\n").unwrap();
+            let opts = ArchiveOpts {
+                archive_dir: arch.path().to_path_buf(),
+                render: false,
+                run_token: "t".into(),
+            };
+            archive_project(&real, home.path(), "E:\\A", &opts).unwrap();
+            assert!(arch.path().join("projects/E--A").join(name).is_file());
+            assert_no_secret_copied(arch.path());
+        }
+    }
+
+    /// The per-id store copy itself refuses the empty id, `.` and `..`.
+    #[test]
+    fn copy_stores_refuses_empty_dot_and_dotdot_ids() {
+        let (home, arch) = real_home_with_secret();
+        let claude = home.path().join(".claude");
+        std::fs::write(claude.join("todos").join("a.json"), b"[]").unwrap();
+        std::fs::write(claude.join("tasks").join("t.json"), b"t").unwrap();
+        let opts = ArchiveOpts {
+            archive_dir: arch.path().to_path_buf(),
+            render: false,
+            run_token: "t".into(),
+        };
+        let real = crate::fs::RealFileSystem;
+        let mut sweep = Sweep::new(&real, &opts);
+        sweep.copy_stores(&claude, &["..".to_string(), ".".to_string(), String::new()]);
+        assert_eq!(sweep.report.copied, 0);
+        assert_eq!(sweep.report.failed, 0);
+        assert_no_secret_copied(arch.path());
     }
 }
