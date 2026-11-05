@@ -19,9 +19,10 @@ the CLI does and no v1.0.0 tag existed yet to freeze against.
 
 The dating of this section is deferred to the tag. The v1 safety closeout (S-04) completed
 2026-07-31, including a passing adversarial acceptance run. That run was repeated on 2026-11-04,
-because clap and the rollback engine changed after it. The tag now waits on the maintainer spec
-sign-off (S-01) and the fixture-history decision (D10). See `docs/internal/maintainer-todo.md`
-section 1.
+because clap and the rollback engine changed after it. The tag now waits on four steps. An agent
+merges the AR-09 (archive scope defect) fix and reruns the archive steps on the merged build.
+The maintainer then gives the spec sign-off (S-01, the mover CLI spec) and makes the
+fixture-history decision (D10). See `docs/internal/maintainer-todo.md` section 1.
 
 ### Added
 
@@ -113,6 +114,26 @@ section 1.
 
 ### Fixed
 
+- **The `SessionEnd` archive hook now asks for a 60-second timeout.** Claude Code gives that
+  event 1.5 seconds by default, which a large session copy can exceed. If you installed the hook
+  with an earlier build, run `awt archive --install-hook --archive-dir <path>` again. The new
+  entry replaces the old one and carries the timeout.
+- **A full `awt archive` sweep now copies `file-history/`, `session-env/`, `tasks/` and `todos/`
+  whole.** Files whose session had no transcript or session folder left were dropped before.
+  `--session`, the hook and `associate --export` still copy per session id.
+- **`archive` refuses an archive folder that holds the Claude data (exit 2).** A folder equal to
+  or above `~/.claude`, `projects`, `file-history`, `session-env`, `tasks` or `todos`, including
+  a drive root, made the run skip its own sources, copy nothing and exit 0. `--install-hook`
+  refuses it too, so the hook never records a useless path.
+- **A failure to write into the archive folder now exits 1** on a full sweep and on `--session`,
+  after the result prints. Read failures and hook mode still exit 0.
+- **A relative or `..` spelling of `--archive-dir` no longer defeats the self-copy guard.** The
+  path is made absolute before use, and the hook records the absolute path.
+- **A transcript named `...jsonl` could copy the whole Claude home into the archive**, including
+  `.credentials.json`. Session ids that are empty, `.` or `..` are no longer used as paths.
+- **`associate --export` plans before it exports.** A plan refusal no longer leaves an export
+  in `--to`. An export-only run that no readable transcript resolves now refuses with exit 2
+  instead of printing an export path over an empty folder.
 - **Rollback left a renamed plugin-state folder behind, and the same move then could not be
   retried.** Original files came back byte-identical, so the post-rollback proof passed, but
   rollback worked out each rename's destination from the encoded project name. A plugin-state

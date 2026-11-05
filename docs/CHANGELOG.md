@@ -3,6 +3,36 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-11-05 - AR-09 review findings fixed on the branch
+
+Code changed in this entry. A review of the AR-09 (archive scope defect) fix found problems, and
+they are fixed on `fix/ar-09-archive-scope`.
+
+**Hook users must act.** The installed `SessionEnd` hook now sets a 60-second timeout, because
+Claude Code gives that event 1.5 seconds by default. An existing hook has no timeout. Re-run
+`awt archive --install-hook --archive-dir <path>` to replace it. The root `CHANGELOG.md` and the
+README say so.
+
+**`awt archive`.** A full sweep copies the four session stores whole. An archive folder that holds
+the Claude data is refused with exit 2. A failure to write into the archive folder exits 1 on a
+sweep and on `--session`. `--archive-dir` is made absolute. A transcript named `...jsonl` can no
+longer copy the whole home.
+
+**`awt associate --export`.** It plans before it exports, and an export-only run with no resolving
+transcript refuses with exit 2.
+
+**Human layer.** `docs/reference/commands.md`, `docs/faq.md`, `docs/quickstart.md`, `README.md` and
+the root `CHANGELOG.md` describe the new behavior. A hook run retries only its own session, and a
+rerun reads and hashes both sides, so it is not free on a large home.
+
+**Maintainer layer.** `maintainer-todo.md` now says that the merge and the archive rerun are agent
+steps still to do, and that 1.2 (D10 read) and 1.5 (S-01 sign-off) are the maintainer's. Section
+1.9 has a dated follow-up list that does not block the tag. `README.md`, `docs/ROADMAP.md` and the
+tag row in `plan_v1.0.0.md` say the same.
+
+**Unchanged.** `AGENTS.md` and `CLAUDE.md` do not describe archive or hook behavior. The S-01 spec
+and the D10 sheet are untouched.
+
 ## 2026-11-04 (second entry) - AR-09 fixed; the archive docs return to the full claim
 
 Code changed in this entry: `awt archive` now copies what AC-35 promises.

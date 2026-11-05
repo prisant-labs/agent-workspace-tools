@@ -24,8 +24,9 @@ No LLM, no network, backup-before-write, verify-after, single-command rollback.
 > closed test-first, and an adversarial acceptance run passed on real data (fresh scratch
 > copy, hostile matrix, byte-identical rollback). A repeat passed on 2026-11-04, after the
 > argument parser and the rollback engine changed. The repeat found that `awt archive`
-> copied less than it promised (AR-09); that is fixed. The tag now waits on the maintainer's spec
-> sign-off and a fixture-history decision.
+> copied less than it promised (AR-09, the archive scope defect). The fix is on a branch. The tag
+> now waits on its merge, an archive rerun on the merged build, the maintainer's spec sign-off and
+> a fixture-history decision.
 >
 > Because `awt` edits Claude Code state under `~/.claude`, read the
 > [quickstart](docs/quickstart.md) and the [FAQ](docs/faq.md), and **always run it against a copy
@@ -93,6 +94,11 @@ so use a throwaway folder while practicing.
 | `awt associate` | Re-link a deprecated project's history to a replacement path, even when the old folder is gone |
 | `awt repair` | Fix state that is damaged rather than stale - currently history entries with a corrupted drive letter. Dry run by default; repairs only where the answer is unambiguous |
 
+**The archive hook.** `awt archive --install-hook --archive-dir <path>` registers a `SessionEnd` hook with a
+60-second timeout. Claude Code gives that event 1.5 seconds by default. If you installed the hook
+with an earlier build, run the same command again to add the timeout. See
+[the command reference](docs/reference/commands.md#awt-archive).
+
 Every `apply` and `rollback` also writes an always-on machine-readable record (`report.json` /
 `rollback-report.json`) beside the backup. Add `--json` to any command for machine-readable output.
 
@@ -129,7 +135,7 @@ Every `apply` and `rollback` also writes an always-on machine-readable record (`
 | Release | Contents | Status |
 |---|---|---|
 | v0.1.0 | `awt doctor` and `awt scan` - read-only | Internal milestone (not tagged) |
-| **v1.0.0** | Full CLI: mover (`plan`/`apply`/`verify`/`rollback`) plus `list`, `archive`, `associate`, `repair` | **Feature-complete; safety closeout done.** Happy-path acceptance passed 2026-07-30; the adversarial audit's closeout completed 2026-07-31 with a passing adversarial acceptance run, repeated 2026-11-04. Tag blocked on the maintainer spec sign-off and the fixture-history (D10) decision. |
+| **v1.0.0** | Full CLI: mover (`plan`/`apply`/`verify`/`rollback`) plus `list`, `archive`, `associate`, `repair` | **Feature-complete; safety closeout done.** Happy-path acceptance passed 2026-07-30; the adversarial audit's closeout completed 2026-07-31 with a passing adversarial acceptance run, repeated 2026-11-04. The AR-09 (archive scope defect) fix is on a branch. The tag waits on its merge, an archive rerun on the merged build, the maintainer spec sign-off and the fixture-history (D10) decision. |
 | v1.x (parked) | Cross-volume move; Codex and Gemini adapters | Behind the existing adapter boundary; promotable when scheduled |
 | v2.0.0 | Tauri 2 + React GUI over the identical core | Deferred; security and native-parity baselines first |
 

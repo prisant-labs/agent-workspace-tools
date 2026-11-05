@@ -23,8 +23,8 @@ These flags are accepted by every subcommand.
 | Code | Meaning |
 |---|---|
 | 0 | Success |
-| 1 | I/O error (catch-all for file-system failures) |
-| 2 | Guard tripped - nothing was written. Conditions that produce exit 2: destination path already exists, a plugin-state folder already occupies its rename destination, the `list --html` target already exists, the source folder is missing, nested projects live under the source, source is a worktree, an IDE lock file exists under `~/.claude/ide/`, an ambiguous reference was found, or a flag combination leaves nothing to do |
+| 1 | I/O error (catch-all for file-system failures), including a failed write into the archive folder on a full `awt archive` sweep or a `--session` run |
+| 2 | Guard tripped - nothing was written. Conditions that produce exit 2: destination path already exists, a plugin-state folder already occupies its rename destination, the `list --html` target already exists, the source folder is missing, nested projects live under the source, source is a worktree, an IDE lock file exists under `~/.claude/ide/`, an ambiguous reference was found, an archive folder contains the Claude data, an export-only `associate` has no readable transcript that resolves the project, or a flag combination leaves nothing to do |
 | 3 | Verify failed - apply ran but at least one postcondition check failed; auto-rollback was attempted |
 | 4 | Unrecognized format - a store contained a shape the tool does not know how to rewrite; no writes were made |
 
@@ -178,7 +178,8 @@ Copy session history to a durable folder before Claude's 30-day auto-delete remo
 
 - Each top-level `*.jsonl` transcript, to `<archive>/projects/<enc>/`.
 - Every file below every subfolder of the project folder, except `memory/`, to `<archive>/projects/<enc>/<subfolder>/`. These session folders hold `subagents/`, `tool-results/` and `workflows/`. A session folder is copied even when no transcript sits beside it.
-- For each session id, the session-keyed stores, to `<archive>/session-artifacts/`: `file-history/<id>/`, `session-env/<id>/`, `tasks/<id>/`, and the `todos/` files whose name contains the id. The ids come from the transcript names and the session folder names.
+- The session-keyed stores, to `<archive>/session-artifacts/`. A full `awt archive` sweep copies `file-history/`, `session-env/`, `tasks/` and `todos/` whole. A file is archived even when its session has no transcript or session folder left.
+- `--session`, the hook and `associate --export` copy the stores per session id instead: `file-history/<id>/`, `session-env/<id>/`, `tasks/<id>/`, and the `todos/` files whose name contains the id. The ids come from the transcript names and the session folder names.
 
 **What it deliberately does not copy.**
 
@@ -195,7 +196,7 @@ Copy session history to a durable folder before Claude's 30-day auto-delete remo
   projects/<enc>/<sessionId>.jsonl
   projects/<enc>/<sessionId>/...        subagents, tool-results, workflows
   session-artifacts/{file-history,session-env,tasks}/<sessionId>/...
-  session-artifacts/todos/<sessionId>-*.json
+  session-artifacts/todos/<file>.json   a sweep copies every file; a per-session run copies files whose name contains the id
   manifest.json                         source path, destination and SHA-256 of every archived file
   index.json
 ```
@@ -208,28 +209,42 @@ Copy session history to a durable folder before Claude's 30-day auto-delete remo
 
 | Flag | Required | Description |
 |---|---|---|
-| `--archive-dir <PATH>` | yes (for archival and hook operations) | Destination directory for archived data |
+| `--archive-dir <PATH>` | yes (for archival and hook operations) | Destination directory for archived data. A relative path is made absolute, and `.` and `..` are removed, before use. The folder must not contain the Claude data (see below) |
 | `--session <PATH>` | no | Archive a single transcript; path must be a `.jsonl` file. Requires `--archive-dir` |
-| `--install-hook` | no | Register the `awt archive` `SessionEnd` hook in `~/.claude/settings.json`. Requires `--archive-dir` |
+| `--install-hook` | no | Register the `awt archive` `SessionEnd` hook in `~/.claude/settings.json`, with a 60-second timeout. Requires `--archive-dir`, and records its absolute path |
 | `--uninstall-hook` | no | Remove the `awt archive` `SessionEnd` hook from `~/.claude/settings.json` |
 | `--set-retention <DAYS>` | no | Set `cleanupPeriodDays` in `~/.claude/settings.json`. Minimum safe value is 1 (see issues #23710 and #62272 before setting to 0) |
 | `--force-zero` | no | Required to set `cleanupPeriodDays` to 0. Read the known issues before using |
 | `--hook-stdin` | no | Read `SessionEnd` hook JSON from stdin and archive the `transcript_path` field. Requires `--archive-dir`. Used by the installed hook; not normally called by hand |
 | `--render` | no | Reserved for future HTML rendering of archived sessions. Has no effect in v1.0 |
 
-**Default behavior (no session or hook flags):** archive all transcripts not yet archived.
+**Default behavior (no session or hook flags):** archive every file listed under "What it copies" that is new or changed.
 
 **Output:** `archived: N copied, N skipped, N failed`. With `--json`, one object with numeric `copied`, `skipped` and `failed` fields.
 
-**Failed files.** Running sessions hold some of these files open, such as `tasks/<id>/.lock`, so a read can be refused. The sweep records each file it cannot read or write, prints `archive failed: <path>: <reason>` to stderr, and carries on. A failed file is not listed in `manifest.json`, and a failed write never leaves a partial copy behind. The next run tries the file again.
+**Failed files.** Running sessions hold some of these files open, such as `tasks/<id>/.lock`, so a read can be refused. The sweep records each file it cannot read or write, prints `archive failed: <path>: <reason>` to stderr, and carries on. A failed file gets no new manifest entry. A file that an earlier run archived keeps its old entry and its old copy when it later fails. A failed write never leaves a partial copy behind. The next full sweep tries the file again.
 
-**Archive folder inside the tree.** A source path under `--archive-dir` is never copied, so an archive folder placed inside the Claude home does not copy itself.
+A folder that cannot be listed is recorded as a failure too. A store folder that does not exist is not a failure.
+
+**Leftover temp files.** Each copy is written to `<name>.<token>.awt-tmp` and then renamed. A run that is killed can leave that file in the archive folder. Nothing removes it, and it is safe to delete.
+
+**Archive folder inside the tree.** A source path under `--archive-dir` is never copied. An archive folder placed deep inside the Claude home therefore does not copy itself. A path such as `~/.claude/backups/x` or a project's own subfolder is allowed.
+
+**Archive folder that holds the Claude data.** The command refuses with exit 2 when `--archive-dir` equals or contains `~/.claude`, `projects`, `file-history`, `session-env`, `tasks` or `todos`. That includes the home folder and a drive root. Without this check the run would skip its own sources, copy nothing and exit 0. `--install-hook` makes the same check, so the hook never records a useless path.
+
+**The hook.** `--install-hook` sets a 60-second `timeout` on the hook. Claude Code gives `SessionEnd` hooks 1.5 seconds by default, and 60 seconds is the most a hook may ask for. A hook installed by an older `awt` has no timeout. Run `awt archive --install-hook --archive-dir <path>` again to replace it.
+
+A hook run archives only its own session. A full `awt archive` sweep is what retries every other failed file. A rerun reads and hashes both sides of each file, so on a large home it is not free.
 
 **Cloud-sync warning:** if `--archive-dir` resolves to a path under a known sync root (`OneDrive`, `Dropbox`), a warning is printed to stderr. The archive proceeds; the warning is advisory.
 
-**Exit codes used:** 0, 1, 2 (locked - missing required companion flag), 4 (hook stdin contained invalid JSON or missing `transcript_path`).
+**Exit codes used:** 0, 1, 2 (locked - missing required companion flag, or an archive folder that holds the Claude data), 4 (hook stdin contained invalid JSON or missing `transcript_path`).
 
-Per-file failures exit 0. The installed `SessionEnd` hook runs while other sessions are live, and a locked file must not turn a working hook into a failing one. The failures are printed and counted instead. Exit 1 still means the sweep could not run. The archive folder or `manifest.json` could not be written, or the `--session` transcript does not exist.
+A failure to read a file exits 0. The installed `SessionEnd` hook runs while other sessions are live, and a locked file must not turn a working hook into a failing one. The failures are printed and counted instead.
+
+A failure to write into the archive folder exits 1 on a full sweep and on `--session`. The result prints first, and with `--json` stdout stays one object. Hook mode (`--hook-stdin`) exits 0 for both kinds of failure.
+
+Exit 1 also means the sweep could not run. The archive folder or `manifest.json` could not be written, or the `--session` transcript does not exist.
 
 `awt associate --export` is stricter, because its export is a safety copy. It exits 1 and re-associates nothing if any file failed.
 
@@ -303,12 +318,16 @@ Re-link session history from one project path to another, and optionally export 
 
 Passing both `--no-reassociate` and `--no-export` is an error (exit 2 - nothing to do).
 
-The export uses the same copy as `awt archive`, so it includes session folders, `session-env/`, `tasks/` and `todos/`. If any file cannot be copied, the command exits 1 before re-associating anything.
+The export uses the same per-session copy as `awt archive --session`, so it includes session folders, `session-env/`, `tasks/` and `todos/`. If any file cannot be copied, the command exits 1 before re-associating anything.
+
+With re-association on, the plan is built before the export. A plan refusal exits 2 and writes nothing into `--to`. If no readable transcript resolves the project, the export does nothing, and the re-association still runs.
+
+With `--no-reassociate`, that same case refuses with exit 2 and says that nothing was exported. The command never prints an export path over an empty folder.
 
 
 **Output:** `associate complete: N changes applied`.
 
-**Exit codes used:** 0, 1, 2 (guard - both no-ops requested, or collision refused).
+**Exit codes used:** 0, 1, 2 (guard - both no-ops requested, collision refused, or an export-only run with no resolving transcript).
 
 ---
 
