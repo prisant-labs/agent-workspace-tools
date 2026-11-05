@@ -491,3 +491,26 @@ fn plan_refuses_when_two_state_folders_would_land_on_one_destination() {
     );
     assert_eq!(fs.read(Path::new(&second)).unwrap(), b"second spelling");
 }
+
+/// The same refusal, reached when the apply finished and only verification failed. Nothing about
+/// this failure was cleaned up, so the message must not read as if it had been.
+#[test]
+fn a_refused_rollback_after_a_failed_verification_says_the_move_is_still_in_place() {
+    let fs = LiveSessionFs { inner: seed() };
+    let plan = plan_of(&fs.inner);
+    let opts = ApplyOpts {
+        run_id: "T".into(),
+        auto_rollback: true,
+        force: false,
+    };
+
+    let err = match apply_verified(&plan, &fs, Path::new("/backup"), &opts) {
+        Err(e) => e,
+        Ok(_) => panic!("the recreated state folder must fail verification"),
+    };
+
+    let text = err.to_string();
+    assert!(matches!(err, AwtError::VerifyFailed(_)), "{err:?}");
+    assert!(text.contains("the move is still in place"), "{text}");
+    assert!(!text.contains("was rolled back"), "{text}");
+}

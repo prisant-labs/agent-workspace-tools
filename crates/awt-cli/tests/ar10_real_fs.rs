@@ -521,3 +521,30 @@ fn a_state_folder_that_is_a_junction_refuses_with_exit_2() {
     assert_eq!(out.status.code(), Some(2), "{}", show(&out));
     assert!(target.join("memory").join("M.md").exists());
 }
+
+#[test]
+fn an_empty_folder_at_the_old_name_passes_verify_but_one_with_a_file_fails() {
+    // A running session can recreate the folder the moment it vanishes. That moved nothing back.
+    // This needs a real filesystem, because the in-memory one has no empty folders.
+    let fx = Fixture::new();
+    let src = fx.project("from");
+    let dst = fx.path_of("to");
+    fx.seed(&src, "memory/MEMORY.md", b"m");
+    let out = fx.apply(&src, &dst);
+    assert!(out.status.success(), "apply: {}", show(&out));
+    std::fs::create_dir_all(fx.state_dir(&src)).unwrap();
+    let home = fx.home.path().to_str().unwrap().to_string();
+    let verify = || awt(&["verify", "--home", &home, "--src", &src, "--dst", &dst]);
+
+    let out = verify();
+    assert!(out.status.success(), "empty folder: {}", show(&out));
+
+    fx.seed(&src, "memory/LATER.md", b"written after the move");
+    let out = verify();
+    assert_eq!(
+        out.status.code(),
+        Some(3),
+        "folder with a file: {}",
+        show(&out)
+    );
+}

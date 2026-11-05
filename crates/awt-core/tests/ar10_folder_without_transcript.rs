@@ -1153,25 +1153,6 @@ fn verify_catches_a_stale_forward_slash_cwd() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn an_empty_folder_at_the_old_name_does_not_fail_verification() {
-    // A running session can recreate the folder the moment it vanishes.
-    let fs = MemoryFileSystem::new();
-    write(&fs, "E:/Projects/A/f.txt", b"x");
-    write(&fs, "/h/.claude/projects/E--Projects-A/memory/M.md", b"m");
-    run_move(&fs, "E:\\Projects\\A", "E:\\Projects\\B");
-    fs.create_dir_all(Path::new("/h/.claude/projects/E--Projects-A"))
-        .unwrap();
-
-    let mv = Move {
-        src_abs: "E:\\Projects\\A".into(),
-        dst_abs: "E:\\Projects\\B".into(),
-    };
-    let results = awt_core::verify::verify(&fs, Path::new(HOME), &mv, None, None).unwrap();
-
-    assert!(results.iter().all(|r| r.ok), "{results:?}");
-}
-
-#[test]
 fn plugin_state_is_enough_to_know_the_path() {
     let fs = MemoryFileSystem::new();
     write(&fs, "E:/New/B/keep.txt", b"x");
@@ -1355,4 +1336,55 @@ fn a_path_known_only_by_its_folder_name_gets_no_warning_when_it_is_left() {
     let plan = plan_move(&fs, SRC, "E:\\baz").unwrap();
 
     assert!(plan.warnings.is_empty(), "{:?}", plan.warnings);
+}
+
+// ---------------------------------------------------------------------------
+// Final review: behaviors no test pinned
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_nested_transcript_naming_an_unrelated_live_path_is_not_a_rival() {
+    // Only a look-alike could own this folder. A session can run from any folder, so a live path
+    // with a different encoding says nothing about who owns this one.
+    let fs = MemoryFileSystem::new();
+    write(&fs, "E:/second/f.txt", b"x");
+    write(&fs, "E:/unrelated/f.txt", b"x");
+    write(&fs, "/h/.claude/projects/E--second/memory/M.md", b"m");
+    write(
+        &fs,
+        "/h/.claude/projects/E--second/sess/subagents/a.jsonl",
+        cwd_line("E:\\unrelated").as_bytes(),
+    );
+
+    run_move(&fs, "E:\\second", "E:\\third");
+
+    assert!(exists(&fs, "/h/.claude/projects/E--third/memory/M.md"));
+    assert!(!fs.is_dir(Path::new("/h/.claude/projects/E--second")));
+}
+
+#[test]
+fn a_failed_verification_with_rollback_off_leaves_the_move_and_says_so() {
+    let fs = MemoryFileSystem::new();
+    write(&fs, "E:/Projects/A/f.txt", b"x");
+    write(&fs, "/h/.claude/projects/E--Projects-A/memory/M.md", b"m");
+    let mut plan = plan_move(&fs, "E:\\Projects\\A", "E:\\Projects\\B").unwrap();
+    plan.changes.retain(
+        |c| !matches!(c, Change::RenameDir { from, .. } if from.ends_with("E--Projects-A")),
+    );
+    let opts = ApplyOpts {
+        auto_rollback: false,
+        ..apply_opts()
+    };
+
+    let err = apply_verified(&plan, &fs, Path::new("/backup"), &opts).unwrap_err();
+
+    assert!(matches!(err, AwtError::VerifyFailed(_)), "{err:?}");
+    assert!(
+        err.to_string().contains("the move is still in place"),
+        "{err}"
+    );
+    assert!(
+        exists(&fs, "E:/Projects/B/f.txt"),
+        "rollback was off, so the project folder must stay at its new path"
+    );
 }
