@@ -187,6 +187,112 @@ fn a_real_lookalike_folder_stays_with_its_owner() {
 }
 
 #[test]
+fn apply_prints_the_name_match_warning_and_keeps_json_clean() {
+    let fx = Fixture::new();
+    let src = fx.project("proj");
+    let dst = fx.path_of("moved");
+    fx.seed(&src, "memory/MEMORY.md", b"m");
+
+    let out = awt(&[
+        "--json",
+        "apply",
+        "--home",
+        fx.home.path().to_str().unwrap(),
+        "--backup-root",
+        fx.backup_root.to_str().unwrap(),
+        "--src",
+        &src,
+        "--dst",
+        &dst,
+    ]);
+
+    assert!(out.status.success(), "{}", show(&out));
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("folder name"),
+        "{}",
+        show(&out)
+    );
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert!(doc["warnings"][0].as_str().unwrap().contains("folder name"));
+}
+
+/// Three spellings of one path, each of which used to verify clean with state left behind.
+fn spelled_move(spell: impl Fn(&str) -> String) {
+    let fx = Fixture::new();
+    let src = fx.project("proj");
+    let dst = fx.path_of("moved");
+    let transcript = format!("{{\"cwd\":\"{}\"}}\n", src.replace('\\', "\\\\"));
+    fx.seed(&src, "s.jsonl", transcript.as_bytes());
+    let json = format!(
+        "{{\"projects\":{{{}:{{}}}}}}",
+        serde_json::Value::String(src.clone())
+    );
+    std::fs::write(fx.home.path().join(".claude.json"), json).unwrap();
+
+    let out = fx.apply(&spell(&src), &spell(&dst));
+    assert!(out.status.success(), "apply: {}", show(&out));
+
+    let moved = std::fs::read_to_string(fx.state_dir(&dst).join("s.jsonl"))
+        .unwrap_or_else(|e| panic!("state did not reach the clean name: {e}\n{}", show(&out)));
+    assert!(
+        moved.contains("moved"),
+        "the cwd was not rewritten: {moved}"
+    );
+    assert!(!fx.state_dir(&src).exists(), "the old folder must be gone");
+    let settings = std::fs::read_to_string(fx.home.path().join(".claude.json")).unwrap();
+    assert!(
+        settings.contains("moved"),
+        "the key was not moved: {settings}"
+    );
+    assert!(Path::new(&dst).join("f.txt").exists());
+}
+
+#[test]
+fn a_trailing_separator_still_migrates_state() {
+    spelled_move(|p| format!("{p}{}", std::path::MAIN_SEPARATOR));
+}
+
+#[test]
+fn a_trailing_dot_component_still_migrates_state() {
+    spelled_move(|p| format!("{p}{}.", std::path::MAIN_SEPARATOR));
+}
+
+#[cfg(windows)]
+#[test]
+fn forward_slashes_still_migrate_state() {
+    spelled_move(|p| p.replace('\\', "/"));
+}
+
+#[test]
+fn associate_reports_no_export_when_nothing_was_exported() {
+    let fx = Fixture::new();
+    let src = fx.path_of("gone");
+    let to = fx.project("to");
+    fx.seed(&src, "memory/MEMORY.md", b"m");
+    let json = format!(
+        "{{\"projects\":{{{}:{{}}}}}}",
+        serde_json::Value::String(src.clone())
+    );
+    std::fs::write(fx.home.path().join(".claude.json"), json).unwrap();
+
+    let out = awt(&[
+        "--json",
+        "associate",
+        "--home",
+        fx.home.path().to_str().unwrap(),
+        "--from",
+        &src,
+        "--to",
+        &to,
+    ]);
+
+    assert!(out.status.success(), "{}", show(&out));
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert!(doc["export"].is_null(), "{}", show(&out));
+    assert!(fx.state_dir(&to).join("memory").join("MEMORY.md").exists());
+}
+
+#[test]
 fn a_file_on_both_sides_of_a_merge_exits_2_at_plan() {
     let fx = Fixture::new();
     let src = fx.project("proj");
@@ -223,4 +329,32 @@ fn a_real_rename_with_the_same_encoded_name_works_and_rolls_back() {
     assert!(out.status.success(), "rollback: {}", show(&out));
     assert_eq!(tree(fx.home.path()), home_before);
     assert!(Path::new(&src).join("f.txt").exists());
+}
+
+#[cfg(windows)]
+#[test]
+fn a_state_folder_that_is_a_junction_refuses_with_exit_2() {
+    let fx = Fixture::new();
+    let src = fx.project("proj");
+    let dst = fx.path_of("moved");
+    let target = fx.root.path().join("elsewhere");
+    std::fs::create_dir_all(target.join("memory")).unwrap();
+    std::fs::write(target.join("memory").join("M.md"), b"m").unwrap();
+    let link = fx.state_dir(&src);
+    let status = Command::new("cmd")
+        .args([
+            "/C",
+            "mklink",
+            "/J",
+            link.to_str().unwrap(),
+            target.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(status.status.success(), "mklink /J failed");
+
+    let out = fx.plan(&src, &dst);
+
+    assert_eq!(out.status.code(), Some(2), "{}", show(&out));
+    assert!(target.join("memory").join("M.md").exists());
 }

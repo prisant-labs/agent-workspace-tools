@@ -125,6 +125,7 @@ pub fn associate(
         applied: vec![],
         backup_dir: String::new(),
         verify: None,
+        warnings: Vec::new(),
     })
 }
 

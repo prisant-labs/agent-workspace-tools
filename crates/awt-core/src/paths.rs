@@ -10,6 +10,16 @@ pub fn encode_project_dir(abs: &str) -> String {
         .collect()
 }
 
+/// `abs` without its trailing separators, keeping a root such as `E:\\` or `/` whole.
+pub fn trim_separators(abs: &str) -> &str {
+    let trimmed = abs.trim_end_matches(['\\', '/']);
+    if trimmed.is_empty() || trimmed.ends_with(':') {
+        abs
+    } else {
+        trimmed
+    }
+}
+
 /// Case- and separator-insensitive key for comparing two absolute paths.
 pub fn normalize_path(abs: &str) -> String {
     abs.replace('\\', "/").to_lowercase()

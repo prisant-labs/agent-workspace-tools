@@ -93,7 +93,7 @@ pub fn verify(
             let want = std::str::from_utf8(&fs.read(Path::new(&e.backup))?)
                 .map(|t| t.lines().count())
                 .unwrap_or(0);
-            let moved = moved_path(&e.original, mv);
+            let moved = moved_path(&e.original, mv, plan);
             let got = fs
                 .read(&moved)
                 .ok()
@@ -109,10 +109,24 @@ pub fn verify(
     Ok(out)
 }
 
-/// Map a PRE-rename transcript path to its POST-move location by swapping the old encoded
-/// dir segment for the new one.
-fn moved_path(original: &str, mv: &Move) -> PathBuf {
+/// Map a PRE-rename transcript path to its POST-move location. The plan knows where each folder
+/// went. A folder's spelling need not equal encode(src), and swapping text would miss it. With
+/// no plan, swap the old encoded dir segment for the new one.
+fn moved_path(original: &str, mv: &Move, plan: Option<&crate::plan::Plan>) -> PathBuf {
     use crate::paths::encode_project_dir;
+    if let Some(p) = plan {
+        let path = Path::new(original);
+        for c in &p.changes {
+            if let crate::model::Change::RenameDir { from, to }
+            | crate::model::Change::MergeDir { from, to } = c
+            {
+                if let Ok(rel) = path.strip_prefix(from) {
+                    return to.join(rel);
+                }
+            }
+        }
+        return path.to_path_buf();
+    }
     let (old_enc, new_enc) = (
         encode_project_dir(&mv.src_abs),
         encode_project_dir(&mv.dst_abs),

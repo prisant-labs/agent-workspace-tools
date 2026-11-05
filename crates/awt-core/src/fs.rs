@@ -42,22 +42,28 @@ pub fn read_dir_optional(fs: &dyn FileSystem, path: &Path) -> crate::error::Resu
 /// inventory but poison for backup and apply - a subtree that silently drops out of the walk
 /// is a subtree that silently drops out of the snapshot.
 pub fn walk_files_strict(fs: &dyn FileSystem, root: &Path) -> crate::error::Result<Vec<PathBuf>> {
+    // Reparse points (junctions/symlinks) are refused outright in mutation walks (AC-61):
+    // following one lets a snapshot, rewrite, or delete escape the tree it believes it is
+    // confined to, and NOT following one means the backup silently covers less than the
+    // directory appears to contain. Neither is acceptable during a write; refuse and let the
+    // user relocate the link first. The root counts: a state folder can itself be a link.
+    let refuse = |path: &Path| {
+        crate::error::AwtError::Locked(format!(
+            "reparse point (junction or symlink) inside the tree: {}. Mutation and \
+             archive operations refuse links because following them can escape the \
+             tree being operated on. Remove or relocate the link, then re-run.",
+            path.display()
+        ))
+    };
+    if fs.is_reparse_point(root) {
+        return Err(refuse(root));
+    }
     let mut out = Vec::new();
     let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
         for child in fs.read_dir(&dir)? {
-            // Reparse points (junctions/symlinks) are refused outright in mutation walks
-            // (AC-61): following one lets a snapshot, rewrite, or delete escape the tree it
-            // believes it is confined to, and NOT following one means the backup silently
-            // covers less than the directory appears to contain. Neither is acceptable
-            // during a write; refuse and let the user relocate the link first.
             if fs.is_reparse_point(&child) {
-                return Err(crate::error::AwtError::Locked(format!(
-                    "reparse point (junction or symlink) inside the tree: {}. Mutation and \
-                     archive operations refuse links because following them can escape the \
-                     tree being operated on. Remove or relocate the link, then re-run.",
-                    child.display()
-                )));
+                return Err(refuse(&child));
             }
             if fs.is_dir(&child) {
                 stack.push(child);

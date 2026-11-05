@@ -247,6 +247,7 @@ pub fn apply_repair(
             applied: vec![],
             backup_dir: String::new(),
             verify: None,
+            warnings: Vec::new(),
         });
     };
     let inner = crate::plan::Plan {

@@ -331,8 +331,9 @@ pub fn rollback(manifest_path: &Path, fs: &dyn FileSystem) -> Result<()> {
     //    removed. This is deliberately NOT the wholesale remove_dir_all used for <dir-rename>
     //    above - doing that to a merge target would destroy B's own history. Any now-empty
     //    subdirectory left behind in B is acceptable v1 residue; removing B's dirs is not worth
-    //    the risk. (Session filenames are UUIDs, so a relative path from A cannot alias one of
-    //    B's own files; apply additionally refuses on any collision before moving.)
+    //    the risk. (A relative path from A can alias one of B's own files: MEMORY.md has a
+    //    fixed name. Plan refuses that, and apply re-checks after its snapshot, because reaching
+    //    this step with an alias would remove B's file.)
     for e in entries {
         if !e["backup"]
             .as_str()

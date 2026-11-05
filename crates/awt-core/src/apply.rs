@@ -23,6 +23,15 @@ pub fn apply(plan: &Plan, fs: &dyn FileSystem, backup_root: &Path, run_id: &str)
             "{conflict}. This appeared after plan, and nothing was changed"
         )));
     }
+    for c in &plan.changes {
+        if let Change::MergeDir { from, to } = c {
+            if let Some(conflict) = crate::plan::merge_conflict(fs, from, to)? {
+                return Err(AwtError::DestinationExists(format!(
+                    "{conflict}. This appeared after plan, and nothing was changed"
+                )));
+            }
+        }
+    }
     let mut applied = Vec::new();
 
     // 1. rename dirs first (so post-rename RewriteFile paths resolve), except MoveTree.
@@ -159,6 +168,7 @@ pub fn apply(plan: &Plan, fs: &dyn FileSystem, backup_root: &Path, run_id: &str)
         applied,
         backup_dir: format!("awt-{run_id}"),
         verify: None,
+        warnings: plan.warnings.clone(),
     })
 }
 

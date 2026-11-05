@@ -4,6 +4,7 @@ use crate::index::ProjectIndex;
 use crate::locks::detect_live;
 use crate::model::{Change, Ctx, Move};
 use crate::paths::{normalize_path, same_volume};
+use crate::stores::claude_projects::ClaudeProjects;
 use crate::stores::registry;
 use std::path::Path;
 
@@ -219,8 +220,9 @@ pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) 
     let mut changes = Vec::new();
     let mut nested = Vec::new();
 
-    // AR-10: the person about to write should know when a folder name alone decided the move.
-    warnings.extend(crate::stores::claude_projects::ClaudeProjects::name_match_warning(&ctx, mv)?);
+    // AR-10: the person about to write should know when a folder name alone decided the move,
+    // and a folder that two look-alike paths both claim refuses here.
+    warnings.extend(ClaudeProjects::name_match_warning(&ctx, mv)?);
 
     for store in registry() {
         store.probe(&ctx)?;
@@ -249,6 +251,11 @@ pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) 
     for k in index.by_cwd.keys() {
         if k != &src_key && k.starts_with(&format!("{src_key}/")) {
             nested.push(k.clone());
+        }
+    }
+    for k in ClaudeProjects::nested_state_paths(&ctx, &mv.src_abs)? {
+        if !nested.contains(&k) {
+            nested.push(k);
         }
     }
     if !nested.is_empty() && opts.move_folder {
@@ -341,6 +348,44 @@ pub(crate) fn rename_conflict(fs: &dyn FileSystem, changes: &[Change]) -> Option
         }
     }
     None
+}
+
+/// Why this merge cannot succeed, if it cannot: a file in `from` would land on a file already in
+/// `to`, or would need a folder where `to` holds a file. Merges never overwrite, and rollback
+/// removes merged paths from `to`, so this must be caught before the first change.
+pub(crate) fn merge_conflict(
+    fs: &dyn FileSystem,
+    from: &Path,
+    to: &Path,
+) -> Result<Option<String>> {
+    for file in crate::fs::walk_files_strict(fs, from)? {
+        let rel = file.strip_prefix(from).map_err(|e| {
+            AwtError::Io(std::io::Error::other(format!(
+                "merge: {} not under {}: {e}",
+                file.display(),
+                from.display()
+            )))
+        })?;
+        let dest = to.join(rel);
+        // An existing folder on the way is fine. A file where a folder must go is not.
+        let blocked = if fs.exists(&dest) {
+            Some(dest.clone())
+        } else {
+            dest.ancestors()
+                .skip(1)
+                .take_while(|a| *a != to)
+                .find(|a| fs.is_file(a))
+                .map(Path::to_path_buf)
+        };
+        if let Some(path) = blocked {
+            return Ok(Some(format!(
+                "{} (both project folders hold this path, and a merge never overwrites. Move or \
+                 combine it by hand, then re-run)",
+                path.display()
+            )));
+        }
+    }
+    Ok(None)
 }
 
 /// Merge text-splice changes that target the same file with the same `from` and `to`

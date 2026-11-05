@@ -259,6 +259,27 @@ fn archive_run_token() -> String {
 /// itself, and a hook would record a path that means something else from another folder.
 /// Done here, not in awt-core, because the core tests use paths such as `/arch` on an
 /// in-memory filesystem that `absolute` would rewrite on Windows.
+/// One spelling of a project path: absolute, in the platform's separators, with no `.` or `..`
+/// and no trailing separator. Every store compares and encodes this text, and transcripts record
+/// the platform spelling. A trailing separator or forward slashes used to change the encoded name
+/// or miss the rewrite, and verification then passed with state left behind.
+fn project_path(path: &str) -> awt_core::error::Result<String> {
+    let abs = std::path::absolute(path).map_err(AwtError::Io)?;
+    let text = abs.to_str().ok_or_else(|| {
+        AwtError::Locked(format!(
+            "the path {path} is not valid Unicode, so it cannot be used"
+        ))
+    })?;
+    Ok(awt_core::paths::trim_separators(text).to_string())
+}
+
+/// Warnings go to stderr, so that stdout stays parseable under `--json`.
+fn print_warnings(warnings: &[String]) {
+    for w in warnings {
+        eprintln!("warning: {w}");
+    }
+}
+
 fn absolute_archive_dir(dir: &std::path::Path) -> awt_core::error::Result<PathBuf> {
     use std::path::Component;
     let abs = std::path::absolute(dir).map_err(AwtError::Io)?;
@@ -377,11 +398,13 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
             Ok(())
         }
         Cmd::Scan { src } => {
+            let src = &project_path(src)?;
             let r = scan(fs, home, src)?;
             print_scan(&r, src, cli.json);
             Ok(())
         }
         Cmd::Plan { src, dst } => {
+            let (src, dst) = (&project_path(src)?, &project_path(dst)?);
             let mv = Move {
                 src_abs: src.clone(),
                 dst_abs: dst.clone(),
@@ -395,6 +418,7 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
             Ok(())
         }
         Cmd::Apply { src, dst } => {
+            let (src, dst) = (&project_path(src)?, &project_path(dst)?);
             let mv = Move {
                 src_abs: src.clone(),
                 dst_abs: dst.clone(),
@@ -408,6 +432,7 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
                 force: cli.force,
             };
             let r = apply_verified(&plan, fs, &backup_root, &opts)?;
+            print_warnings(&r.warnings);
             let doc = r.to_json();
             let doc_str = serde_json::to_string_pretty(&doc).unwrap();
             let report_path = backup_root.join(&r.backup_dir).join("report.json");
@@ -425,6 +450,7 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
             Ok(())
         }
         Cmd::Verify { src, dst } => {
+            let (src, dst) = (&project_path(src)?, &project_path(dst)?);
             let mv = Move {
                 src_abs: src.clone(),
                 dst_abs: dst.clone(),
@@ -601,8 +627,12 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
                     .unwrap_or_else(|| ".claude-sessions".into()),
                 run_id: pick_run_id(),
             };
+            let (from, to) = (&project_path(from)?, &project_path(to)?);
             let r = associate(fs, home, from, to, &aopts)?;
+            print_warnings(&r.warnings);
             let export_loc = format!("{}/{}", to.replace('\\', "/"), aopts.export_subdir);
+            // With no transcript to copy, the export does nothing. Never report an empty one.
+            let exported = aopts.export && fs.is_dir(std::path::Path::new(&export_loc));
             if cli.json {
                 // The fourth mutating mode that printed prose under --json (the other
                 // three were the archive settings paths; found 2026-07-31).
@@ -615,7 +645,7 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
                         } else {
                             serde_json::Value::String(r.backup_dir.clone())
                         },
-                        "export": if aopts.export {
+                        "export": if exported {
                             serde_json::Value::String(export_loc.clone())
                         } else {
                             serde_json::Value::Null
@@ -623,7 +653,7 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
                     })
                 );
             } else {
-                for line in associate_result_lines(&r, aopts.export, &export_loc) {
+                for line in associate_result_lines(&r, exported, &export_loc) {
                     println!("{line}");
                 }
             }
@@ -964,6 +994,7 @@ mod tests {
             applied: vec![],
             backup_dir: "/tmp/backup/x".into(),
             verify: None,
+            warnings: Vec::new(),
         };
         let lines = associate_result_lines(&r, false, "E:/B/.claude-sessions");
         assert!(
@@ -979,6 +1010,7 @@ mod tests {
             applied: vec![],
             backup_dir: String::new(),
             verify: None,
+            warnings: Vec::new(),
         };
         let lines = associate_result_lines(&r, true, "E:/B/.claude-sessions");
         assert!(
@@ -994,6 +1026,7 @@ mod tests {
             applied: vec![],
             backup_dir: String::new(),
             verify: None,
+            warnings: Vec::new(),
         };
         let lines = associate_result_lines(&r, false, "E:/B/.claude-sessions");
         assert_eq!(
