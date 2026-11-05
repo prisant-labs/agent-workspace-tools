@@ -240,6 +240,55 @@ fn pick_run_id() -> String {
     )
 }
 
+/// Token that names the temp files of one archive run. Seconds plus the process id, so two
+/// runs that start in the same second (a hook and a sweep) never share a temp name.
+/// `pick_run_id` stays as it is because backup folder names use it.
+fn archive_run_token() -> String {
+    format!(
+        "{}-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs(),
+        std::process::id()
+    )
+}
+
+/// Turn `--archive-dir` into an absolute path with `.` and `..` removed lexically. A relative
+/// or `..` spelling would otherwise defeat the guard that keeps the archive from copying
+/// itself, and a hook would record a path that means something else from another folder.
+/// Done here, not in awt-core, because the core tests use paths such as `/arch` on an
+/// in-memory filesystem that `absolute` would rewrite on Windows.
+fn absolute_archive_dir(dir: &std::path::Path) -> awt_core::error::Result<PathBuf> {
+    use std::path::Component;
+    let abs = std::path::absolute(dir).map_err(AwtError::Io)?;
+    let mut out = PathBuf::new();
+    for c in abs.components() {
+        match c {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                // `pop` refuses to remove a root or prefix, so `/..` stays at the root.
+                out.pop();
+            }
+            other => out.push(other.as_os_str()),
+        }
+    }
+    Ok(out)
+}
+
+/// Fail with exit 1 when the sweep could not WRITE into the archive folder. Read failures
+/// stay at exit 0 because a live session holding its own file is expected. Called after the
+/// result is printed, so the output is complete either way.
+fn write_failures_to_error(r: &awt_core::archive::ArchiveReport) -> awt_core::error::Result<()> {
+    if r.write_failed > 0 {
+        return Err(AwtError::Io(std::io::Error::other(format!(
+            "{} file(s) could not be written to the archive folder",
+            r.write_failed
+        ))));
+    }
+    Ok(())
+}
+
 fn health_to_str(h: &awt_core::list::Health) -> &'static str {
     match h {
         awt_core::list::Health::Ok => "ok",
@@ -590,10 +639,16 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
             render,
             hook_stdin,
         } => {
+            let archive_dir: Option<PathBuf> = match archive_dir {
+                Some(d) => Some(absolute_archive_dir(d)?),
+                None => None,
+            };
             if *install_hook {
                 let dir = archive_dir.clone().ok_or_else(|| {
                     AwtError::Locked("--archive-dir is required with --install-hook".into())
                 })?;
+                // A useless path must never be recorded in settings.json.
+                awt_core::archive::check_archive_dir(home, &dir)?;
                 let exe = std::env::current_exe().map_err(awt_core::error::AwtError::Io)?;
                 awt_core::settings::install_session_end_hook(fs, home, &exe, &dir)?;
                 if cli.json {
@@ -651,7 +706,7 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
                 let opts = awt_core::archive::ArchiveOpts {
                     archive_dir: dir,
                     render: *render,
-                    run_token: pick_run_id(),
+                    run_token: archive_run_token(),
                 };
                 let r = awt_core::archive::archive_session(
                     fs,
@@ -659,6 +714,8 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
                     std::path::Path::new(transcript_path),
                     &opts,
                 )?;
+                // Hook mode exits 0 for read and write failures alike, so a full disk
+                // cannot make Claude Code report a failing hook. The full sweep retries.
                 print_archive_result(&r, cli.json);
                 return Ok(());
             }
@@ -670,11 +727,11 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
                 let opts = awt_core::archive::ArchiveOpts {
                     archive_dir: dir,
                     render: *render,
-                    run_token: pick_run_id(),
+                    run_token: archive_run_token(),
                 };
                 let r = awt_core::archive::archive_session(fs, home, transcript, &opts)?;
                 print_archive_result(&r, cli.json);
-                return Ok(());
+                return write_failures_to_error(&r);
             }
             let dir = archive_dir
                 .clone()
@@ -683,11 +740,11 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
             let opts = awt_core::archive::ArchiveOpts {
                 archive_dir: dir,
                 render: *render,
-                run_token: pick_run_id(),
+                run_token: archive_run_token(),
             };
             let r = awt_core::archive::archive_all(fs, home, &opts)?;
             print_archive_result(&r, cli.json);
-            Ok(())
+            write_failures_to_error(&r)
         }
     }
 }
@@ -695,8 +752,9 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
 /// Print an archive summary, honoring --json (AR-07: archive was the one subcommand that
 /// advertised --json but always emitted the text line).
 fn print_archive_result(r: &awt_core::archive::ArchiveReport, json: bool) {
-    // Each failed file goes to stderr with its reason, whatever the output format. Per-file
-    // failures do not change the exit code (see docs/reference/commands.md, `awt archive`).
+    // Each failed file goes to stderr with its reason, whatever the output format. The caller
+    // decides the exit code: a write failure exits 1 on a sweep or `--session`, a read failure
+    // never does (see docs/reference/commands.md, `awt archive`).
     for f in &r.failures {
         eprintln!("archive failed: {}: {}", f.path.display(), f.reason);
     }
@@ -875,6 +933,26 @@ mod tests {
             check_transcript_confinement(ghost.to_str().unwrap(), home.path()).is_err(),
             "a transcript that does not exist cannot be archived and must be refused"
         );
+    }
+
+    // --- Archive folder spelling and run token ---
+
+    #[test]
+    fn archive_dir_becomes_absolute_and_loses_dot_segments() {
+        let cwd = std::env::current_dir().unwrap();
+        let got = absolute_archive_dir(std::path::Path::new("a/./b/../c")).unwrap();
+        assert!(got.is_absolute());
+        assert_eq!(got, cwd.join("a").join("c"));
+        let up = absolute_archive_dir(std::path::Path::new("../x")).unwrap();
+        assert_eq!(up, cwd.parent().unwrap().join("x"));
+    }
+
+    #[test]
+    fn archive_run_token_carries_the_process_id() {
+        let t = archive_run_token();
+        let (secs, pid) = t.split_once('-').expect("seconds-pid");
+        assert!(secs.parse::<u64>().is_ok(), "{t}");
+        assert_eq!(pid, std::process::id().to_string());
     }
 
     // --- Finding 7 tests: associate result lines ---
