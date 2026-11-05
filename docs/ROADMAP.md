@@ -215,8 +215,10 @@ because clap and the rollback engine changed after 2026-07-31. Every planned ste
 copied less than it promised). The maintainer chose to fix it before the tag, and the fix is on
 branch `fix/ar-09-archive-scope`.
 
-**Remaining before the v1.0 tag (both maintainer-owned):** (1) the maintainer S-01 spec
-sign-off, made against the closed state; (2) the D10 exposure read (emails and URLs in the
+**Remaining before the v1.0 tag:** two agent steps, then two maintainer steps. The agent merges
+the AR-09 (archive scope defect) fix branch, then reruns the archive steps of the acceptance run
+on the merged build. The maintainer then does (1) the S-01 (mover CLI spec) sign-off, made
+against the closed state, and (2) the D10 (history-rewrite read) exposure read (emails and URLs in the
 formerly published transcripts; rotate anything sensitive). The history rewrite half of D10
 was executed 2026-07-31: `git filter-repo` removed the real transcripts and the
 once-committed session logs from all history, force-pushed, with the current tree

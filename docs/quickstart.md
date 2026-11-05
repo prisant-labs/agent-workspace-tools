@@ -103,8 +103,11 @@ awt archive --archive-dir "E:\claude-archive"
 
 Copies transcripts, subagent transcripts, tool results and session artifacts to a durable folder before Claude Code auto-deletes them.
 Incremental and deduplicated by content hash, so re-running only copies what changed.
+A rerun still reads and hashes both sides of every file, so it is not free on a large home.
 The archive folder holds the same private data as `~/.claude`, so protect it the same way.
-A file that is locked by a running session is reported as failed and skipped; the next run picks it up.
+The folder must not contain `~/.claude`; the command refuses it with exit 2.
+A file that is locked by a running session is reported as failed and skipped.
+A hook run retries only its own session, so run a full `awt archive` to retry everything.
 
 ## Next
 

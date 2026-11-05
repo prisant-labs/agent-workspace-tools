@@ -121,11 +121,14 @@ AR-06 (stale `--force` help text), AR-07 (`archive --json` emitted text), AR-08
 (`associate` on a never-recorded path exited 4 instead of 2). Run 2 on a fresh scratch
 copy passed every happy-path and adversarial step, including a real junction (plan
 refuses, archive skips) and byte-identical whole-tree rollback. **No technical step
-remains in the closeout; what is left is yours: 1.2 (D10 read) and 1.5 (S-01 sign-off).**
+remains in the S-04 closeout itself. The two steps that were left then were yours: 1.2 (D10 read)
+and 1.5 (S-01 sign-off).**
 That stopped being the whole list on 2026-11-03: 1.6 (acceptance re-run), 1.7 (FF-1 docs fix)
 and 1.8 (F-1 and F-2 engine fixes) also blocked the tag, and all three are done. The re-run then
 raised 1.9 (AR-09, `archive` copies less than it promises). You chose to fix it before the tag
-(2026-11-04), and the fix is done, so what is left is 1.2 and 1.5.
+(2026-11-04). The fix is on branch `fix/ar-09-archive-scope` and is not merged. Two agent steps
+remain: the merge, and the archive rerun on the merged build (1.9). Two maintainer steps remain:
+1.2 (D10 read) and 1.5 (S-01 sign-off).
 
 ### 1.5 Sign off S-01 **[HUMAN - nobody else can do this]**
 
@@ -181,7 +184,25 @@ Decided 2026-11-03: both are fixed before the tag. See section 5.
 
 ### 1.9 Decide whether AR-09 blocks the tag **[DECIDED 2026-11-04: option A, fixed on a branch]**
 
-Decided 2026-11-04: option A, fix it before the tag. The fix is in `archive.rs` with tests, and the docs are back to the full claim. It still needs a merge, and the archive steps of the acceptance run should be repeated on the merged build. See section 5.
+Decided 2026-11-04: option A, fix it before the tag. The fix is in `archive.rs` with tests, and the docs are back to the full claim. Two agent steps remain: merge the branch, then repeat the archive steps of the acceptance run on the merged build. See section 5.
+
+A review on 2026-11-05 found further problems in the fix, and they are fixed on the same branch. The rerun after the merge must now also cover `--install-hook` against a scratch home and `associate --export`, because the review fixes touched both.
+
+**Follow-ups from the 2026-11-05 review (AR-09, archive scope defect). None of these blocks the tag.** They are recorded, not fixed.
+
+- `associate` with re-association on a project whose transcripts are locked or absent proceeds without an export. A real fix needs `archive_project` to resolve a project without the transcript index.
+- `--session` has no confinement to the home. Only `--hook-stdin` checks that the transcript lies under `~/.claude/projects`.
+- The `contains` match on `todos/` file names can over-match a very short session id.
+- `--session memory.jsonl` copies the project `memory/` folder, because the session folder takes its name from the transcript stem.
+- A file name longer than about 236 characters fails to archive, because the temp suffix pushes the path over the limit.
+- Nothing removes leftover `<name>.<token>.awt-tmp` files after a killed run.
+- A file name that is not valid UTF-8 can collapse with another name in the manifest.
+- An upper-case `.JSONL` extension is ignored.
+- A truncated `manifest.json` resets without a message.
+- The per-file failure list is lost if the manifest write itself fails.
+- The manifest read-merge-write race between two concurrent runs needs a lock.
+- AC-39 (manifest contents) asks for sizes, and the manifest does not record them.
+- An unlistable project folder stops the whole sweep, because `ProjectIndex::build` returns the error.
 
 `awt archive` does not copy subagent transcripts or most session artifacts, which AC-35 (archive
 includes session artifacts) promises in part. See section 5.
@@ -325,9 +346,11 @@ Whether FF-1 or FF-2 blocks the v1.0.0 tag is your call **[HUMAN]**. FF-1 is the
 
 A file that cannot be read is reported as failed, and the sweep continues. A lock file held by a running session is the usual case. The exit code stays 0 for that case. Writes go through a temp file, so a failed write leaves no partial copy. An archive folder inside the walked tree does not copy itself.
 
+**Review fixes, 2026-11-05.** A full sweep now copies the four session stores whole, so files whose session has no transcript left are archived. An archive folder that holds the Claude data is refused with exit 2. A failure to write into the archive folder exits 1 on a sweep and on `--session`. `--archive-dir` is made absolute. Session ids that are empty, `.` or `..` are refused, which closes a path traversal from a transcript named `...jsonl`. The hook now has a 60-second timeout, and existing hook users must run `--install-hook` again. `associate` plans before it exports.
+
 `awt associate --export` shares this code. It now refuses before re-associating if any export file failed. The pages that carried the narrower claim are restored.
 
-Next step: merge the branch, then rerun the archive steps of the acceptance run against a scratch copy. That should be enough (inferred), because the change is confined to `archive.rs`, `associate.rs` and the archive output in the CLI.
+Next step, for an agent: merge the branch, then rerun the archive steps of the acceptance run against a scratch copy. Add `--install-hook` against a scratch home and `associate --export` to that rerun. The change reaches `archive.rs`, `associate.rs`, `settings.rs` and the archive paths of the CLI (inferred scope).
 
 ---
 

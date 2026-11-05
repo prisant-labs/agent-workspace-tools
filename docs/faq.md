@@ -128,8 +128,10 @@ Claude Code auto-deletes transcripts after 30 days by default, with no warning a
 `awt list` shows each project's oldest transcript age so the cliff is visible, and `awt archive`
 copies transcripts, subagent transcripts, tool results, and each session's file history, session
 environment, tasks, and todos to a durable folder before it takes them. Archiving is incremental and
-deduplicated by content hash, so re-running is cheap. A file that a running session holds open is
-reported as failed and skipped, and the next run copies it.
+deduplicated by content hash, so unchanged files are not copied again. A rerun still reads and
+hashes both sides of every file, so it is not free on a large home. A file that a running session
+holds open is reported as failed and skipped. A hook run retries only its own session, so a full
+`awt archive` sweep is what retries everything else.
 
 ### Should I just set `cleanupPeriodDays` to 0?
 
