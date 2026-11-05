@@ -1,7 +1,7 @@
 ---
 title: "Maintainer to-do - the single human checklist"
 type: checklist
-updated: 2026-11-03
+updated: 2026-11-05
 ---
 
 # Maintainer to-do
@@ -126,9 +126,9 @@ and 1.5 (S-01 sign-off).**
 That stopped being the whole list on 2026-11-03: 1.6 (acceptance re-run), 1.7 (FF-1 docs fix)
 and 1.8 (F-1 and F-2 engine fixes) also blocked the tag, and all three are done. The re-run then
 raised 1.9 (AR-09, `archive` copies less than it promises). You chose to fix it before the tag
-(2026-11-04). The fix is on branch `fix/ar-09-archive-scope` and is not merged. Two agent steps
-remain: the merge, and the archive rerun on the merged build (1.9). Two maintainer steps remain:
-1.2 (D10 read) and 1.5 (S-01 sign-off).
+(2026-11-04). PR #36 merged the fix, and the archive rerun on the merged build passed on 2026-11-05
+(1.9). No agent step remains. Three maintainer steps remain: 1.2 (D10 read), 1.5 (S-01 sign-off),
+and 1.10 (whether AR-10, a project folder with no readable transcript, blocks the tag).
 
 ### 1.5 Sign off S-01 **[HUMAN - nobody else can do this]**
 
@@ -182,11 +182,11 @@ spec's AC-21 wording is unchanged, because you sign that text. The review guide 
 
 Decided 2026-11-03: both are fixed before the tag. See section 5.
 
-### 1.9 Decide whether AR-09 blocks the tag **[DECIDED 2026-11-04: option A, fixed on a branch]**
+### 1.9 Decide whether AR-09 blocks the tag **[DONE 2026-11-05: option A, fix merged, rerun passed]**
 
-Decided 2026-11-04: option A, fix it before the tag. The fix is in `archive.rs` with tests, and the docs are back to the full claim. Two agent steps remain: merge the branch, then repeat the archive steps of the acceptance run on the merged build. See section 5.
+Decided 2026-11-04: option A, fix it before the tag. The fix is in `archive.rs` with tests, and the docs are back to the full claim. PR #36 merged it, and the archive steps passed on the merged build on 2026-11-05. The record is [`acceptance-run-2026-11-05.md`](release-plans/plan_v1.0.0/acceptance-run-2026-11-05.md). See section 5.
 
-A review on 2026-11-05 found further problems in the fix, and they are fixed on the same branch. The rerun after the merge must now also cover `--install-hook` against a scratch home and `associate --export`, because the review fixes touched both.
+A review on 2026-11-05 found further problems in the fix, and PR #36 fixed them too. The rerun also covered `--install-hook` against a scratch home and `associate --export`, because the review fixes touched both.
 
 **Follow-ups from the 2026-11-05 review (AR-09, archive scope defect). None of these blocks the tag.** They are recorded, not fixed.
 
@@ -341,7 +341,7 @@ Whether FF-1 or FF-2 blocks the v1.0.0 tag is your call **[HUMAN]**. FF-1 is the
 
 **Decision (2026-11-03): the engine refuses.** It exits 2, before the scan, and leaves the file alone. There is no override flag, so refreshing an inventory now takes a delete or a new name. Add a flag later only if that proves annoying.
 
-### AR-09 (`archive` copies less than it promises) **[FIXED 2026-11-04, decided at 1.9: option A]**
+### AR-09 (`archive` copies less than it promises) **[FIXED, merged in PR #36, rerun passed 2026-11-05; decided at 1.9: option A]**
 
 **What happened.** The 2026-11-04 re-run checked a first sweep against the scratch copy. All 3,957 top-level transcripts and 24,683 of 24,689 file-history files were copied. The six others are likely orphans of sessions with no surviving transcript (inferred). The sweep did not copy 10,405 subagent transcripts (5.8 GB), 3,666 `tool-results` files (837 MB), or anything from `session-env/`, `tasks/` or `todos/`.
 
@@ -357,7 +357,9 @@ A file that cannot be read is reported as failed, and the sweep continues. A loc
 
 `awt associate --export` shares this code. It now refuses before re-associating if any export file failed. The pages that carried the narrower claim are restored.
 
-Next step, for an agent: merge the branch, then rerun the archive steps of the acceptance run against a scratch copy. Add `--install-hook` against a scratch home and `associate --export` to that rerun. The change reaches `archive.rs`, `associate.rs`, `settings.rs` and the archive paths of the CLI (inferred scope).
+**Rerun, 2026-11-05.** The archive steps passed on the merged build, with `--install-hook` against a scratch home and `associate --export` added. All 56,570 expected files are in the archive, and each matches its source by hash. The record is [`acceptance-run-2026-11-05.md`](release-plans/plan_v1.0.0/acceptance-run-2026-11-05.md).
+
+**Hook users must act.** An existing `SessionEnd` hook has no timeout, so Claude Code can cut it off after 1.5 seconds. Re-run `awt archive --install-hook --archive-dir <path>` to replace it.
 
 ### AR-10: a project folder with no readable transcript cannot be moved or re-associated
 

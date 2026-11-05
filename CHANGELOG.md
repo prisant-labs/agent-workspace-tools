@@ -19,10 +19,11 @@ the CLI does and no v1.0.0 tag existed yet to freeze against.
 
 The dating of this section is deferred to the tag. The v1 safety closeout (S-04) completed
 2026-07-31, including a passing adversarial acceptance run. That run was repeated on 2026-11-04,
-because clap and the rollback engine changed after it. The tag now waits on four steps. An agent
-merges the AR-09 (archive scope defect) fix and reruns the archive steps on the merged build.
-The maintainer then gives the spec sign-off (S-01, the mover CLI spec) and makes the
-fixture-history decision (D10). See `docs/internal/maintainer-todo.md` section 1.
+because clap and the rollback engine changed after it. The AR-09 (archive scope defect) fix is
+merged, and the archive steps passed on the merged build on 2026-11-05. The tag now waits on three
+maintainer steps: the spec sign-off (S-01, the mover CLI spec), the fixture-history decision (D10),
+and a decision on AR-10 (a project folder with no readable transcript cannot be moved). See
+`docs/internal/maintainer-todo.md` section 1.
 
 ### Added
 

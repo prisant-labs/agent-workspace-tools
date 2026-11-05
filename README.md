@@ -24,9 +24,10 @@ No LLM, no network, backup-before-write, verify-after, single-command rollback.
 > closed test-first, and an adversarial acceptance run passed on real data (fresh scratch
 > copy, hostile matrix, byte-identical rollback). A repeat passed on 2026-11-04, after the
 > argument parser and the rollback engine changed. The repeat found that `awt archive`
-> copied less than it promised (AR-09, the archive scope defect). The fix is on a branch. The tag
-> now waits on its merge, an archive rerun on the merged build, the maintainer's spec sign-off and
-> a fixture-history decision.
+> copied less than it promised (AR-09, the archive scope defect). The fix is merged, and an archive
+> rerun on the merged build passed on 2026-11-05. The tag now waits on the maintainer's spec sign-off,
+> a fixture-history decision, and a decision on AR-10 (a project folder with no readable transcript
+> cannot be moved, and the attempt rolls back safely).
 >
 > Because `awt` edits Claude Code state under `~/.claude`, read the
 > [quickstart](docs/quickstart.md) and the [FAQ](docs/faq.md), and **always run it against a copy
@@ -135,7 +136,7 @@ Every `apply` and `rollback` also writes an always-on machine-readable record (`
 | Release | Contents | Status |
 |---|---|---|
 | v0.1.0 | `awt doctor` and `awt scan` - read-only | Internal milestone (not tagged) |
-| **v1.0.0** | Full CLI: mover (`plan`/`apply`/`verify`/`rollback`) plus `list`, `archive`, `associate`, `repair` | **Feature-complete; safety closeout done.** Happy-path acceptance passed 2026-07-30; the adversarial audit's closeout completed 2026-07-31 with a passing adversarial acceptance run, repeated 2026-11-04. The AR-09 (archive scope defect) fix is on a branch. The tag waits on its merge, an archive rerun on the merged build, the maintainer spec sign-off and the fixture-history (D10) decision. |
+| **v1.0.0** | Full CLI: mover (`plan`/`apply`/`verify`/`rollback`) plus `list`, `archive`, `associate`, `repair` | **Feature-complete; safety closeout done.** Happy-path acceptance passed 2026-07-30; the adversarial audit's closeout completed 2026-07-31 with a passing adversarial acceptance run, repeated 2026-11-04. The AR-09 (archive scope defect) fix is merged, and an archive rerun on the merged build passed 2026-11-05. The tag waits on the maintainer spec sign-off, the fixture-history (D10) decision and a decision on AR-10 (a project folder with no readable transcript cannot be moved). |
 | v1.x (parked) | Cross-volume move; Codex and Gemini adapters | Behind the existing adapter boundary; promotable when scheduled |
 | v2.0.0 | Tauri 2 + React GUI over the identical core | Deferred; security and native-parity baselines first |
 
