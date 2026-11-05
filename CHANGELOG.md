@@ -33,9 +33,9 @@ section 1.
 - **Read-only tools** - `doctor` (scan the whole install for stale path references) and `scan`
   (show all Claude state for one project).
 - **Retention tooling** - `list` (inventory with session counts, sizes, and 30-day-cliff ages),
-  `archive` (content-hash incremental copy of transcripts, subagent transcripts, tool results,
-  and each session's file history, session environment, tasks and todos, before the auto-delete
-  removes them; a file a running session holds open is reported as failed and the sweep goes on),
+  `archive` (content-hash incremental copy, before the auto-delete removes it, of transcripts,
+  subagent transcripts, tool results, and each session's file history, session environment, tasks
+  and todos; a file a running session holds open is reported as failed and the sweep goes on),
   and `associate` (re-link a deprecated project's history to a replacement path, reversibly,
   even when the old folder is gone).
 - **Repair tooling** - `repair --drive-letter` recovers `history.jsonl` entries whose drive

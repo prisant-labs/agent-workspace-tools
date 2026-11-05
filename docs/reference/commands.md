@@ -184,7 +184,7 @@ Copy session history to a durable folder before Claude's 30-day auto-delete remo
 
 - Project `memory/` folders, because they are project notes and not session history.
 - Top-level files in a project folder that are not transcripts, for the same reason.
-- Anything behind a junction or symlink. The sweep skips the link and protects the rest (AC-61).
+- Anything behind a junction or symlink. The sweep skips the link and protects the rest (AC-61, the junction skip).
 
 **Care for the archive folder.** `session-env/` holds hook environment scripts that can contain environment values. Transcripts and tool results can hold pasted secrets. Give the archive folder the same protection as the Claude home.
 
@@ -229,7 +229,9 @@ Copy session history to a durable folder before Claude's 30-day auto-delete remo
 
 **Exit codes used:** 0, 1, 2 (locked - missing required companion flag), 4 (hook stdin contained invalid JSON or missing `transcript_path`).
 
-Per-file failures exit 0. The installed `SessionEnd` hook runs while other sessions are live, and a locked file must not turn a working hook into a failing one. The failures are printed and counted instead. Exit 1 still means the sweep could not run: the archive folder or `manifest.json` could not be written, or the `--session` transcript does not exist. `awt associate --export` is stricter, because the export is a safety copy: it exits 1 and re-associates nothing if any file failed.
+Per-file failures exit 0. The installed `SessionEnd` hook runs while other sessions are live, and a locked file must not turn a working hook into a failing one. The failures are printed and counted instead. Exit 1 still means the sweep could not run. The archive folder or `manifest.json` could not be written, or the `--session` transcript does not exist.
+
+`awt associate --export` is stricter, because its export is a safety copy. It exits 1 and re-associates nothing if any file failed.
 
 ---
 
@@ -300,6 +302,8 @@ Re-link session history from one project path to another, and optionally export 
 | `--no-export` | no | Skip the export step; re-associate only |
 
 Passing both `--no-reassociate` and `--no-export` is an error (exit 2 - nothing to do).
+
+The export uses the same copy as `awt archive`, so it includes session folders, `session-env/`, `tasks/` and `todos/`. If any file cannot be copied, the command exits 1 before re-associating anything.
 
 
 **Output:** `associate complete: N changes applied`.
