@@ -20,8 +20,8 @@ the CLI does and no v1.0.0 tag existed yet to freeze against.
 The dating of this section is deferred to the tag. The v1 safety closeout (S-04) completed
 2026-07-31, including a passing adversarial acceptance run. That run was repeated on 2026-11-04,
 because clap and the rollback engine changed after it. The tag now waits on the maintainer spec
-sign-off (S-01), the fixture-history decision (D10), and a decision on AR-09 (`archive` copies
-less than it promises). See `docs/internal/maintainer-todo.md` section 1.
+sign-off (S-01) and the fixture-history decision (D10). See `docs/internal/maintainer-todo.md`
+section 1.
 
 ### Added
 
@@ -33,7 +33,9 @@ less than it promises). See `docs/internal/maintainer-todo.md` section 1.
 - **Read-only tools** - `doctor` (scan the whole install for stale path references) and `scan`
   (show all Claude state for one project).
 - **Retention tooling** - `list` (inventory with session counts, sizes, and 30-day-cliff ages),
-  `archive` (content-hash incremental copy of transcripts before the auto-delete removes them),
+  `archive` (content-hash incremental copy of transcripts, subagent transcripts, tool results,
+  and each session's file history, session environment, tasks and todos, before the auto-delete
+  removes them; a file a running session holds open is reported as failed and the sweep goes on),
   and `associate` (re-link a deprecated project's history to a replacement path, reversibly,
   even when the old folder is gone).
 - **Repair tooling** - `repair --drive-letter` recovers `history.jsonl` entries whose drive
@@ -221,10 +223,6 @@ less than it promises). See `docs/internal/maintainer-todo.md` section 1.
   report success. The session then keeps writing under the old path, so the migration goes
   stale within minutes. No data is lost. Exit every session running in the source folder first,
   and do not run `awt` from inside one. The guard fix is planned for v1.0.1.
-- **`archive` copies less than it promises (AR-09).** It copies top-level session transcripts and
-  file history. It does not copy subagent transcripts, `tool-results/`, `session-env/`, `tasks/`
-  or `todos/`, and it does not say so when it runs. Those files are not protected from auto-delete.
-  A move and a rollback are not affected.
 - **`associate` cannot finish into a destination that is already live (FF-2).** It refuses with
   exit 2 and writes nothing, so a half-migrated project has no supported way to finish. The
   planned fix prints the manual steps, and exports same-session transcripts as an archive.

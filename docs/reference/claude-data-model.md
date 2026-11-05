@@ -165,7 +165,9 @@ server-side store. Two implications:
 - Transcripts hold whatever passed through tools, including `.env` contents, command
   output with credentials, and pasted secrets, all in plaintext. OS file
   permissions are the only protection. An archive inherits that exposure and should
-  live somewhere with the same or tighter permissions.
+  live somewhere with the same or tighter permissions. `session-env/` adds hook
+  environment scripts that can contain environment values, so `awt archive` copies
+  it too and the archive folder needs the same care as the Claude home.
 
 ## 8. Traps, in one place
 

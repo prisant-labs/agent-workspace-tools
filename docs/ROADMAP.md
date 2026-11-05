@@ -212,7 +212,8 @@ live-session guard misses terminal sessions) blocked the tag on documentation on
 is done; the guard fix itself ships in v1.0.1. The adversarial acceptance run was repeated,
 because clap and the rollback engine changed after 2026-07-31. Every planned step passed
 (`docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-11-04.md`). It found AR-09 (`archive`
-copies less than it promises), and whether that blocks the tag is a maintainer decision.
+copied less than it promised). The maintainer chose to fix it before the tag, and the fix is on
+branch `fix/ar-09-archive-scope`.
 
 **Remaining before the v1.0 tag (both maintainer-owned):** (1) the maintainer S-01 spec
 sign-off, made against the closed state; (2) the D10 exposure read (emails and URLs in the

@@ -126,9 +126,10 @@ different failure modes, and it is deferred to v1.x rather than half-implemented
 
 Claude Code auto-deletes transcripts after 30 days by default, with no warning and no recovery.
 `awt list` shows each project's oldest transcript age so the cliff is visible, and `awt archive`
-copies top-level transcripts and file history to a durable folder before it takes them. It does
-not yet copy subagent transcripts or other session artifacts. Archiving is incremental and
-deduplicated by content hash, so re-running is cheap.
+copies transcripts, subagent transcripts, tool results, and each session's file history, session
+environment, tasks, and todos to a durable folder before it takes them. Archiving is incremental and
+deduplicated by content hash, so re-running is cheap. A file that a running session holds open is
+reported as failed and skipped, and the next run copies it.
 
 ### Should I just set `cleanupPeriodDays` to 0?
 

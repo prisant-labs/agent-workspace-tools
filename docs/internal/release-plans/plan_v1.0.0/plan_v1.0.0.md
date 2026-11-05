@@ -116,7 +116,7 @@ Reconciled against the repo 2026-07-28.
 | `test/fixtures/README.md` | Sanitization provenance recorded (plan Task 1.3 step executed) | [x] exists with provenance |
 | Workspace `Cargo.toml` | `version` bumped to `1.0.0` | [x] `version = "1.0.0"` |
 | Binary channel (conditional) | IF binaries are distributed with this tag: CI-3 signing/minisign/winget steps done; otherwise mark N/A with a note | [x] N/A - v1.0.0 ships source-first; CI-3 is not a tag blocker |
-| Git tag `v1.0.0` | Create the annotated tag once all of the above are done | [ ] blocked by gate (a) (S-01 sign-off), the D10 publication decision, and the AR-09 decision (`maintainer-todo.md` section 1.9); gate (g) cleared 2026-07-31 and repeated 2026-11-04 |
+| Git tag `v1.0.0` | Create the annotated tag once all of the above are done | [ ] blocked by gate (a) (S-01 sign-off) and the D10 publication decision; AR-09 (`archive` scope) is fixed (`maintainer-todo.md` section 5); gate (g) cleared 2026-07-31 and repeated 2026-11-04 |
 
 The two unticked non-blocked rows are correct as unticked: the README banner should flip
 *during* the tag ceremony, and the runbook row can only be ticked by a release that was
