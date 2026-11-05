@@ -61,7 +61,24 @@ pub fn associate(
                 render: false,
                 run_token: opts.run_id.clone(),
             };
-            archive_project(fs, home, from, &aopts)?;
+            let rep = archive_project(fs, home, from, &aopts)?;
+            // The export is the safety copy taken before the re-association rewrites state.
+            // `archive` tolerates unreadable files so a hook never fails; here that tolerance
+            // would let the rewrite proceed behind a partial copy, so refuse instead.
+            if rep.failed > 0 {
+                let shown: Vec<String> = rep
+                    .failures
+                    .iter()
+                    .take(5)
+                    .map(|f| format!("{} ({})", f.path.display(), f.reason))
+                    .collect();
+                return Err(AwtError::Io(std::io::Error::other(format!(
+                    "export could not copy {} file(s), so nothing was re-associated: {}. \
+                     Close the sessions that hold them and re-run, or pass --no-export.",
+                    rep.failed,
+                    shown.join("; ")
+                ))));
+            }
         }
     }
     if opts.reassociate {
@@ -185,5 +202,33 @@ mod tests {
             !fs.exists(Path::new("E:/B/.claude-sessions/projects/E--Other/o.jsonl")),
             "export must be scoped to the from project only"
         );
+    }
+
+    /// AR-09: archive tolerates unreadable files, but an export that failed to copy a file
+    /// must stop the re-association, because the export is the safety copy taken before it.
+    #[test]
+    fn export_with_a_failed_file_refuses_before_reassociating() {
+        let fs = crate::fs::FaultyFileSystem::new(&["tasks/s/.lock"], &[]);
+        fs.write(
+            Path::new("/h/.claude/projects/E--A/s.jsonl"),
+            b"{\"cwd\":\"E:\\\\A\"}\n",
+        )
+        .unwrap();
+        fs.write(Path::new("/h/.claude/tasks/s/.lock"), b"")
+            .unwrap();
+        fs.write(Path::new("E:/B/keep.txt"), b"x").unwrap();
+        let opts = AssociateOpts {
+            reassociate: true,
+            export: true,
+            export_subdir: ".claude-sessions".into(),
+            run_id: "T".into(),
+        };
+        let err = associate(&fs, Path::new("/h"), "E:\\A", "E:\\B", &opts).unwrap_err();
+        assert!(matches!(err, AwtError::Io(_)), "{err:?}");
+        assert!(
+            fs.exists(Path::new("/h/.claude/projects/E--A/s.jsonl")),
+            "records must be untouched when the export failed"
+        );
+        assert!(!fs.exists(Path::new("/h/.claude/projects/E--B")));
     }
 }

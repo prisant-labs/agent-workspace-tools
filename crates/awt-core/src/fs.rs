@@ -370,6 +370,80 @@ impl FileSystem for MemoryFileSystem {
     }
 }
 
+/// Test double that wraps a `MemoryFileSystem` and fails reads or writes whose path contains
+/// a configured substring. It models a sharing violation on a live session's file (read) or a
+/// full destination disk (write), which `MemoryFileSystem` alone cannot produce.
+#[cfg(test)]
+pub(crate) struct FaultyFileSystem {
+    pub inner: MemoryFileSystem,
+    pub fail_read_containing: Vec<String>,
+    pub fail_write_containing: Vec<String>,
+}
+
+#[cfg(test)]
+impl FaultyFileSystem {
+    pub fn new(fail_read: &[&str], fail_write: &[&str]) -> Self {
+        Self {
+            inner: MemoryFileSystem::new(),
+            fail_read_containing: fail_read.iter().map(|s| s.to_string()).collect(),
+            fail_write_containing: fail_write.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+    fn hit(list: &[String], path: &Path) -> bool {
+        let p = norm(path);
+        list.iter().any(|s| p.contains(s.as_str()))
+    }
+}
+
+#[cfg(test)]
+impl FileSystem for FaultyFileSystem {
+    fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
+        if Self::hit(&self.fail_read_containing, path) {
+            return Err(io::Error::other("sharing violation (test)"));
+        }
+        self.inner.read(path)
+    }
+    fn write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
+        if Self::hit(&self.fail_write_containing, path) {
+            return Err(io::Error::other("disk full (test)"));
+        }
+        self.inner.write(path, data)
+    }
+    fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+        self.inner.rename(from, to)
+    }
+    fn exists(&self, path: &Path) -> bool {
+        self.inner.exists(path)
+    }
+    fn is_file(&self, path: &Path) -> bool {
+        self.inner.is_file(path)
+    }
+    fn is_dir(&self, path: &Path) -> bool {
+        self.inner.is_dir(path)
+    }
+    fn read_dir(&self, path: &Path) -> io::Result<Vec<PathBuf>> {
+        self.inner.read_dir(path)
+    }
+    fn create_dir_all(&self, path: &Path) -> io::Result<()> {
+        self.inner.create_dir_all(path)
+    }
+    fn copy(&self, from: &Path, to: &Path) -> io::Result<()> {
+        self.inner.copy(from, to)
+    }
+    fn remove_file(&self, path: &Path) -> io::Result<()> {
+        self.inner.remove_file(path)
+    }
+    fn remove_dir_all(&self, path: &Path) -> io::Result<()> {
+        self.inner.remove_dir_all(path)
+    }
+    fn mtime_secs(&self, path: &Path) -> io::Result<u64> {
+        self.inner.mtime_secs(path)
+    }
+    fn is_reparse_point(&self, path: &Path) -> bool {
+        self.inner.is_reparse_point(path)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
