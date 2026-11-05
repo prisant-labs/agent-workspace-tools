@@ -172,6 +172,21 @@ pub fn apply(plan: &Plan, fs: &dyn FileSystem, backup_root: &Path, run_id: &str)
     })
 }
 
+/// Roll back after a failed verification, and say what actually happened. The move did complete
+/// here, so a refused rollback leaves it in place, whatever the refusal's own message says.
+fn undo_after_failed_verify(manifest: &Path, fs: &dyn FileSystem, opts: &ApplyOpts) -> String {
+    if !opts.auto_rollback {
+        return "; automatic rollback is off, so the move is still in place".to_string();
+    }
+    match crate::rollback::rollback(manifest, fs) {
+        Ok(_) => "; the apply was rolled back".to_string(),
+        Err(refused) => format!(
+            "; automatic rollback did not complete ({refused}), so the move is still in place: \
+             resolve that, then run awt rollback on this backup"
+        ),
+    }
+}
+
 pub fn apply_verified(
     plan: &Plan,
     fs: &dyn FileSystem,
@@ -213,25 +228,21 @@ pub fn apply_verified(
     {
         Ok(r) => r,
         Err(e) => {
-            if opts.auto_rollback {
-                crate::rollback::rollback(&manifest_path, fs)?;
-            }
             return Err(AwtError::VerifyFailed(format!(
-                "verification could not run ({e}); the apply was rolled back; backup at {}",
+                "verification could not run ({e}){}; backup at {}",
+                undo_after_failed_verify(&manifest_path, fs, opts),
                 backup_dir.display()
             )));
         }
     };
     let failed: Vec<_> = results.iter().filter(|r| !r.ok).collect();
     if !failed.is_empty() {
-        if opts.auto_rollback {
-            crate::rollback::rollback(&manifest_path, fs)?;
-        }
         let names: Vec<&str> = failed.iter().map(|r| r.check.as_str()).collect();
         return Err(AwtError::VerifyFailed(format!(
-            "{} checks failed ({}); backup at {}",
+            "{} checks failed ({}){}; backup at {}",
             failed.len(),
             names.join(", "),
+            undo_after_failed_verify(&manifest_path, fs, opts),
             backup_dir.display()
         )));
     }

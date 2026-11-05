@@ -93,27 +93,45 @@ impl ClaudeProjects {
             return Ok(decide(paths));
         }
 
-        // The index reads only top-level transcripts. Session folders can name a path too.
-        let mut nested: Vec<String> = Vec::new();
-        for file in crate::fs::walk_files(ctx.fs, &dir) {
-            if file.extension().and_then(|e| e.to_str()) != Some("jsonl") {
-                continue;
+        // The index reads only top-level transcripts, and session folders can name a path too.
+        // Those are never rewritten, so one naming an older home is residue of an earlier move,
+        // even of awt's own. Only a look-alike that something still knows about is a rival.
+        let known = Self::known_paths(ctx)?;
+        let is_alive = |p: &str| {
+            ctx.fs.is_dir(Path::new(&p.replace('\\', "/")))
+                || known.iter().any(|k| {
+                    normalize_path(trim_separators(k)) == normalize_path(trim_separators(p))
+                })
+        };
+        let nested = Self::nested_cwds(ctx, &dir);
+        let names_src = nested.iter().any(|p| is_src(p));
+        let rivals: Vec<String> = nested
+            .into_iter()
+            .filter(|p| is_lookalike(p) && is_alive(p))
+            .collect();
+        match (names_src, rivals.first()) {
+            (true, Some(_)) => {
+                return Ok(NameMatch::Contested {
+                    dir: dir.clone(),
+                    paths: rivals,
+                });
             }
-            if let Some(cwd) = crate::index::read_stored_cwd(ctx.fs, &file) {
-                if !nested
-                    .iter()
-                    .any(|n| normalize_path(n) == normalize_path(&cwd))
-                {
-                    nested.push(cwd);
-                }
+            (true, None) => {
+                return Ok(NameMatch::Ours {
+                    dir: dir.clone(),
+                    named: true,
+                });
             }
-        }
-        if !nested.is_empty() {
-            return Ok(decide(&nested));
+            (false, Some(p)) => {
+                return Ok(NameMatch::Others {
+                    dir: dir.clone(),
+                    owner: p.clone(),
+                });
+            }
+            (false, None) => {}
         }
 
         // The folder says nothing, so any other known path with the same name could own it.
-        let known = Self::known_paths(ctx)?;
         let rival = ctx
             .index
             .cwds
@@ -127,6 +145,34 @@ impl ClaudeProjects {
             },
             None => NameMatch::Ours { dir, named: false },
         })
+    }
+
+    /// Every `cwd` the transcripts anywhere under `dir` record. A link is not followed, because
+    /// it could lead out of the folder and into a very large tree.
+    fn nested_cwds(ctx: &Ctx, dir: &Path) -> Vec<String> {
+        let mut found: Vec<String> = Vec::new();
+        let mut stack = vec![dir.to_path_buf()];
+        while let Some(current) = stack.pop() {
+            let Ok(children) = ctx.fs.read_dir(&current) else {
+                continue;
+            };
+            for child in children {
+                if ctx.fs.is_reparse_point(&child) {
+                    continue;
+                }
+                if ctx.fs.is_dir(&child) {
+                    stack.push(child);
+                } else if child.extension().and_then(|e| e.to_str()) == Some("jsonl") {
+                    if let Some(cwd) = crate::index::read_stored_cwd(ctx.fs, &child) {
+                        let key = normalize_path(&cwd);
+                        if !found.iter().any(|f| normalize_path(f) == key) {
+                            found.push(cwd);
+                        }
+                    }
+                }
+            }
+        }
+        found
     }
 
     /// Every path `~/.claude.json` and `history.jsonl` record.
@@ -181,9 +227,19 @@ impl ClaudeProjects {
             return Ok(true);
         }
         let key = normalize_path(src);
-        Ok(Self::known_paths(ctx)?
+        if Self::known_paths(ctx)?
             .iter()
-            .any(|p| normalize_path(trim_separators(p)) == key))
+            .any(|p| normalize_path(trim_separators(p)) == key)
+        {
+            return Ok(true);
+        }
+        let probe = Move {
+            src_abs: src.to_string(),
+            dst_abs: String::new(),
+        };
+        Ok(!crate::stores::plugin_state::PluginState
+            .detect(ctx, &probe)?
+            .is_empty())
     }
 
     /// What the plan must say, or refuse, when a folder name decided what happens to a folder.
@@ -226,9 +282,16 @@ impl ClaudeProjects {
         for path in Self::claude_json_paths(ctx)? {
             let path = trim_separators(&path).to_string();
             let key = normalize_path(&path);
+            // A child that is gone has nothing to break, and a folder that belongs to a
+            // look-alike of the child is not the child's.
             if key.starts_with(&prefix)
-                && ctx.fs.is_dir(&projects.join(encode_project_dir(&path)))
                 && !out.contains(&key)
+                && ctx.fs.is_dir(Path::new(&path.replace('\\', "/")))
+                && ctx.fs.is_dir(&projects.join(encode_project_dir(&path)))
+                && matches!(
+                    Self::name_match(ctx, &path)?,
+                    NameMatch::Ours { .. } | NameMatch::Contested { .. }
+                )
             {
                 out.push(key);
             }
@@ -331,16 +394,23 @@ impl Store for ClaudeProjects {
             if ctx.fs.is_dir(&new_dir) {
                 // The folder at the destination's name can belong to a look-alike of the
                 // destination. Merging would hand this project's state to that project.
-                if let NameMatch::Others { dir, owner } = Self::name_match(ctx, &mv.dst_abs)? {
-                    let rival = encode_project_dir(trim_separators(&owner));
-                    if rival.eq_ignore_ascii_case(&encoded_dst) {
-                        return Err(AwtError::DestinationExists(format!(
-                            "{} (this folder belongs to {owner}, whose encoded name matches {}. \
-                             Choose another destination)",
-                            dir.display(),
-                            mv.dst_abs
-                        )));
+                let rival = match Self::name_match(ctx, &mv.dst_abs)? {
+                    NameMatch::Others { dir, owner }
+                        if encode_project_dir(trim_separators(&owner))
+                            .eq_ignore_ascii_case(&encoded_dst) =>
+                    {
+                        Some((dir, owner))
                     }
+                    NameMatch::Contested { dir, paths } => Some((dir, paths.join(", "))),
+                    _ => None,
+                };
+                if let Some((dir, owner)) = rival {
+                    return Err(AwtError::DestinationExists(format!(
+                        "{} (this folder belongs to {owner}, whose encoded name matches {}. \
+                         Choose another destination)",
+                        dir.display(),
+                        mv.dst_abs
+                    )));
                 }
                 // A merge refuses to overwrite a file, so a file on both sides would fail
                 // at apply. MEMORY.md has a fixed name, which makes that the normal case
@@ -360,7 +430,8 @@ impl Store for ClaudeProjects {
                 });
             }
         }
-        let rules = build_path_rules(&mv.src_abs, &mv.dst_abs);
+        let typed_rules = build_path_rules(&mv.src_abs, &mv.dst_abs);
+        let src_key = normalize_path(trim_separators(&mv.src_abs));
         // One behavior, no tiers (AC-58): the moved project's own transcripts are rewritten.
         // The old Minimal tier renamed the dir and rewrote nothing, so Standard verification
         // always failed it; Full rewrote nested sidecars that verification and (pre-AC-54)
@@ -378,23 +449,39 @@ impl Store for ClaudeProjects {
                 })?;
                 // Verification requires every line to parse, so apply could only fail and roll
                 // back. Keep the promise that plan shows what apply will do.
-                let broken = text.lines().position(|l| {
-                    !l.trim().is_empty() && serde_json::from_str::<serde_json::Value>(l).is_err()
-                });
-                if let Some(at) = broken {
-                    return Err(AwtError::UnrecognizedFormat(format!(
-                        "{}: line {} is not valid JSON, so this transcript cannot be verified \
-                         after a move. Repair or remove that line, then re-run",
-                        child.display(),
-                        at + 1
-                    )));
+                // A transcript also records paths as Claude Code spelled them, and the drive
+                // letter's case or the separators can differ from what was typed. Rewriting only
+                // the typed spelling would leave the old path behind.
+                let mut rules = typed_rules.clone();
+                for (at, line) in text.lines().enumerate() {
+                    if line.trim().is_empty() {
+                        continue;
+                    }
+                    let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+                        return Err(AwtError::UnrecognizedFormat(format!(
+                            "{}: line {} is not valid JSON, so this transcript cannot be verified \
+                             after a move. Repair or remove that line, then re-run",
+                            child.display(),
+                            at + 1
+                        )));
+                    };
+                    let Some(cwd) = v.get("cwd").and_then(|c| c.as_str()) else {
+                        continue;
+                    };
+                    if cwd != mv.src_abs && normalize_path(trim_separators(cwd)) == src_key {
+                        for rule in build_path_rules(cwd, &mv.dst_abs) {
+                            if !rules.iter().any(|r| r.find == rule.find) {
+                                rules.push(rule);
+                            }
+                        }
+                    }
                 }
                 let (_, n) = anchored_rewrite(text, &rules);
                 // the file lives under the NEW dir after the rename; path is post-rename
                 let post = new_dir.join(child.file_name().unwrap());
                 changes.push(Change::RewriteFile {
                     path: post,
-                    rules: rules.clone(),
+                    rules,
                     expected: n,
                 });
             }
@@ -407,7 +494,7 @@ impl Store for ClaudeProjects {
             .home
             .join(".claude")
             .join("projects")
-            .join(encode_project_dir(&mv.dst_abs));
+            .join(encode_project_dir(trim_separators(&mv.dst_abs)));
         // AR-02: a project whose transcripts have expired has no directory to relocate, so
         // demanding that the destination directory exist would fail a migration that is in
         // fact complete. Tell "nothing to move" apart from "the move did not happen" by
@@ -417,11 +504,11 @@ impl Store for ClaudeProjects {
         // this check still catches it. AR-10: "the source" means a folder this project owns.
         // One that only shares its encoded name was never planned to move, so it stays.
         let new_exists = ctx.fs.is_dir(&new_dir);
-        let old_is_ours = matches!(
-            Self::name_match(ctx, &mv.src_abs)?,
-            NameMatch::Ours { .. } | NameMatch::Contested { .. }
-        );
-        let had_transcripts = new_exists || old_is_ours;
+        let old_dir = match Self::name_match(ctx, &mv.src_abs)? {
+            NameMatch::Ours { dir, .. } | NameMatch::Contested { dir, .. } => Some(dir),
+            _ => None,
+        };
+        let had_transcripts = new_exists || old_dir.is_some();
         let mut out = vec![VerifyResult {
             check: "new projects dir exists".into(),
             ok: new_exists || !had_transcripts,
@@ -431,19 +518,31 @@ impl Store for ClaudeProjects {
                 format!("{} (no transcripts for this project)", new_dir.display())
             },
         }];
-        // A folder at each name means a rename or merge did not happen. The check above cannot
-        // see that, because the new name can already exist. A rename that keeps the encoded
-        // name has one folder, which is both.
+        // A folder with files at each name means a rename or merge did not happen. The check
+        // above cannot see that, because the new name can already exist. A rename that keeps the
+        // encoded name has one folder, which is both. An empty folder at the old name moved
+        // nothing back: a running session can recreate one the moment it vanishes.
         let same_name = encode_project_dir(trim_separators(&mv.src_abs))
             .eq_ignore_ascii_case(&encode_project_dir(trim_separators(&mv.dst_abs)));
-        if new_exists && old_is_ours && !same_name {
+        let old_holds_files = old_dir
+            .as_ref()
+            .is_some_and(|d| !crate::fs::walk_files(ctx.fs, d).is_empty());
+        if new_exists && old_holds_files && !same_name {
             out.push(VerifyResult {
                 check: "old projects dir gone".into(),
                 ok: false,
                 detail: format!("the folder for {} is still there", mv.src_abs),
             });
         }
-        let old_cwd = format!(r#""cwd":"{}""#, mv.src_abs.replace('\\', "\\\\"));
+        // Any spelling counts as stale: a drive letter's case or the separators can differ from
+        // what was typed. Only a case-only rename leaves the two paths equal under this test.
+        let spellings_differ = normalize_path(trim_separators(&mv.src_abs))
+            != normalize_path(trim_separators(&mv.dst_abs));
+        let lower = trim_separators(&mv.src_abs).to_lowercase();
+        let old_cwds = [
+            format!(r#""cwd":"{}""#, lower.replace('\\', "\\\\")),
+            format!(r#""cwd":"{}""#, lower.replace('\\', "/")),
+        ];
         let mut stale = 0usize;
         // A read_dir failure here is a verification failure, not emptiness (AC-59): "the
         // transcripts could not be read" must never verify as "zero stale transcripts". A
@@ -469,7 +568,13 @@ impl Store for ClaudeProjects {
                 let text = std::str::from_utf8(&bytes).map_err(|e| {
                     AwtError::UnrecognizedFormat(format!("{}: {e}", child.display()))
                 })?;
-                stale += text.matches(&old_cwd).count();
+                if spellings_differ {
+                    let folded = text.to_lowercase();
+                    stale += old_cwds
+                        .iter()
+                        .map(|c| folded.matches(c.as_str()).count())
+                        .sum::<usize>();
+                }
                 for l in text.lines() {
                     if !l.trim().is_empty() && serde_json::from_str::<serde_json::Value>(l).is_err()
                     {

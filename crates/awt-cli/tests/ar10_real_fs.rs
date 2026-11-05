@@ -259,6 +259,169 @@ fn a_trailing_dot_component_still_migrates_state() {
 
 #[cfg(windows)]
 #[test]
+fn a_verbatim_prefix_still_migrates_state() {
+    spelled_move(|p| format!(r"\\?\{p}"));
+}
+
+#[test]
+fn a_second_move_after_awt_moved_a_session_folder_takes_everything() {
+    // AC-58 leaves nested transcripts unrewritten, so the first move creates residue.
+    let fx = Fixture::new();
+    let first = fx.project("first");
+    let second = fx.path_of("second");
+    let third = fx.path_of("third");
+    fx.seed(&first, "memory/MEMORY.md", b"m");
+    let nested = format!("{{\"cwd\":\"{}\"}}\n", first.replace('\\', "\\\\"));
+    fx.seed(&first, "sess/subagents/agent.jsonl", nested.as_bytes());
+
+    let out = fx.apply(&first, &second);
+    assert!(out.status.success(), "first: {}", show(&out));
+    let out = fx.apply(&second, &third);
+    assert!(out.status.success(), "second: {}", show(&out));
+
+    assert!(fx
+        .state_dir(&third)
+        .join("memory")
+        .join("MEMORY.md")
+        .exists());
+    assert!(!fx.state_dir(&second).exists(), "{}", show(&out));
+}
+
+#[test]
+fn a_typed_case_variant_rewrites_the_stored_cwd() {
+    let fx = Fixture::new();
+    let src = fx.project("proj");
+    let dst = fx.path_of("moved");
+    let transcript = format!("{{\"cwd\":\"{}\"}}\n", src.replace('\\', "\\\\"));
+    fx.seed(&src, "s.jsonl", transcript.as_bytes());
+    let typed = fx.path_of("PROJ");
+
+    let out = fx.apply(&typed, &dst);
+
+    assert!(out.status.success(), "{}", show(&out));
+    let moved = std::fs::read_to_string(fx.state_dir(&dst).join("s.jsonl")).unwrap();
+    assert!(moved.contains("moved"), "{moved}");
+    assert!(!moved.to_lowercase().contains("proj"), "{moved}");
+}
+
+#[test]
+fn a_stored_forward_slash_cwd_is_rewritten() {
+    let fx = Fixture::new();
+    let src = fx.project("proj");
+    let dst = fx.path_of("moved");
+    let transcript = format!("{{\"cwd\":\"{}\"}}\n", src.replace('\\', "/"));
+    fx.seed(&src, "s.jsonl", transcript.as_bytes());
+
+    let out = fx.apply(&src, &dst);
+
+    assert!(out.status.success(), "{}", show(&out));
+    let moved = std::fs::read_to_string(fx.state_dir(&dst).join("s.jsonl")).unwrap();
+    assert!(moved.contains("moved"), "{moved}");
+    assert!(!moved.contains("proj"), "{moved}");
+}
+
+#[test]
+fn every_command_takes_a_trailing_separator() {
+    let fx = Fixture::new();
+    let src = fx.project("proj");
+    let dst = fx.path_of("moved");
+    fx.seed(&src, "memory/MEMORY.md", b"m");
+    let home = fx.home.path().to_str().unwrap();
+    let sep = std::path::MAIN_SEPARATOR;
+    let (src_sep, dst_sep) = (format!("{src}{sep}"), format!("{dst}{sep}"));
+
+    let out = awt(&["scan", "--home", home, "--src", &src_sep]);
+    assert!(
+        String::from_utf8_lossy(&out.stdout).contains(&encode(&src)),
+        "scan: {}",
+        show(&out)
+    );
+
+    let out = fx.plan(&src_sep, &dst_sep);
+    assert!(out.status.success(), "plan: {}", show(&out));
+    assert!(
+        String::from_utf8_lossy(&out.stdout).contains(&encode(&dst)),
+        "plan: {}",
+        show(&out)
+    );
+    assert!(
+        !String::from_utf8_lossy(&out.stdout).contains(&format!("{}-", encode(&dst))),
+        "plan: {}",
+        show(&out)
+    );
+
+    let out = fx.apply(&src, &dst);
+    assert!(out.status.success(), "apply: {}", show(&out));
+
+    let out = awt(&[
+        "verify", "--home", home, "--src", &src_sep, "--dst", &dst_sep,
+    ]);
+    assert!(out.status.success(), "verify: {}", show(&out));
+}
+
+#[test]
+fn associate_takes_a_trailing_separator_and_prints_the_warning() {
+    let fx = Fixture::new();
+    let src = fx.path_of("gone");
+    let to = fx.project("to");
+    fx.seed(&src, "memory/MEMORY.md", b"m");
+    let json = format!(
+        "{{\"projects\":{{{}:{{}}}}}}",
+        serde_json::Value::String(src.clone())
+    );
+    std::fs::write(fx.home.path().join(".claude.json"), json).unwrap();
+    let sep = std::path::MAIN_SEPARATOR;
+
+    let out = awt(&[
+        "associate",
+        "--home",
+        fx.home.path().to_str().unwrap(),
+        "--from",
+        &format!("{src}{sep}"),
+        "--to",
+        &format!("{to}{sep}"),
+    ]);
+
+    assert!(out.status.success(), "{}", show(&out));
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("folder name"),
+        "{}",
+        show(&out)
+    );
+    assert!(fx.state_dir(&to).join("memory").join("MEMORY.md").exists());
+}
+
+#[test]
+fn an_empty_export_folder_is_not_reported_as_an_export() {
+    let fx = Fixture::new();
+    let src = fx.path_of("gone");
+    let to = fx.project("to");
+    fx.seed(&src, "memory/MEMORY.md", b"m");
+    let json = format!(
+        "{{\"projects\":{{{}:{{}}}}}}",
+        serde_json::Value::String(src.clone())
+    );
+    std::fs::write(fx.home.path().join(".claude.json"), json).unwrap();
+    std::fs::create_dir_all(Path::new(&to).join(".claude-sessions")).unwrap();
+
+    let out = awt(&[
+        "--json",
+        "associate",
+        "--home",
+        fx.home.path().to_str().unwrap(),
+        "--from",
+        &src,
+        "--to",
+        &to,
+    ]);
+
+    assert!(out.status.success(), "{}", show(&out));
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert!(doc["export"].is_null(), "{}", show(&out));
+}
+
+#[cfg(windows)]
+#[test]
 fn forward_slashes_still_migrate_state() {
     spelled_move(|p| p.replace('\\', "/"));
 }

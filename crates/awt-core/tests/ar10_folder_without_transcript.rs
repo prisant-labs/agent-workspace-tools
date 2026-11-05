@@ -585,6 +585,7 @@ fn a_lookalike_differing_also_in_case_still_counts() {
 fn a_nested_transcript_naming_another_path_keeps_the_folder_with_it() {
     let fs = MemoryFileSystem::new();
     seed_source(&fs);
+    write(&fs, "E:/foo_bar/k.txt", b"x");
     let line = cwd_line("E:\\foo_bar");
     write(
         &fs,
@@ -933,4 +934,425 @@ fn a_rename_with_the_same_encoded_name_rewrites_in_place() {
     rollback(Path::new("/backup/awt-T/manifest.json"), &fs).unwrap();
     assert_eq!(fs.read(Path::new(transcript)).unwrap(), before.as_bytes());
     assert!(exists(&fs, "E:/foo_bar/f.txt"));
+}
+
+// ---------------------------------------------------------------------------
+// Round three: nested evidence is residue unless it is a live look-alike
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_nested_transcript_naming_an_older_home_does_not_strand_the_folder() {
+    // Nested transcripts are never rewritten, so awt's own first move creates this shape.
+    let fs = MemoryFileSystem::new();
+    write(&fs, "E:/second/f.txt", b"x");
+    write(&fs, "/h/.claude/projects/E--second/memory/M.md", b"m");
+    write(
+        &fs,
+        "/h/.claude/projects/E--second/sess/subagents/a.jsonl",
+        cwd_line("E:\\first").as_bytes(),
+    );
+
+    let plan = run_move(&fs, "E:\\second", "E:\\third");
+
+    assert!(exists(&fs, "/h/.claude/projects/E--third/memory/M.md"));
+    assert!(exists(
+        &fs,
+        "/h/.claude/projects/E--third/sess/subagents/a.jsonl"
+    ));
+    assert!(!fs.is_dir(Path::new("/h/.claude/projects/E--second")));
+    assert!(
+        plan.warnings.iter().any(|w| w.contains("folder name")),
+        "the name is still the only link to this path: {:?}",
+        plan.warnings
+    );
+}
+
+#[test]
+fn a_nested_dead_lookalike_that_nothing_knows_is_not_a_rival() {
+    // A rename that keeps the encoded name leaves exactly this behind in nested files.
+    let fs = MemoryFileSystem::new();
+    seed_source(&fs);
+    write(
+        &fs,
+        &format!("{LOOKALIKE}/sess/a.jsonl"),
+        cwd_line("E:\\foo_bar").as_bytes(),
+    );
+
+    run_move(&fs, SRC, "E:\\baz");
+
+    assert!(exists(&fs, "/h/.claude/projects/E--baz/sess/a.jsonl"));
+}
+
+#[test]
+fn a_nested_transcript_naming_this_path_and_a_live_lookalike_refuses() {
+    let fs = MemoryFileSystem::new();
+    seed_source(&fs);
+    write(&fs, "E:/foo-bar/k.txt", b"x");
+    write(
+        &fs,
+        &format!("{LOOKALIKE}/s1/a.jsonl"),
+        cwd_line(SRC).as_bytes(),
+    );
+    write(
+        &fs,
+        &format!("{LOOKALIKE}/s2/a.jsonl"),
+        cwd_line("E:\\foo-bar").as_bytes(),
+    );
+
+    let err = plan_move(&fs, SRC, "E:\\baz").unwrap_err();
+
+    assert!(matches!(err, AwtError::Ambiguous(_)), "{err:?}");
+}
+
+#[test]
+fn a_nested_transcript_naming_this_path_needs_no_warning() {
+    let fs = MemoryFileSystem::new();
+    write(&fs, "E:/Projects/A/f.txt", b"x");
+    write(
+        &fs,
+        "/h/.claude/projects/E--Projects-A/sess/a.jsonl",
+        cwd_line("E:\\Projects\\A").as_bytes(),
+    );
+
+    let plan = plan_move(&fs, "E:\\Projects\\A", "E:\\Projects\\B").unwrap();
+
+    assert!(plan.warnings.is_empty(), "{:?}", plan.warnings);
+    assert!(plan
+        .changes
+        .iter()
+        .any(|c| matches!(c, Change::RenameDir { from, .. } if from.ends_with("E--Projects-A"))));
+}
+
+#[test]
+fn a_link_inside_the_folder_is_not_scanned_for_evidence() {
+    let fs = MemoryFileSystem::new();
+    seed_source(&fs);
+    write(&fs, &format!("{LOOKALIKE}/memory/M.md"), b"m");
+    write(&fs, "E:/foo-bar/k.txt", b"x");
+    write(
+        &fs,
+        &format!("{LOOKALIKE}/link/a.jsonl"),
+        cwd_line("E:\\foo-bar").as_bytes(),
+    );
+    fs.mark_reparse(Path::new(&format!("{LOOKALIKE}/link")));
+
+    let hits = scan(&fs, Path::new(HOME), SRC).unwrap().hits;
+
+    assert!(
+        hits.iter().any(|h| h.detail.contains("folder name")),
+        "{hits:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Round three: every recorded spelling is rewritten and verified
+// ---------------------------------------------------------------------------
+
+fn transcript_after(fs: &MemoryFileSystem, dir: &str) -> String {
+    String::from_utf8(
+        fs.read(Path::new(&format!("/h/.claude/projects/{dir}/s.jsonl")))
+            .unwrap(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn a_differently_cased_typed_path_still_rewrites_the_stored_cwd() {
+    let fs = MemoryFileSystem::new();
+    write(&fs, "E:/New/B/keep.txt", b"x");
+    write(
+        &fs,
+        "/h/.claude/projects/E--Old-A/s.jsonl",
+        cwd_line("E:\\Old\\A").as_bytes(),
+    );
+
+    associate(
+        &fs,
+        Path::new(HOME),
+        "e:\\OLD\\a",
+        "E:\\New\\B",
+        &reassociate_only(),
+    )
+    .unwrap();
+
+    let after = transcript_after(&fs, "E--New-B");
+    assert!(after.contains("E:\\\\New\\\\B"), "{after}");
+    assert!(!after.to_lowercase().contains("old"), "{after}");
+}
+
+#[test]
+fn a_transcript_mixing_spellings_has_all_of_them_rewritten() {
+    let fs = MemoryFileSystem::new();
+    write(&fs, "E:/New/B/keep.txt", b"x");
+    let mixed = format!(
+        "{}{}{}",
+        cwd_line("E:\\Old\\A"),
+        cwd_line("e:\\old\\a"),
+        "{\"type\":\"user\",\"cwd\":\"E:/Old/A\"}\n"
+    );
+    write(
+        &fs,
+        "/h/.claude/projects/E--Old-A/s.jsonl",
+        mixed.as_bytes(),
+    );
+
+    associate(
+        &fs,
+        Path::new(HOME),
+        "E:\\Old\\A",
+        "E:\\New\\B",
+        &reassociate_only(),
+    )
+    .unwrap();
+
+    let after = transcript_after(&fs, "E--New-B");
+    assert!(!after.to_lowercase().contains("old"), "{after}");
+}
+
+#[test]
+fn verify_catches_a_stale_cwd_in_another_spelling() {
+    let fs = MemoryFileSystem::new();
+    write(&fs, "E:/Projects/A/f.txt", b"x");
+    write(
+        &fs,
+        "/h/.claude/projects/E--Projects-A/s.jsonl",
+        cwd_line("e:\\projects\\a").as_bytes(),
+    );
+
+    let mut plan = plan_move(&fs, "E:\\Projects\\A", "E:\\Projects\\B").unwrap();
+    plan.changes
+        .retain(|c| !matches!(c, Change::RewriteFile { .. }));
+
+    let err = apply_verified(&plan, &fs, Path::new("/backup"), &apply_opts()).unwrap_err();
+
+    assert!(err.to_string().contains("zero old cwd"), "{err}");
+    assert!(err.to_string().contains("rolled back"), "{err}");
+}
+
+#[test]
+fn verify_catches_a_stale_forward_slash_cwd() {
+    let fs = MemoryFileSystem::new();
+    write(&fs, "E:/Projects/A/f.txt", b"x");
+    write(
+        &fs,
+        "/h/.claude/projects/E--Projects-A/s.jsonl",
+        b"{\"cwd\":\"E:/Projects/A\"}\n",
+    );
+
+    let mut plan = plan_move(&fs, "E:\\Projects\\A", "E:\\Projects\\B").unwrap();
+    plan.changes
+        .retain(|c| !matches!(c, Change::RewriteFile { .. }));
+
+    let err = apply_verified(&plan, &fs, Path::new("/backup"), &apply_opts()).unwrap_err();
+
+    assert!(err.to_string().contains("zero old cwd"), "{err}");
+}
+
+// ---------------------------------------------------------------------------
+// Round three: smaller gaps
+// ---------------------------------------------------------------------------
+
+#[test]
+fn an_empty_folder_at_the_old_name_does_not_fail_verification() {
+    // A running session can recreate the folder the moment it vanishes.
+    let fs = MemoryFileSystem::new();
+    write(&fs, "E:/Projects/A/f.txt", b"x");
+    write(&fs, "/h/.claude/projects/E--Projects-A/memory/M.md", b"m");
+    run_move(&fs, "E:\\Projects\\A", "E:\\Projects\\B");
+    fs.create_dir_all(Path::new("/h/.claude/projects/E--Projects-A"))
+        .unwrap();
+
+    let mv = Move {
+        src_abs: "E:\\Projects\\A".into(),
+        dst_abs: "E:\\Projects\\B".into(),
+    };
+    let results = awt_core::verify::verify(&fs, Path::new(HOME), &mv, None, None).unwrap();
+
+    assert!(results.iter().all(|r| r.ok), "{results:?}");
+}
+
+#[test]
+fn plugin_state_is_enough_to_know_the_path() {
+    let fs = MemoryFileSystem::new();
+    write(&fs, "E:/New/B/keep.txt", b"x");
+    write(&fs, "/h/.claude/projects/E--Old-A/memory/M.md", b"m");
+    let hash = awt_core::stores::plugin_state::state_hash("E:\\Old\\A");
+    write(
+        &fs,
+        &format!("/h/.claude/plugins/data/p/state/A-{hash}/state.json"),
+        b"{}",
+    );
+
+    associate(
+        &fs,
+        Path::new(HOME),
+        "E:\\Old\\A",
+        "E:\\New\\B",
+        &reassociate_only(),
+    )
+    .unwrap();
+
+    assert!(exists(&fs, "/h/.claude/projects/E--New-B/memory/M.md"));
+}
+
+#[test]
+fn a_contested_destination_refuses() {
+    let fs = MemoryFileSystem::new();
+    write(&fs, "E:/Projects/A/f.txt", b"x");
+    write(&fs, "/h/.claude/projects/E--Projects-A/memory/A.md", b"a");
+    write(
+        &fs,
+        "/h/.claude/projects/E--b-c/a.jsonl",
+        cwd_line("E:\\b-c").as_bytes(),
+    );
+    write(
+        &fs,
+        "/h/.claude/projects/E--b-c/b.jsonl",
+        cwd_line("E:\\b_c").as_bytes(),
+    );
+
+    let err = plan_move(&fs, "E:\\Projects\\A", "E:\\b-c").unwrap_err();
+
+    assert!(matches!(err, AwtError::DestinationExists(_)), "{err:?}");
+}
+
+#[test]
+fn a_destination_folder_with_an_older_home_still_merges() {
+    // Its transcript names a path that encodes differently, so no look-alike owns it.
+    let fs = MemoryFileSystem::new();
+    write(&fs, "E:/Projects/A/f.txt", b"x");
+    write(&fs, "/h/.claude/projects/E--Projects-A/memory/A.md", b"a");
+    write(
+        &fs,
+        "/h/.claude/projects/E--Projects-B/s.jsonl",
+        cwd_line("E:\\Older\\Z").as_bytes(),
+    );
+
+    run_move(&fs, "E:\\Projects\\A", "E:\\Projects\\B");
+
+    assert!(exists(&fs, "/h/.claude/projects/E--Projects-B/memory/A.md"));
+}
+
+#[test]
+fn a_folder_resolved_to_a_live_project_stays_even_if_it_mentions_this_path() {
+    // Two recorded paths, and only E:\Live\Z exists, so the index gives the folder to it.
+    let fs = MemoryFileSystem::new();
+    write(&fs, "E:/Live/Z/k.txt", b"x");
+    write(&fs, "/h/.claude.json", br#"{"projects":{"E:/Old/A":{}}}"#);
+    let dir = "/h/.claude/projects/E--Old-A";
+    write(
+        &fs,
+        &format!("{dir}/a.jsonl"),
+        cwd_line("E:\\Live\\Z").as_bytes(),
+    );
+    write(
+        &fs,
+        &format!("{dir}/b.jsonl"),
+        cwd_line("E:\\Old\\A").as_bytes(),
+    );
+
+    let hits = scan(&fs, Path::new(HOME), "E:\\Old\\A").unwrap().hits;
+
+    assert!(
+        !hits.iter().any(|h| h.store == "claude.projects"),
+        "{hits:?}"
+    );
+}
+
+#[test]
+fn a_blank_line_in_a_transcript_does_not_refuse() {
+    let fs = MemoryFileSystem::new();
+    write(&fs, "E:/Projects/A/f.txt", b"x");
+    let body = format!("{}\n   \n", cwd_line("E:\\Projects\\A"));
+    write(
+        &fs,
+        "/h/.claude/projects/E--Projects-A/s.jsonl",
+        body.as_bytes(),
+    );
+
+    run_move(&fs, "E:\\Projects\\A", "E:\\Projects\\B");
+
+    assert!(exists(&fs, "/h/.claude/projects/E--Projects-B/s.jsonl"));
+}
+
+#[test]
+fn a_child_key_with_no_state_folder_does_not_block_the_parent() {
+    let fs = MemoryFileSystem::new();
+    write(&fs, "E:/Projects/A/child/f.txt", b"x");
+    write(
+        &fs,
+        "/h/.claude.json",
+        br#"{"projects":{"E:/Projects/A/child":{}}}"#,
+    );
+
+    plan_move(&fs, "E:\\Projects\\A", "E:\\Projects\\B").unwrap();
+}
+
+#[test]
+fn a_dead_child_key_does_not_block_the_parent() {
+    let fs = MemoryFileSystem::new();
+    write(&fs, "E:/Projects/A/f.txt", b"x");
+    write(
+        &fs,
+        "/h/.claude/projects/E--Projects-A-child/memory/M.md",
+        b"m",
+    );
+    write(
+        &fs,
+        "/h/.claude.json",
+        br#"{"projects":{"E:/Projects/A/child":{}}}"#,
+    );
+
+    plan_move(&fs, "E:\\Projects\\A", "E:\\Projects\\B").unwrap();
+}
+
+#[test]
+fn a_child_whose_folder_belongs_to_a_lookalike_does_not_block_the_parent() {
+    let fs = MemoryFileSystem::new();
+    write(&fs, "E:/Projects/A/child/f.txt", b"x");
+    write(
+        &fs,
+        "/h/.claude.json",
+        br#"{"projects":{"E:/Projects/A/child":{}}}"#,
+    );
+    write(
+        &fs,
+        "/h/.claude/projects/E--Projects-A-child/s.jsonl",
+        cwd_line("E:\\Projects\\A-child").as_bytes(),
+    );
+
+    plan_move(&fs, "E:\\Projects\\A", "E:\\Projects\\B").unwrap();
+}
+
+#[test]
+fn a_same_name_rename_of_a_memory_only_project_works() {
+    let fs = MemoryFileSystem::new();
+    write(&fs, "E:/foo_bar/f.txt", b"x");
+    write(&fs, "/h/.claude/projects/E--foo-bar/memory/M.md", b"m");
+
+    run_move(&fs, "E:\\foo_bar", "E:\\foo-bar");
+
+    assert!(exists(&fs, "/h/.claude/projects/E--foo-bar/memory/M.md"));
+    assert!(exists(&fs, "E:/foo-bar/f.txt"));
+}
+
+#[test]
+fn a_path_known_only_by_its_folder_name_gets_no_warning_when_it_is_left() {
+    // A look-alike owns it and this project has its own transcript folder: nothing to say.
+    let fs = MemoryFileSystem::new();
+    seed_source(&fs);
+    write(
+        &fs,
+        "/h/.claude/projects/E--own/s.jsonl",
+        cwd_line(SRC).as_bytes(),
+    );
+    write(
+        &fs,
+        &format!("{LOOKALIKE}/s.jsonl"),
+        cwd_line("E:\\foo-bar").as_bytes(),
+    );
+
+    let plan = plan_move(&fs, SRC, "E:\\baz").unwrap();
+
+    assert!(plan.warnings.is_empty(), "{:?}", plan.warnings);
 }
