@@ -85,6 +85,11 @@ fn is_awt_entry(entry: &serde_json::Value) -> bool {
         .unwrap_or(false)
 }
 
+/// Seconds a `SessionEnd` hook may run. Claude Code gives that event a 1.5-second default
+/// budget, and a per-hook `timeout` raises it to at most 60 seconds. A full session copy
+/// can take longer than 1.5 seconds, so the hook asks for the maximum.
+const HOOK_TIMEOUT_SECS: u32 = 60;
+
 /// Install a SessionEnd hook in ~/.claude/settings.json.
 /// The installed command reads hook context from stdin as JSON (Claude Code's confirmed
 /// contract) rather than env vars, and archives the transcript to archive_dir.
@@ -103,7 +108,7 @@ pub fn install_session_end_hook(
     );
     let new_entry = serde_json::json!({
         "matcher": "",
-        "hooks": [{"type": "command", "command": cmd}]
+        "hooks": [{"type": "command", "command": cmd, "timeout": HOOK_TIMEOUT_SECS}]
     });
     if let Some(arr) = v
         .get_mut("hooks")
@@ -178,6 +183,68 @@ mod tests {
             !cmd.contains("$CLAUDE_SESSION_ID"),
             "installed command must not reference $CLAUDE_SESSION_ID; got: {cmd}"
         );
+    }
+
+    /// Claude Code gives `SessionEnd` hooks 1.5 seconds unless the hook sets `timeout`.
+    #[test]
+    fn install_hook_sets_the_sixty_second_timeout() {
+        let fs = MemoryFileSystem::new();
+        install_session_end_hook(
+            &fs,
+            Path::new("/h"),
+            Path::new("/usr/bin/awt"),
+            Path::new("/archive"),
+        )
+        .unwrap();
+        let v: serde_json::Value =
+            serde_json::from_slice(&fs.read(Path::new("/h/.claude/settings.json")).unwrap())
+                .unwrap();
+        assert_eq!(v["hooks"]["SessionEnd"][0]["hooks"][0]["timeout"], 60);
+    }
+
+    /// Re-running the install replaces an older entry that has no timeout, so existing
+    /// hook users get the timeout by installing again. Other entries survive.
+    #[test]
+    fn reinstall_replaces_an_old_entry_and_adds_the_timeout() {
+        let fs = MemoryFileSystem::new();
+        let old = serde_json::json!({
+            "hooks": {
+                "SessionEnd": [
+                    {
+                        "matcher": "",
+                        "hooks": [{"type": "command", "command": "awt archive --hook-stdin --archive-dir \"/old\""}]
+                    },
+                    {
+                        "matcher": "",
+                        "hooks": [{"type": "command", "command": "my-other-tool"}]
+                    }
+                ]
+            }
+        });
+        fs.write(
+            Path::new("/h/.claude/settings.json"),
+            serde_json::to_vec_pretty(&old).unwrap().as_slice(),
+        )
+        .unwrap();
+        install_session_end_hook(
+            &fs,
+            Path::new("/h"),
+            Path::new("/usr/bin/awt"),
+            Path::new("/new"),
+        )
+        .unwrap();
+        let v: serde_json::Value =
+            serde_json::from_slice(&fs.read(Path::new("/h/.claude/settings.json")).unwrap())
+                .unwrap();
+        let arr = v["hooks"]["SessionEnd"].as_array().unwrap();
+        assert_eq!(arr.len(), 2, "old awt entry replaced, user entry kept");
+        assert_eq!(arr[0]["hooks"][0]["command"], "my-other-tool");
+        let new_cmd = arr[1]["hooks"][0]["command"].as_str().unwrap();
+        assert!(
+            new_cmd.contains("/new") && !new_cmd.contains("/old"),
+            "{new_cmd}"
+        );
+        assert_eq!(arr[1]["hooks"][0]["timeout"], 60);
     }
 
     // --- Finding 1 test: legacy hook is also recognized and removed ---
