@@ -13,7 +13,7 @@ Read these files first, in this order:
 
 These rules are load-bearing. Violating any one invalidates correctness guarantees for the whole tool.
 
-**Encoding.** `encode_project_dir(abs)` replaces every non-`[A-Za-z0-9]` character with `-`, including dots. The encoding is lossy and forward-only: `a-b`, `a.b`, `a\b`, and `a_b` all encode identically. Never look up an existing project dir by computing `encode(src)`. Instead, build a reverse index by reading the `cwd` stored inside transcripts and mapping `normalize(cwd)` to dirs.
+**Encoding.** `encode_project_dir(abs)` replaces every non-`[A-Za-z0-9]` character with `-`, including dots. The encoding is lossy and forward-only: `a-b`, `a.b`, `a\b`, and `a_b` all encode identically. Never look up an existing project dir by computing `encode(src)`. Instead, build a reverse index by reading the `cwd` stored inside transcripts and mapping `normalize(cwd)` to dirs. The one exception is `ClaudeProjects::name_match`, for a dir no transcript resolves (AR-10). It refuses a dir that anything ties to another path. Do not add a second lookup by name, and route any change through that function, because `detect` and `verify` must agree.
 
 **Parse to validate, never to write.** Call `serde_json::from_str` to confirm the shape of a store file, discard the result, and write by literal boundary-anchored, count-checked byte splice. NEVER re-serialize a store file. Re-serializing reformats whitespace and defeats verification.
 

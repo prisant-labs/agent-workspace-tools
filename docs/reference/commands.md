@@ -24,7 +24,7 @@ These flags are accepted by every subcommand.
 |---|---|
 | 0 | Success |
 | 1 | I/O error (catch-all for file-system failures), including a failed write into the archive folder on a full `awt archive` sweep or a `--session` run |
-| 2 | Guard tripped - nothing was written. Conditions that produce exit 2: destination path already exists, a plugin-state folder already occupies its rename destination, the `list --html` target already exists, the source folder is missing, nested projects live under the source, source is a worktree, an IDE lock file exists under `~/.claude/ide/`, an ambiguous reference was found, an archive folder contains the Claude data, an export-only `associate` has no readable transcript that resolves the project, or a flag combination leaves nothing to do |
+| 2 | Guard tripped - nothing was written. Conditions that produce exit 2: destination path already exists, both project folders of a merge hold the same file, the destination's project folder belongs to a look-alike path, a plugin-state folder already occupies its rename destination, the `list --html` target already exists, the source folder is missing, nested projects live under the source, source is a worktree, an IDE lock file exists under `~/.claude/ide/`, an ambiguous reference was found, an archive folder contains the Claude data, an export-only `associate` has no readable transcript that resolves the project, or a flag combination leaves nothing to do |
 | 3 | Verify failed - apply ran but at least one postcondition check failed; auto-rollback was attempted |
 | 4 | Unrecognized format - a store contained a shape the tool does not know how to rewrite; no writes were made |
 
@@ -324,7 +324,14 @@ With re-association on, the plan is built before the export. A plan refusal exit
 
 With `--no-reassociate`, that same case refuses with exit 2 and says that nothing was exported. The command never prints an export path over an empty folder.
 
-**Known limit (AR-10, project folder with no readable transcript).** If `~/.claude/projects/<enc>/` still exists but holds no transcript that names the old path, re-association exits 3 and rolls back. A folder that holds only `memory/` is the usual case. `awt apply` fails the same way. Nothing is lost, because the rollback restores every file. A project with no such folder at all is re-associated normally.
+**A project folder with no readable transcript.** A folder under `~/.claude/projects/` can hold only `memory/`, only session folders, or transcripts with no `cwd`. `awt plan`, `apply` and `associate` then decide by the folder's encoded name, which is lossy, so a name alone is not enough:
+
+- **The folder moves** if the path is known: the source folder exists, or `~/.claude.json`, `history.jsonl`, plugin state or the folder's own nested transcripts record the path. awt warns when the name was the only link.
+- **The folder stays,** with a warning, if something ties it to another path. That means a transcript, or another recorded path with the same encoded name. The move itself still goes ahead.
+- **The command exits 2** if two look-alike paths both claim the folder, or if the destination's folder belongs to a look-alike.
+- **`associate` exits 2** if nothing records the path at all, so a typo cannot take another project's folder.
+
+**One limit remains.** awt cannot see a look-alike project that nothing records. If `E:\foo_bar` exists and no file names it, moving `E:\foo-bar` can take a memory-only folder that was really `foo_bar`'s. Read the warning, and use `awt rollback` if the folder was not this project's.
 
 
 **Output:** `associate complete: N changes applied`.

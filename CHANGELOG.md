@@ -20,10 +20,10 @@ the CLI does and no v1.0.0 tag existed yet to freeze against.
 The dating of this section is deferred to the tag. The v1 safety closeout (S-04) completed
 2026-07-31, including a passing adversarial acceptance run. That run was repeated on 2026-11-04,
 because clap and the rollback engine changed after it. The AR-09 (archive scope defect) fix is
-merged, and the archive steps passed on the merged build on 2026-11-05. The tag now waits on three
-maintainer steps: the spec sign-off (S-01, the mover CLI spec), the fixture-history decision (D10),
-and a decision on AR-10 (a project folder with no readable transcript cannot be moved). See
-`docs/internal/maintainer-todo.md` section 1.
+merged, and the archive steps passed on the merged build on 2026-11-05. AR-10 (a project folder
+with no readable transcript could not be moved) is fixed, and its acceptance run passed. The tag
+now waits on two maintainer steps: the spec sign-off (S-01, the mover CLI spec) and the
+fixture-history decision (D10). See `docs/internal/maintainer-todo.md` section 1.
 
 ### Added
 
@@ -115,6 +115,27 @@ and a decision on AR-10 (a project folder with no readable transcript cannot be 
 
 ### Fixed
 
+- **A project folder with no readable transcript now moves with its project.** A folder holding
+  only `memory/`, only session folders, or a transcript with no `cwd` used to make `apply` and
+  `associate` exit 3 and roll back. The folder now moves when its encoded name matches a path awt
+  knows is real, and awt warns that the name was the only link. If something ties the folder to
+  another path, it stays put and awt says so. If two look-alike paths both claim it, awt refuses
+  with exit 2.
+- **`apply` and `associate` now show the plan's warnings.** They appeared only in `plan` before. They
+  go to stderr, and into a `warnings` field of the report when there are any.
+- **A path's spelling no longer changes the result.** A trailing separator, a trailing `\.`, forward
+  slashes or a `\\?\` prefix on `--src` or `--dst` could pass verification with state left behind.
+  A typed path that differs from the stored one in case now rewrites the stored spelling too.
+- **`plan` now refuses what `apply` could not do.** That covers a transcript with a broken line
+  (exit 4), a file on both sides of a folder merge, a destination folder that belongs to a
+  look-alike, and a nested project that has only a state folder (each exit 2).
+- **A rename that keeps the encoded name now works,** such as `foo_bar` to `foo-bar`. It used to try
+  to merge the folder into itself and exit 3.
+- **Each run now has its own backup folder.** Two runs in the same second used to share one, and
+  one could overwrite the backup the other's rollback needs. Backup folders are now named
+  `awt-<seconds>-<process id>`.
+- **A state folder that is itself a junction now refuses with exit 2.** It used to move files out
+  of the junction's target.
 - **The `SessionEnd` archive hook now asks for a 60-second timeout.** Claude Code gives that
   event 1.5 seconds by default, which a large session copy can exceed. If you installed the hook
   with an earlier build, run `awt archive --install-hook --archive-dir <path>` again. The new
