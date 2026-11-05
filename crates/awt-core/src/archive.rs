@@ -90,7 +90,8 @@ pub fn check_archive_dir(home: &Path, archive_dir: &Path) -> Result<()> {
     let key = path_key(archive_dir);
     if key.is_empty() {
         return Err(AwtError::Locked(format!(
-            "archive folder '{}' is a filesystem root, which contains the Claude folders              that are archived; choose a folder that holds only the archive",
+            "archive folder '{}' is a filesystem root, which contains the Claude folders \
+             that are archived; choose a folder that holds only the archive",
             archive_dir.display()
         )));
     }
@@ -103,7 +104,8 @@ pub fn check_archive_dir(home: &Path, archive_dir: &Path) -> Result<()> {
         };
         if is_under(&source, &key) {
             return Err(AwtError::Locked(format!(
-                "archive folder '{}' contains '{}', which is archived; the run would copy                  nothing. Choose a folder that is not above or equal to the Claude data",
+                "archive folder '{}' contains '{}', which is archived; the run would copy \
+                 nothing. Choose a folder that is not above or equal to the Claude data",
                 archive_dir.display(),
                 source.display()
             )));
