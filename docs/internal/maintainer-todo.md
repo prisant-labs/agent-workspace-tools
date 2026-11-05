@@ -215,6 +215,13 @@ includes session artifacts) promises in part. See section 5.
   a move and a rollback are unaffected. You would also need to narrow AC-35 in the S-02 spec, or
   accept that it ships unmet.
 
+### 1.10 Decide whether AR-10 blocks the tag **[DECISION - yours]**
+
+**AR-10 (project folder with no readable transcript) makes `awt apply` and `awt associate` exit 3 and roll back.** It was found on 2026-11-05 and is not part of AR-09. It predates that work. Details are in section 5.
+
+- **Option A, fix it before the tag (recommended).** These projects cannot be moved at all today, and they are common, so the mover's main promise has a real gap. The fix changes how the mover's plan finds a project folder, so it needs its own review.
+- **Option B, ship with the known limit.** The failure is safe, because the rollback restores everything. The limit is documented in `docs/reference/commands.md` and `docs/faq.md`. Fix it in a later release.
+
 ---
 
 ## 2. Decisions
@@ -351,6 +358,18 @@ A file that cannot be read is reported as failed, and the sweep continues. A loc
 `awt associate --export` shares this code. It now refuses before re-associating if any export file failed. The pages that carried the narrower claim are restored.
 
 Next step, for an agent: merge the branch, then rerun the archive steps of the acceptance run against a scratch copy. Add `--install-hook` against a scratch home and `associate --export` to that rerun. The change reaches `archive.rs`, `associate.rs`, `settings.rs` and the archive paths of the CLI (inferred scope).
+
+### AR-10: a project folder with no readable transcript cannot be moved or re-associated
+
+**Found 2026-11-05, while checking an unexplained exit 3 from the AR-09 (archive scope defect) review. Not fixed. Decision in 1.10.**
+
+**What happens.** `awt apply` and `awt associate` exit 3 with `verification failed: 1 checks failed`, then roll back. The source folder and all state stay as they were. Reproduced with a folder holding only `memory/`, only a session folder, or a transcript with no `cwd` line. A project with no folder under `projects/` at all works.
+
+**Why.** `ClaudeProjects::detect` finds a project folder only through the transcript index (`ctx.index.by_cwd`), so the plan does not rename this folder. `ClaudeProjects::verify` then looks for the folder by its encoded name, finds the old one, and fails `new projects dir exists`. The two sides disagree about what counts as the project's folder.
+
+**How common.** A read-only count of the maintainer's home on 2026-11-05 found 46 such folders out of 184: 24 hold only `memory/`, and 22 hold other content with no top-level transcript. `memory/` outlives transcript auto-delete, so this shape grows with age.
+
+**Fix direction.** Let `detect` fall back to the encoded folder name when the index has no entry. The encoding is lossy, so two paths can encode alike. The fallback must therefore refuse a folder that the index assigns to another project. Add a test that `memory/` follows the move. The bare `1 checks failed` message should also name the failed check.
 
 ---
 

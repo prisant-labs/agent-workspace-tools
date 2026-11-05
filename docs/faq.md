@@ -161,7 +161,10 @@ argument.
 ### I already moved the folder by hand. Can awt still fix it?
 
 Yes, that is what `awt associate --from <old> --to <new>` is for, and it works even when the old
-folder no longer exists on disk. See the [recipes](recipes.md).
+folder no longer exists on disk. See the [recipes](recipes.md). One limit applies: if the project's
+folder under `~/.claude/projects/` holds no readable transcript, for example only `memory/`, the
+command exits 3 and rolls back without losing anything. See the
+[command reference](reference/commands.md#awt-associate).
 
 ### How do I remove awt and everything it set up?
 

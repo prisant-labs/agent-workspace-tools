@@ -3,6 +3,10 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-11-05 (second entry) - AR-10 recorded
+
+No code changed for this finding. AR-10 (project folder with no readable transcript) makes `apply` and `associate` exit 3 and roll back. `docs/reference/commands.md` and `docs/faq.md` now state the limit. `docs/internal/maintainer-todo.md` records the finding in section 5 and asks for a tag decision in 1.10.
+
 ## 2026-11-05 - AR-09 review findings fixed on the branch
 
 Code changed in this entry. A review of the AR-09 (archive scope defect) fix found problems, and
