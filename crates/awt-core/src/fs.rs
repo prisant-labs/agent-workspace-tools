@@ -370,14 +370,22 @@ impl FileSystem for MemoryFileSystem {
     }
 }
 
-/// Test double that wraps a `MemoryFileSystem` and fails reads or writes whose path contains
-/// a configured substring. It models a sharing violation on a live session's file (read) or a
-/// full destination disk (write), which `MemoryFileSystem` alone cannot produce.
+/// Test double that wraps a `MemoryFileSystem` and fails operations whose path contains a
+/// configured substring. It models a sharing violation on a live session's file (read), a full
+/// destination disk (write), a write that leaves a partial file behind before failing (torn
+/// write), a rename that fails, and a folder that cannot be listed. `MemoryFileSystem` alone
+/// cannot produce any of these.
 #[cfg(test)]
 pub(crate) struct FaultyFileSystem {
     pub inner: MemoryFileSystem,
     pub fail_read_containing: Vec<String>,
     pub fail_write_containing: Vec<String>,
+    /// A write to a matching path stores a partial file, then fails.
+    pub torn_write_containing: Vec<String>,
+    /// A rename whose DESTINATION matches fails and leaves both paths as they were.
+    pub fail_rename_containing: Vec<String>,
+    /// A `read_dir` of a matching path fails (not as NotFound).
+    pub fail_list_containing: Vec<String>,
 }
 
 #[cfg(test)]
@@ -387,7 +395,22 @@ impl FaultyFileSystem {
             inner: MemoryFileSystem::new(),
             fail_read_containing: fail_read.iter().map(|s| s.to_string()).collect(),
             fail_write_containing: fail_write.iter().map(|s| s.to_string()).collect(),
+            torn_write_containing: Vec::new(),
+            fail_rename_containing: Vec::new(),
+            fail_list_containing: Vec::new(),
         }
+    }
+    pub fn with_torn_write(mut self, containing: &[&str]) -> Self {
+        self.torn_write_containing = containing.iter().map(|s| s.to_string()).collect();
+        self
+    }
+    pub fn with_fail_rename(mut self, containing: &[&str]) -> Self {
+        self.fail_rename_containing = containing.iter().map(|s| s.to_string()).collect();
+        self
+    }
+    pub fn with_fail_list(mut self, containing: &[&str]) -> Self {
+        self.fail_list_containing = containing.iter().map(|s| s.to_string()).collect();
+        self
     }
     fn hit(list: &[String], path: &Path) -> bool {
         let p = norm(path);
@@ -407,9 +430,17 @@ impl FileSystem for FaultyFileSystem {
         if Self::hit(&self.fail_write_containing, path) {
             return Err(io::Error::other("disk full (test)"));
         }
+        if Self::hit(&self.torn_write_containing, path) {
+            let torn = &data[..data.len() / 2];
+            self.inner.write(path, torn)?;
+            return Err(io::Error::other("torn write (test)"));
+        }
         self.inner.write(path, data)
     }
     fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+        if Self::hit(&self.fail_rename_containing, to) {
+            return Err(io::Error::other("rename failed (test)"));
+        }
         self.inner.rename(from, to)
     }
     fn exists(&self, path: &Path) -> bool {
@@ -422,6 +453,9 @@ impl FileSystem for FaultyFileSystem {
         self.inner.is_dir(path)
     }
     fn read_dir(&self, path: &Path) -> io::Result<Vec<PathBuf>> {
+        if Self::hit(&self.fail_list_containing, path) {
+            return Err(io::Error::other("access denied (test)"));
+        }
         self.inner.read_dir(path)
     }
     fn create_dir_all(&self, path: &Path) -> io::Result<()> {
