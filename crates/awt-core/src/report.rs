@@ -6,6 +6,8 @@ pub struct Report {
     pub applied: Vec<Applied>,
     pub backup_dir: String,
     pub verify: Option<Vec<VerifyResult>>,
+    /// What the plan warned about, so that whoever writes sees it too.
+    pub warnings: Vec<String>,
 }
 
 impl Report {
@@ -17,9 +19,11 @@ impl Report {
     ///   "run_id": "...",
     ///   "applied": [{"change": "...", "counts": N}, ...],
     ///   "backup_dir": "awt-...",
-    ///   "verify": [{"check": "...", "ok": true, "detail": "..."}] | null
+    ///   "verify": [{"check": "...", "ok": true, "detail": "..."}] | null,
+    ///   "warnings": ["..."]
     /// }
     /// ```
+    /// `warnings` appears only when there is at least one.
     pub fn to_json(&self) -> serde_json::Value {
         let applied: Vec<serde_json::Value> = self
             .applied
@@ -49,12 +53,16 @@ impl Report {
             }
         };
 
-        serde_json::json!({
+        let mut doc = serde_json::json!({
             "run_id": self.run_id,
             "applied": applied,
             "backup_dir": self.backup_dir,
             "verify": verify,
-        })
+        });
+        if !self.warnings.is_empty() {
+            doc["warnings"] = serde_json::json!(self.warnings);
+        }
+        doc
     }
 }
 
@@ -83,6 +91,7 @@ mod tests {
                 ok: true,
                 detail: "ok".into(),
             }]),
+            warnings: Vec::new(),
         };
 
         let v = report.to_json();
@@ -109,6 +118,7 @@ mod tests {
             applied: vec![],
             backup_dir: "awt-x".into(),
             verify: None,
+            warnings: Vec::new(),
         };
 
         let v = report.to_json();
