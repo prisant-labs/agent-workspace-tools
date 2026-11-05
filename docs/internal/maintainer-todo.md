@@ -194,7 +194,7 @@ A review on 2026-11-05 found further problems in the fix, and they are fixed on 
 - `--session` has no confinement to the home. Only `--hook-stdin` checks that the transcript lies under `~/.claude/projects`.
 - The `contains` match on `todos/` file names can over-match a very short session id.
 - `--session memory.jsonl` copies the project `memory/` folder, because the session folder takes its name from the transcript stem.
-- A file name longer than about 236 characters fails to archive, because the temp suffix pushes the path over the limit.
+- A file name longer than about 230 characters fails to archive, because the temp suffix pushes the name over the 255-character limit. Such a file now makes a full sweep exit 1.
 - Nothing removes leftover `<name>.<token>.awt-tmp` files after a killed run.
 - A file name that is not valid UTF-8 can collapse with another name in the manifest.
 - An upper-case `.JSONL` extension is ignored.
