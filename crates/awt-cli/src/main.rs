@@ -695,13 +695,21 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
 /// Print an archive summary, honoring --json (AR-07: archive was the one subcommand that
 /// advertised --json but always emitted the text line).
 fn print_archive_result(r: &awt_core::archive::ArchiveReport, json: bool) {
+    // Each failed file goes to stderr with its reason, whatever the output format. Per-file
+    // failures do not change the exit code (see docs/reference/commands.md, `awt archive`).
+    for f in &r.failures {
+        eprintln!("archive failed: {}: {}", f.path.display(), f.reason);
+    }
     if json {
         println!(
             "{}",
-            serde_json::json!({ "copied": r.copied, "skipped": r.skipped })
+            serde_json::json!({ "copied": r.copied, "skipped": r.skipped, "failed": r.failed })
         );
     } else {
-        println!("archived: {} copied, {} skipped", r.copied, r.skipped);
+        println!(
+            "archived: {} copied, {} skipped, {} failed",
+            r.copied, r.skipped, r.failed
+        );
     }
 }
 

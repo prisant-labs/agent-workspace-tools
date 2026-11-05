@@ -179,8 +179,9 @@ fn archive_json_emits_machine_readable_summary() {
         panic!("archive --json stdout must parse as JSON ({e}); got: {stdout:?}")
     });
     assert!(
-        v["copied"].is_u64() && v["skipped"].is_u64(),
-        "summary must carry numeric copied/skipped: {v}"
+        v["copied"].is_u64() && v["skipped"].is_u64() && v["failed"].is_u64(),
+        "summary must carry numeric copied/skipped/failed: {v}"
     );
     assert_eq!(v["copied"].as_u64(), Some(1), "one transcript archived");
+    assert_eq!(v["failed"].as_u64(), Some(0), "nothing failed");
 }
