@@ -96,6 +96,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn trim_separators_keeps_a_root_whole() {
+        assert_eq!(trim_separators("E:\\"), "E:\\");
+        assert_eq!(trim_separators("E:/"), "E:/");
+        assert_eq!(trim_separators("/"), "/");
+        assert_eq!(trim_separators("E:\\a\\"), "E:\\a");
+        assert_eq!(trim_separators("E:/a//"), "E:/a");
+        assert_eq!(trim_separators("E:\\a"), "E:\\a");
+    }
+
+    #[test]
     fn encodes_like_claude_real_dirs() {
         assert_eq!(
             encode_project_dir("E:\\Projects\\demo-labs\\demo-notes-editor-pro"),

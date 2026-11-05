@@ -230,19 +230,21 @@ fn plan_opts(cli: &Cli) -> PlanOpts {
     }
 }
 
+/// Names one run's backup folder. Seconds plus the process id: with seconds alone, two runs in
+/// the same second shared a folder, and one could overwrite the backup the other's rollback needs.
 fn pick_run_id() -> String {
     format!(
-        "{}",
+        "{}-{}",
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
-            .as_secs()
+            .as_secs(),
+        std::process::id()
     )
 }
 
 /// Token that names the temp files of one archive run. Seconds plus the process id, so two
 /// runs that start in the same second (a hook and a sweep) never share a temp name.
-/// `pick_run_id` stays as it is because backup folder names use it.
 fn archive_run_token() -> String {
     format!(
         "{}-{}",
@@ -270,7 +272,14 @@ fn project_path(path: &str) -> awt_core::error::Result<String> {
             "the path {path} is not valid Unicode, so it cannot be used"
         ))
     })?;
-    Ok(awt_core::paths::trim_separators(text).to_string())
+    let plain = match text.strip_prefix(r"\\?\") {
+        Some(rest) => match rest.strip_prefix(r"UNC\") {
+            Some(unc) => format!(r"\\{unc}"),
+            None => rest.to_string(),
+        },
+        None => text.to_string(),
+    };
+    Ok(awt_core::paths::trim_separators(&plain).to_string())
 }
 
 /// Warnings go to stderr, so that stdout stays parseable under `--json`.
@@ -632,7 +641,10 @@ fn run(cli: &Cli, fs: &RealFileSystem, home: &std::path::Path) -> awt_core::erro
             print_warnings(&r.warnings);
             let export_loc = format!("{}/{}", to.replace('\\', "/"), aopts.export_subdir);
             // With no transcript to copy, the export does nothing. Never report an empty one.
-            let exported = aopts.export && fs.is_dir(std::path::Path::new(&export_loc));
+            let exported = aopts.export
+                && fs
+                    .read_dir(std::path::Path::new(&export_loc))
+                    .is_ok_and(|children| !children.is_empty());
             if cli.json {
                 // The fourth mutating mode that printed prose under --json (the other
                 // three were the archive settings paths; found 2026-07-31).
