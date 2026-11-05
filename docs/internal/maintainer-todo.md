@@ -319,9 +319,15 @@ Whether FF-1 or FF-2 blocks the v1.0.0 tag is your call **[HUMAN]**. FF-1 is the
 
 **Why.** `archive_project_dir` in `crates/awt-core/src/archive.rs` copies only `*.jsonl` directly inside a project folder, plus `file-history/<sessionId>/`. AC-35 in the S-02 spec also names session-env, tasks and todos, and the design's layout names `tool-results` and `subagents`. Only file-history has a test, so the gap never showed.
 
-**Effect.** Nothing was lost by running `archive`, and a move and a rollback were unaffected. Files it skipped remained exposed to auto-delete. The S-02 spec is unchanged, because the fix meets AC-35 as written.
+**Effect.** Nothing was lost by running `archive`, and a move and a rollback were unaffected. Files it skipped remained exposed to auto-delete. The S-02 spec is unchanged, because the fix meets AC-35 (archive includes session artifacts) as written.
 
-**Fixed.** `archive` now copies every file below every project subfolder except `memory/` (so subagents, `tool-results/` and `workflows/`, including session folders with no transcript beside them), and `session-env/<id>/`, `tasks/<id>/` and the matching `todos/` files for every session id, beside the existing file-history. `--session` and the `SessionEnd` hook archive the same set for their one session. A file that cannot be read, such as a lock file held by a running session, is reported as failed and the sweep continues; the exit code stays 0 for that case. Writes go through a temp file, so a failed write leaves no partial copy, and an archive folder inside the walked tree does not copy itself. `awt associate --export` also uses this code and now refuses before re-associating if any export file failed. The pages that carried the narrower claim are restored. What to do next: merge the branch, then rerun the archive steps of the acceptance run against a scratch copy (inferred as sufficient, since the change is confined to `archive.rs`, `associate.rs` and the archive output in the CLI).
+**Fixed.** `archive` now copies every file below every project subfolder except `memory/`. That covers subagents, `tool-results/` and `workflows/`, including session folders with no transcript beside them. For every session id it also copies `session-env/<id>/`, `tasks/<id>/` and the matching `todos/` files, beside the existing file-history. `--session` and the `SessionEnd` hook archive the same set for their one session.
+
+A file that cannot be read is reported as failed, and the sweep continues. A lock file held by a running session is the usual case. The exit code stays 0 for that case. Writes go through a temp file, so a failed write leaves no partial copy. An archive folder inside the walked tree does not copy itself.
+
+`awt associate --export` shares this code. It now refuses before re-associating if any export file failed. The pages that carried the narrower claim are restored.
+
+Next step: merge the branch, then rerun the archive steps of the acceptance run against a scratch copy. That should be enough (inferred), because the change is confined to `archive.rs`, `associate.rs` and the archive output in the CLI.
 
 ---
 
