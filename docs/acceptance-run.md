@@ -151,7 +151,7 @@ Expect: exit 2, and the file's hash unchanged.
 ```
 awt archive --home "C:\Temp\claude-acceptance" --archive-dir "C:\Temp\claude-acceptance-archive"
 ```
-Expect: exit 0 and an "archived: N copied, M skipped" line.
+Expect: exit 0 and an "archived: N copied, M skipped, F failed" line. F is 0 unless a running session holds a file open.
 
 ```
 awt associate --home "C:\Temp\claude-acceptance" --from "<old-path>" --to "<new-path>"

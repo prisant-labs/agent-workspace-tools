@@ -3,6 +3,10 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-11-05 (third entry) - AR-09 merged and the archive rerun passed
+
+No code changed in this entry. PR #36 merged the AR-09 (archive scope defect) fix, so the two entries below describe a branch that no longer exists. The archive steps then passed on the merged build, and `docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-11-05.md` is the record. All 56,570 expected files are in the archive, and each matches its source by hash. `README.md`, the root `CHANGELOG.md`, `docs/ROADMAP.md`, the v1.0.0 plan and `docs/internal/maintainer-todo.md` now say that the tag waits on three maintainer steps, including the AR-10 decision. `docs/acceptance-run.md` now quotes the full `archive` output line.
+
 ## 2026-11-05 (second entry) - AR-10 recorded
 
 No code changed for this finding. AR-10 (project folder with no readable transcript) makes `apply` and `associate` exit 3 and roll back. `docs/reference/commands.md` and `docs/faq.md` now state the limit. `docs/internal/maintainer-todo.md` records the finding in section 5 and asks for a tag decision in 1.10.

@@ -212,14 +212,15 @@ live-session guard misses terminal sessions) blocked the tag on documentation on
 is done; the guard fix itself ships in v1.0.1. The adversarial acceptance run was repeated,
 because clap and the rollback engine changed after 2026-07-31. Every planned step passed
 (`docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-11-04.md`). It found AR-09 (`archive`
-copied less than it promised). The maintainer chose to fix it before the tag, and the fix is on
-branch `fix/ar-09-archive-scope`.
+copied less than it promised). The maintainer chose to fix it before the tag. PR #36 merged the
+fix, and the archive steps passed on the merged build on 2026-11-05
+(`docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-11-05.md`).
 
-**Remaining before the v1.0 tag:** two agent steps, then two maintainer steps. The agent merges
-the AR-09 (archive scope defect) fix branch, then reruns the archive steps of the acceptance run
-on the merged build. The maintainer then does (1) the S-01 (mover CLI spec) sign-off, made
+**Remaining before the v1.0 tag:** three maintainer steps. The maintainer does (1) the S-01 (mover CLI spec) sign-off, made
 against the closed state, and (2) the D10 (history-rewrite read) exposure read (emails and URLs in the
-formerly published transcripts; rotate anything sensitive). The history rewrite half of D10
+formerly published transcripts; rotate anything sensitive), and (3) the decision on AR-10 (a
+project folder with no readable transcript cannot be moved) in
+`docs/internal/maintainer-todo.md` 1.10. The history rewrite half of D10
 was executed 2026-07-31: `git filter-repo` removed the real transcripts and the
 once-committed session logs from all history, force-pushed, with the current tree
 byte-identical. The earlier claim here that only the sign-off remained was wrong: it
