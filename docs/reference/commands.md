@@ -324,6 +324,8 @@ With re-association on, the plan is built before the export. A plan refusal exit
 
 With `--no-reassociate`, that same case refuses with exit 2 and says that nothing was exported. The command never prints an export path over an empty folder.
 
+**Known limit (AR-10, project folder with no readable transcript).** If `~/.claude/projects/<enc>/` still exists but holds no transcript that names the old path, re-association exits 3 and rolls back. A folder that holds only `memory/` is the usual case. `awt apply` fails the same way. Nothing is lost, because the rollback restores every file. A project with no such folder at all is re-associated normally.
+
 
 **Output:** `associate complete: N changes applied`.
 
