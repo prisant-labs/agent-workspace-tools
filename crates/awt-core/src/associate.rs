@@ -47,10 +47,27 @@ pub fn associate(
         )));
     }
 
+    // Build the plan before anything is written. A plan refusal (exit 2) then leaves `--to`
+    // untouched, which is what "nothing was written" promises. The plan is applied last.
+    let plan = if opts.reassociate {
+        let mv = Move {
+            src_abs: from.to_string(),
+            dst_abs: to.to_string(),
+        };
+        let plan_opts = PlanOpts {
+            force: false,
+            move_folder: false,
+        };
+        Some(build_plan(fs, home, &mv, &plan_opts)?)
+    } else {
+        None
+    };
+
     if opts.export {
-        // Export copies transcripts. When they have expired there is nothing to copy, so
-        // this degrades to a no-op rather than aborting a run whose re-association half is
-        // perfectly viable.
+        // Export copies transcripts. When they have expired there is nothing to copy. With
+        // re-association on, that is a no-op and the re-association half still runs. An
+        // export-only run has nothing else to do, so it refuses instead of reporting an
+        // export path over an empty folder.
         let has_transcripts = crate::index::ProjectIndex::build(fs, home)?
             .by_cwd
             .contains_key(&normalize_path(from));
@@ -72,25 +89,30 @@ pub fn associate(
                     .take(5)
                     .map(|f| format!("{} ({})", f.path.display(), f.reason))
                     .collect();
+                let advice = if opts.reassociate {
+                    "Close the sessions that hold them and re-run, or pass --no-export."
+                } else {
+                    "Close the sessions that hold them and re-run."
+                };
+                let outcome = if opts.reassociate {
+                    "so nothing was re-associated"
+                } else {
+                    "so the export is incomplete"
+                };
                 return Err(AwtError::Io(std::io::Error::other(format!(
-                    "export could not copy {} file(s), so nothing was re-associated: {}. \
-                     Close the sessions that hold them and re-run, or pass --no-export.",
+                    "export could not copy {} file(s), {outcome}: {}. {advice}",
                     rep.failed,
                     shown.join("; ")
                 ))));
             }
+        } else if !opts.reassociate {
+            return Err(AwtError::Locked(format!(
+                "no readable transcript resolved project '{from}', so nothing was exported. \
+                 The transcripts may have expired or be unreadable."
+            )));
         }
     }
-    if opts.reassociate {
-        let mv = Move {
-            src_abs: from.to_string(),
-            dst_abs: to.to_string(),
-        };
-        let plan_opts = PlanOpts {
-            force: false,
-            move_folder: false,
-        };
-        let plan = build_plan(fs, home, &mv, &plan_opts)?;
+    if let Some(plan) = plan {
         let aopts = ApplyOpts {
             run_id: opts.run_id.clone(),
             auto_rollback: true,
@@ -202,6 +224,98 @@ mod tests {
             !fs.exists(Path::new("E:/B/.claude-sessions/projects/E--Other/o.jsonl")),
             "export must be scoped to the from project only"
         );
+    }
+
+    /// A plan refusal (exit 2) must happen before the export, so nothing lands in `--to`.
+    #[test]
+    fn plan_refusal_writes_nothing_into_the_export_folder() {
+        let fs = MemoryFileSystem::new();
+        fs.write(
+            Path::new("/h/.claude/projects/E--A/s.jsonl"),
+            b"{\"cwd\":\"E:\\\\A\"}\n",
+        )
+        .unwrap();
+        // The destination already has a claude.json key, which the plan refuses.
+        fs.write(
+            Path::new("/h/.claude.json"),
+            br#"{"projects":{"E:/A":{},"E:/B":{}}}"#,
+        )
+        .unwrap();
+        fs.write(Path::new("E:/B/keep.txt"), b"x").unwrap();
+        let opts = AssociateOpts {
+            reassociate: true,
+            export: true,
+            export_subdir: ".claude-sessions".into(),
+            run_id: "T".into(),
+        };
+        let err = associate(&fs, Path::new("/h"), "E:\\A", "E:\\B", &opts).unwrap_err();
+        assert!(matches!(err, AwtError::DestinationExists(_)), "{err:?}");
+        assert!(
+            !fs.exists(Path::new("E:/B/.claude-sessions")),
+            "a refused plan must not leave an export behind"
+        );
+    }
+
+    /// Export-only where no readable transcript resolves the project must refuse, not print
+    /// an export path over an empty folder.
+    #[test]
+    fn export_only_without_a_resolving_transcript_refuses() {
+        let fs = MemoryFileSystem::new();
+        fs.write(
+            Path::new("/h/.claude.json"),
+            br#"{"projects":{"E:/gone/proj":{}}}"#,
+        )
+        .unwrap();
+        fs.write(Path::new("E:/new/proj/keep.txt"), b"x").unwrap();
+        let opts = AssociateOpts {
+            reassociate: false,
+            export: true,
+            export_subdir: ".claude-sessions".into(),
+            run_id: "T".into(),
+        };
+        let err = associate(
+            &fs,
+            Path::new("/h"),
+            "E:\\gone\\proj",
+            "E:\\new\\proj",
+            &opts,
+        )
+        .unwrap_err();
+        match err {
+            AwtError::Locked(m) => assert!(
+                m.contains("no readable transcript") && m.contains("nothing was exported"),
+                "{m}"
+            ),
+            other => panic!("expected Locked, got {other:?}"),
+        }
+        assert!(!fs.exists(Path::new("E:/new/proj/.claude-sessions")));
+    }
+
+    /// `--no-export` is only useful advice when re-association is on. With
+    /// `--no-reassociate`, passing it leaves nothing to do and exits 2.
+    #[test]
+    fn export_failure_suggests_no_export_only_when_reassociating() {
+        for (reassociate, advises) in [(true, true), (false, false)] {
+            let fs = crate::fs::FaultyFileSystem::new(&["tasks/s/.lock"], &[]);
+            fs.write(
+                Path::new("/h/.claude/projects/E--A/s.jsonl"),
+                b"{\"cwd\":\"E:\\\\A\"}\n",
+            )
+            .unwrap();
+            fs.write(Path::new("/h/.claude/tasks/s/.lock"), b"")
+                .unwrap();
+            fs.write(Path::new("E:/B/keep.txt"), b"x").unwrap();
+            let opts = AssociateOpts {
+                reassociate,
+                export: true,
+                export_subdir: ".claude-sessions".into(),
+                run_id: "T".into(),
+            };
+            let err = associate(&fs, Path::new("/h"), "E:\\A", "E:\\B", &opts).unwrap_err();
+            let m = err.to_string();
+            assert_eq!(m.contains("--no-export"), advises, "{m}");
+            assert!(m.contains("export could not copy"), "{m}");
+        }
     }
 
     /// AR-09: archive tolerates unreadable files, but an export that failed to copy a file
