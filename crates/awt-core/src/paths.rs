@@ -1,7 +1,9 @@
 /// Map an absolute path to Claude Code's `projects/` directory name.
 /// Every character that is not ASCII alphanumeric becomes '-'. Forward-only:
-/// this is lossy (a-b, a.b, a\b, a_b all collapse) so it is NEVER used to look
-/// up an existing directory - use the reverse index for that.
+/// this is lossy (a-b, a.b, a\b, a_b all collapse) so a name match never proves
+/// which project owns a directory - use the reverse index for that. The one
+/// lookup by name is `ClaudeProjects::name_match`, for a directory no transcript
+/// resolves, and it refuses any directory that something ties to another path.
 pub fn encode_project_dir(abs: &str) -> String {
     abs.chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })

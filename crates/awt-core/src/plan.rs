@@ -219,6 +219,9 @@ pub fn build_plan(fs: &dyn FileSystem, home: &Path, mv: &Move, opts: &PlanOpts) 
     let mut changes = Vec::new();
     let mut nested = Vec::new();
 
+    // AR-10: the person about to write should know when a folder name alone decided the move.
+    warnings.extend(crate::stores::claude_projects::ClaudeProjects::name_match_warning(&ctx, mv)?);
+
     for store in registry() {
         store.probe(&ctx)?;
         // Surface declined shapes to the person about to WRITE, not just to whoever runs

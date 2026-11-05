@@ -217,9 +217,11 @@ pub fn apply_verified(
         if opts.auto_rollback {
             crate::rollback::rollback(&manifest_path, fs)?;
         }
+        let names: Vec<&str> = failed.iter().map(|r| r.check.as_str()).collect();
         return Err(AwtError::VerifyFailed(format!(
-            "{} checks failed; backup at {}",
+            "{} checks failed ({}); backup at {}",
             failed.len(),
+            names.join(", "),
             backup_dir.display()
         )));
     }

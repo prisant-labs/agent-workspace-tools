@@ -1,11 +1,134 @@
-use crate::error::Result;
+use crate::error::{AwtError, Result};
 use crate::model::{Change, Ctx, Hit, Move, Stale, Store, VerifyResult};
-use crate::paths::normalize_path;
+use crate::paths::{encode_project_dir, normalize_path};
+use std::path::{Path, PathBuf};
 
 pub struct ClaudeProjects;
 
+/// What the folder at a project's encoded name means for that project.
+enum NameMatch {
+    /// No folder has that name.
+    NoFolder,
+    /// The folder is this project's: nothing ties it to another path.
+    Ours(PathBuf),
+    /// The folder has this project's encoded name, but it belongs to another path.
+    Others { dir: PathBuf, owner: String },
+}
+
 impl ClaudeProjects {
     const ID: &'static str = "claude.projects";
+    const NAME_MATCH_DETAIL: &'static str = "project dir, matched by folder name";
+
+    /// Decide whether the folder at `src`'s encoded name is `src`'s (AR-10).
+    ///
+    /// The encoding is lossy, so a name alone never proves ownership. `detect` and `verify` both
+    /// ask this one question, because the defect was the two of them disagreeing. Anything that
+    /// ties the folder to another path makes it that path's: taking another project's memory is
+    /// a worse failure than leaving a folder behind.
+    fn name_match(ctx: &Ctx, src: &str) -> Result<NameMatch> {
+        let encoded = encode_project_dir(src);
+        let projects = ctx.home.join(".claude").join("projects");
+        let children = match ctx.fs.read_dir(&projects) {
+            Ok(c) => c,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(NameMatch::NoFolder),
+            Err(e) => return Err(e.into()),
+        };
+        // Case-insensitive: the name comes from the launch-time spelling, so the drive letter
+        // can differ from the path the person typed.
+        let has_name = |p: &Path| {
+            p.file_name()
+                .is_some_and(|n| n.to_string_lossy().eq_ignore_ascii_case(&encoded))
+        };
+        let Some(dir) = children
+            .into_iter()
+            .find(|c| has_name(c) && ctx.fs.is_dir(c))
+        else {
+            return Ok(NameMatch::NoFolder);
+        };
+        let key = normalize_path(src);
+        let others = |owner: &str| NameMatch::Others {
+            dir: dir.clone(),
+            owner: owner.to_string(),
+        };
+
+        // What the folder's own transcripts say comes first.
+        for (cwd, dirs) in &ctx.index.by_cwd {
+            if dirs.iter().any(|d| has_name(d)) {
+                return Ok(if *cwd == key {
+                    NameMatch::Ours(dir)
+                } else {
+                    others(cwd)
+                });
+            }
+        }
+        let recorded = ctx
+            .index
+            .ambiguous_candidates
+            .iter()
+            .chain(ctx.index.stale.iter())
+            .find(|(d, _)| has_name(d));
+        if let Some((_, paths)) = recorded {
+            return Ok(if paths.iter().any(|p| normalize_path(p) == key) {
+                NameMatch::Ours(dir)
+            } else {
+                others(paths.first().map_or("another path", |p| p.as_str()))
+            });
+        }
+
+        // The folder says nothing, so any other known path with the same name could own it.
+        let lookalike = |p: &String| {
+            normalize_path(p) != key && encode_project_dir(p).eq_ignore_ascii_case(&encoded)
+        };
+        if let Some(p) = ctx.index.cwds.iter().find(|p| lookalike(p)) {
+            return Ok(others(p));
+        }
+        if let Some(p) = Self::claude_json_paths(ctx)?.iter().find(|p| lookalike(p)) {
+            return Ok(others(p));
+        }
+        Ok(NameMatch::Ours(dir))
+    }
+
+    /// Every path `~/.claude.json` records, as `projects` keys or `githubRepoPaths` values.
+    fn claude_json_paths(ctx: &Ctx) -> Result<Vec<String>> {
+        let path = ctx.home.join(".claude.json");
+        if !ctx.fs.exists(&path) {
+            return Ok(Vec::new());
+        }
+        let bytes = ctx.fs.read(&path)?;
+        let v: serde_json::Value = serde_json::from_slice(&bytes)
+            .map_err(|e| AwtError::UnrecognizedFormat(format!("claude.json parse: {e}")))?;
+        let mut out = Vec::new();
+        if let Some(projects) = v.get("projects").and_then(|p| p.as_object()) {
+            out.extend(projects.keys().cloned());
+        }
+        if let Some(repos) = v.get("githubRepoPaths").and_then(|r| r.as_object()) {
+            for paths in repos.values().filter_map(|p| p.as_array()) {
+                out.extend(paths.iter().filter_map(|p| p.as_str()).map(str::to_string));
+            }
+        }
+        Ok(out)
+    }
+
+    /// A warning for the plan when the folder name alone decided what happens to a folder.
+    pub fn name_match_warning(ctx: &Ctx, mv: &Move) -> Result<Option<String>> {
+        if ctx.index.by_cwd.contains_key(&normalize_path(&mv.src_abs)) {
+            return Ok(None);
+        }
+        Ok(match Self::name_match(ctx, &mv.src_abs)? {
+            NameMatch::NoFolder => None,
+            NameMatch::Ours(dir) => Some(format!(
+                "moving {} by its folder name: no readable transcript names {}, so the name is \
+                 the only link. Check that this folder is this project's before you apply.",
+                dir.display(),
+                mv.src_abs
+            )),
+            NameMatch::Others { dir, owner } => Some(format!(
+                "left {} where it is: its name matches {}, but it belongs to {owner}.",
+                dir.display(),
+                mv.src_abs
+            )),
+        })
+    }
 }
 
 impl Store for ClaudeProjects {
@@ -28,6 +151,13 @@ impl Store for ClaudeProjects {
                     target: dir.clone(),
                 });
             }
+        } else if let NameMatch::Ours(dir) = Self::name_match(ctx, &mv.src_abs)? {
+            // AR-10: no readable transcript names this path, so the folder name decides.
+            hits.push(Hit {
+                store: Self::ID,
+                detail: Self::NAME_MATCH_DETAIL.into(),
+                target: dir,
+            });
         }
         Ok(hits)
     }
@@ -53,28 +183,55 @@ impl Store for ClaudeProjects {
     }
 
     fn plan(&self, ctx: &Ctx, mv: &Move, hit: &Hit) -> Result<Vec<Change>> {
-        use crate::error::AwtError;
-        use crate::paths::encode_project_dir;
         use crate::rewrite::{anchored_rewrite, build_path_rules};
         let projects = ctx.home.join(".claude").join("projects");
-        let new_dir = projects.join(encode_project_dir(&mv.dst_abs));
+        let encoded_dst = encode_project_dir(&mv.dst_abs);
+        // A rename such as foo_bar to foo-bar keeps the encoded name, so the folder is
+        // already in place. Only its transcripts need rewriting.
+        let same_folder = hit
+            .target
+            .file_name()
+            .is_some_and(|n| n.to_string_lossy().eq_ignore_ascii_case(&encoded_dst));
+        let new_dir = if same_folder {
+            hit.target.clone()
+        } else {
+            projects.join(&encoded_dst)
+        };
         // Choose between a plain rename and a merge. If the destination projects dir already
         // exists (B is a live project with its own history), a rename would try to move A's dir
         // ONTO B's - which the OS refuses. Merge A's files into B instead. If B's dir does not
         // exist, the historical rename is correct. Either way the transcripts end up at
         // new_dir/<name>, exactly where the RewriteFile changes below expect them.
-        let first = if ctx.fs.is_dir(&new_dir) {
-            Change::MergeDir {
-                from: hit.target.clone(),
-                to: new_dir.clone(),
+        let mut changes = Vec::new();
+        if !same_folder {
+            if ctx.fs.is_dir(&new_dir) {
+                // A merge refuses to overwrite a file, so a file on both sides would fail
+                // at apply. MEMORY.md has a fixed name, which makes that the normal case
+                // for two projects with memory. Say so here, where nothing has happened.
+                for file in crate::fs::walk_files_strict(ctx.fs, &hit.target)? {
+                    let dest = file
+                        .strip_prefix(&hit.target)
+                        .map(|rel| new_dir.join(rel))
+                        .unwrap_or_default();
+                    if ctx.fs.exists(&dest) {
+                        return Err(AwtError::DestinationExists(format!(
+                            "{} (both project folders hold this file, and a merge never \
+                             overwrites one. Move or combine it by hand, then re-run)",
+                            dest.display()
+                        )));
+                    }
+                }
+                changes.push(Change::MergeDir {
+                    from: hit.target.clone(),
+                    to: new_dir.clone(),
+                });
+            } else {
+                changes.push(Change::RenameDir {
+                    from: hit.target.clone(),
+                    to: new_dir.clone(),
+                });
             }
-        } else {
-            Change::RenameDir {
-                from: hit.target.clone(),
-                to: new_dir.clone(),
-            }
-        };
-        let mut changes = vec![first];
+        }
         let rules = build_path_rules(&mv.src_abs, &mv.dst_abs);
         // One behavior, no tiers (AC-58): the moved project's own transcripts are rewritten.
         // The old Minimal tier renamed the dir and rewrote nothing, so Standard verification
@@ -105,7 +262,6 @@ impl Store for ClaudeProjects {
     }
 
     fn verify(&self, ctx: &Ctx, mv: &Move) -> Result<Vec<VerifyResult>> {
-        use crate::paths::encode_project_dir;
         let new_dir = ctx
             .home
             .join(".claude")
@@ -117,14 +273,11 @@ impl Store for ClaudeProjects {
         // also looking at the source: if neither side is a directory there were never any
         // transcripts, and their continued absence is the correct postcondition. If the
         // source is still there while the destination is not, the move genuinely failed and
-        // this check still catches it.
-        let old_dir = ctx
-            .home
-            .join(".claude")
-            .join("projects")
-            .join(encode_project_dir(&mv.src_abs));
+        // this check still catches it. AR-10: "the source" means a folder this project owns.
+        // One that only shares its encoded name was never planned to move, so it stays.
         let new_exists = ctx.fs.is_dir(&new_dir);
-        let had_transcripts = new_exists || ctx.fs.is_dir(&old_dir);
+        let had_transcripts =
+            new_exists || matches!(Self::name_match(ctx, &mv.src_abs)?, NameMatch::Ours(_));
         let mut out = vec![VerifyResult {
             check: "new projects dir exists".into(),
             ok: new_exists || !had_transcripts,
@@ -158,7 +311,7 @@ impl Store for ClaudeProjects {
             if child.extension().and_then(|e| e.to_str()) == Some("jsonl") {
                 let bytes = ctx.fs.read(&child)?;
                 let text = std::str::from_utf8(&bytes).map_err(|e| {
-                    crate::error::AwtError::UnrecognizedFormat(format!("{}: {e}", child.display()))
+                    AwtError::UnrecognizedFormat(format!("{}: {e}", child.display()))
                 })?;
                 stale += text.matches(&old_cwd).count();
                 for l in text.lines() {
@@ -188,7 +341,6 @@ mod tests {
     use super::*;
     use crate::fs::{FileSystem, MemoryFileSystem};
     use crate::index::ProjectIndex;
-    use std::path::{Path, PathBuf};
 
     fn cwd_line(cwd: &str) -> String {
         format!(
