@@ -3,6 +3,18 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-11-05 (fourth entry) - AR-10 fixed
+
+Code changed in this entry. The maintainer chose to fix AR-10 (a project folder with no readable transcript could not be moved) before the tag. `docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-11-05-ar10.md` is the acceptance record. Three review rounds shaped the fix, and they found older defects on the same path, which this change also fixes.
+
+**Human layer.** `docs/reference/commands.md`, `docs/faq.md`, `docs/troubleshooting.md`, `README.md` and the root `CHANGELOG.md` describe the new behavior. The known limit is gone from the command reference, and a narrower one replaces it.
+
+**Technical layer.** `docs/reference/claude-data-model.md`, `docs/ROADMAP.md`, the v1.0.0 plan and `docs/internal/maintainer-todo.md` record the fix and what stays open. The tag now waits on two maintainer steps.
+
+**Agentic layer.** `AGENTS.md` states the one guarded exception to the rule against looking up a project folder by its encoded name.
+
+**Unchanged on purpose.** The S-01 (mover CLI spec) file awaits the maintainer's sign-off, so no agent edited it. Its AC-6 still holds: when a transcript names a path, that path decides.
+
 ## 2026-11-05 (third entry) - AR-09 merged and the archive rerun passed
 
 No code changed in this entry. PR #36 merged the AR-09 (archive scope defect) fix, so the two entries below describe a branch that no longer exists. The archive steps then passed on the merged build, and `docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-11-05.md` is the record. All 56,570 expected files are in the archive, and each matches its source by hash. `README.md`, the root `CHANGELOG.md`, `docs/ROADMAP.md`, the v1.0.0 plan and `docs/internal/maintainer-todo.md` now say that the tag waits on three maintainer steps, including the AR-10 decision. `docs/acceptance-run.md` now quotes the full `archive` output line.

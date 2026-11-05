@@ -172,7 +172,9 @@ server-side store. Two implications:
 ## 8. Traps, in one place
 
 - Dot-to-dash in the encoding (Section 2). The classic miss.
-- The encoding is lossy; never invert it (Section 2).
+- The encoding is lossy; never invert it (Section 2). awt looks a folder up by its encoded name only
+  when no transcript resolves it, and it refuses a folder that anything ties to another path.
+- Nested transcripts are not rewritten by a move, so a path in one can be residue of an earlier move.
 - Directory name derives from the launch-time `cwd` string, so drive-letter case
   can differ from a normalized path; match case-insensitively (Section 1).
 - `githubRepoPaths` and plugin state dirs are PATH-keyed and easy to forget

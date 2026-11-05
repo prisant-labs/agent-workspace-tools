@@ -127,8 +127,8 @@ That stopped being the whole list on 2026-11-03: 1.6 (acceptance re-run), 1.7 (F
 and 1.8 (F-1 and F-2 engine fixes) also blocked the tag, and all three are done. The re-run then
 raised 1.9 (AR-09, `archive` copies less than it promises). You chose to fix it before the tag
 (2026-11-04). PR #36 merged the fix, and the archive rerun on the merged build passed on 2026-11-05
-(1.9). No agent step remains. Three maintainer steps remain: 1.2 (D10 read), 1.5 (S-01 sign-off),
-and 1.10 (whether AR-10, a project folder with no readable transcript, blocks the tag).
+(1.9). You also chose to fix AR-10, a project folder with no readable transcript (1.10), and that is
+done. No agent step remains. Two maintainer steps remain: 1.2 (D10 read) and 1.5 (S-01 sign-off).
 
 ### 1.5 Sign off S-01 **[HUMAN - nobody else can do this]**
 
@@ -215,9 +215,13 @@ includes session artifacts) promises in part. See section 5.
   a move and a rollback are unaffected. You would also need to narrow AC-35 in the S-02 spec, or
   accept that it ships unmet.
 
-### 1.10 Decide whether AR-10 blocks the tag **[DECISION - yours]**
+### 1.10 Decide whether AR-10 blocks the tag **[DONE 2026-11-05: option A, fixed before the tag]**
 
-**AR-10 (project folder with no readable transcript) makes `awt apply` and `awt associate` exit 3 and roll back.** It was found on 2026-11-05 and is not part of AR-09. It predates that work. Details are in section 5.
+Decided 2026-11-05: option A. The fix is merged, and the move steps passed on it. The record is [`acceptance-run-2026-11-05-ar10.md`](release-plans/plan_v1.0.0/acceptance-run-2026-11-05-ar10.md). See section 5. **When you sign off S-01 (1.5), read AC-6 with this in mind:** a transcript's `cwd` still decides, and the folder name decides only when no transcript names a path.
+
+Also decided 2026-11-05: a failed export in `associate --export` stays exit 1.
+
+**As first reported: AR-10 (project folder with no readable transcript) makes `awt apply` and `awt associate` exit 3 and roll back.** It was found on 2026-11-05 and is not part of AR-09. It predates that work. Details are in section 5.
 
 - **Option A, fix it before the tag (recommended).** These projects cannot be moved at all today, and they are common, so the mover's main promise has a real gap. The fix changes how the mover's plan finds a project folder, so it needs its own review.
 - **Option B, ship with the known limit.** The failure is safe, because the rollback restores everything. The limit is documented in `docs/reference/commands.md` and `docs/faq.md`. Fix it in a later release.
@@ -361,9 +365,9 @@ A file that cannot be read is reported as failed, and the sweep continues. A loc
 
 **Hook users must act.** An existing `SessionEnd` hook has no timeout, so Claude Code can cut it off after 1.5 seconds. Re-run `awt archive --install-hook --archive-dir <path>` to replace it.
 
-### AR-10: a project folder with no readable transcript cannot be moved or re-associated
+### AR-10: a project folder with no readable transcript could not be moved or re-associated **[FIXED 2026-11-05, decided at 1.10: option A]**
 
-**Found 2026-11-05, while checking an unexplained exit 3 from the AR-09 (archive scope defect) review. Not fixed. Decision in 1.10.**
+**Found 2026-11-05, while checking an unexplained exit 3 from the AR-09 (archive scope defect) review. The next paragraphs describe it as found.**
 
 **What happens.** `awt apply` and `awt associate` exit 3 with `verification failed: 1 checks failed`, then roll back. The source folder and all state stay as they were. Reproduced with a folder holding only `memory/`, only a session folder, or a transcript with no `cwd` line. A project with no folder under `projects/` at all works.
 
@@ -371,7 +375,41 @@ A file that cannot be read is reported as failed, and the sweep continues. A loc
 
 **How common.** A read-only count of the maintainer's home on 2026-11-05 found 46 such folders out of 184: 24 hold only `memory/`, and 22 hold other content with no top-level transcript. `memory/` outlives transcript auto-delete, so this shape grows with age.
 
-**Fix direction.** Let `detect` fall back to the encoded folder name when the index has no entry. The encoding is lossy, so two paths can encode alike. The fallback must therefore refuse a folder that the index assigns to another project. Add a test that `memory/` follows the move. The bare `1 checks failed` message should also name the failed check.
+**That count overstated the reach.** Of the 47 such folders in the acceptance copy, only 8 match a path recorded in `.claude.json`, `awt list` or `history.jsonl`. The other 39 can move only through `apply`, when the project still exists on disk.
+
+**Fixed.** `ClaudeProjects::name_match` is the one question `detect` and `verify` both ask. A transcript that names a path decides. Failing that, the folder is the project's unless another known path shares its encoded name, and `detect` also requires the path to be known, so a typo cannot take a folder. Two look-alike claims refuse with exit 2. Warnings now reach `apply` and `associate`.
+
+**Older defects fixed on the same branch, found by its review.**
+
+- A trailing separator, a trailing `\.`, forward slashes or a `\\?\` prefix on a path could pass verification with state left behind. The CLI now gives project paths one spelling.
+- A typed path that differed from the stored one in case left a stale `cwd`. Plan now rewrites every spelling a transcript records, and verify sees any spelling.
+- A file on both sides of a merge failed at apply, and rollback then deleted the destination's copy. Plan refuses it, and apply re-checks after its snapshot.
+- A rename that keeps the encoded name merged the folder into itself.
+- A transcript in a folder not spelled `encode(src)`, such as a lower-case drive, failed verification.
+- Two runs in the same second shared a backup folder.
+- A state folder that was itself a junction had its target's files moved out.
+- `associate --json` reported an export it had not written.
+
+**Follow-ups, none blocking the tag.** They are recorded, not fixed.
+
+- **The one silent wrong result, and it predates AR-10.** `associate --to` a subfolder of `--from` writes `cwd` as `...\a\b\b` and exits 0, because one rewrite rule re-matches another rule's output. A single-pass rewrite in `rewrite.rs` would fix it. `awt rollback` undoes it.
+- **A regression from this fix, which fails safely.** Plan collects spellings only from a transcript's top-level `cwd`, while verify folds every spelling. A nested field in a spelling no top-level line has passes `plan` and exits 3 at `apply`, with a clean rollback. So does a destination's own transcript naming the source in another case. Nobody has checked whether real transcripts hold such fields.
+- A `cwd` for a subfolder of the project, recorded in another case, stays stale with exit 0, and `doctor` reports 0.
+- `\\?\...\x\..\proj` keeps the `..`, so `scan` reports 0 hits for a project with state, and `plan` exits 0. Calling `absolute` after stripping the prefix would fix it.
+- An older non-empty export folder still reports as an export. A refused rollback's message still quotes rollback's "Nothing was changed" inside its parentheses, next to the correct "the move is still in place".
+- A stored `cwd` with a trailing separator falsely refuses as nested. Rollback after a typed `PROJ` leaves the folder named `PROJ`. Both predate this fix.
+- Test gaps from the final mutation run: only `apply` tests the CLI's path clean-up (`scan`, `plan`, `verify` and `associate` do not), and no test pins the process id in the run id.
+- A look-alike project that nothing records can lose a memory-only folder to a move. awt warns. Listing look-alikes on disk would close this.
+- A destination typo can merge into an unrecorded live project's folder, for the same reason.
+- A nested child recorded only in history, or nowhere, does not refuse a parent move, and its state folder stays behind.
+- Rollback removes merged paths from the destination with no hash check. A file that arrives in the instant between apply's re-check and the merge would be deleted.
+- Rollback does not restore an empty subfolder after a merge. File bytes are restored.
+- Two source folders holding one relative file, or a broken line in the destination's own transcript, pass `plan` and exit 3 at `apply`. The rollback is clean.
+- A drive root as the source, or a move into the source's own subfolder, passes `plan` and fails at `apply`. The rollback is clean.
+- An 8.3 short name on `--src` is not resolved, and can pass with state left behind.
+- A non-BMP character in a path may encode differently from Claude Code's own encoding (not verified).
+- Standalone `verify` on a malformed `.claude.json` exits 4 with no check list.
+- `cargo test` leaves a backup folder in the system temp folder on each run.
 
 ---
 

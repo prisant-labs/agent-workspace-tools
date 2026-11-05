@@ -82,6 +82,18 @@ destination already holds the migrated state. A script that loops `apply` should
 2 with a destination-exists message as "already done", not as a failure. (This is the S-01
 AC-19 contract.)
 
+## A transcript has a broken line (exit 4)
+
+`plan` names the transcript and the line that is not valid JSON. A crash can truncate a last line, for
+example. Verification requires every line to parse, so `apply` could only fail. Repair or remove that
+line, then re-run.
+
+## A warning says a folder was left where it is
+
+A folder under `~/.claude/projects/` has this project's encoded name, but something ties it to another
+path. Encoded names collide: `a-b`, `a.b`, `a\b` and `a_b` all encode alike. The move goes ahead, and
+that folder stays with its owner. If the folder really is this project's, move or merge it by hand.
+
 ## Verification failed (exit 3)
 
 `verify`, and `apply`'s built-in post-apply verification, return 3 when any postcondition
