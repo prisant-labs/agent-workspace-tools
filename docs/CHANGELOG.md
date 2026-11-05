@@ -3,6 +3,34 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-11-04 (second entry) - AR-09 fixed; the archive docs return to the full claim
+
+Code changed in this entry: `awt archive` now copies what AC-35 promises.
+
+**`awt archive` now copies the full session set.** It copies project subfolders (subagents,
+`tool-results/`, `workflows/`) except `memory/`, plus `session-env/`, `tasks/` and `todos/` per
+session. It reports files it cannot read as failed and carries on. The maintainer chose this on
+2026-11-04 (`maintainer-todo.md` 1.9, option A).
+
+**Human layer.** `README.md`, `docs/reference/commands.md`, `docs/quickstart.md`, `docs/faq.md` and
+the root `CHANGELOG.md` state the full claim again. The AR-09 known issue is removed from the root
+`CHANGELOG.md`. `commands.md` lists what is deliberately not copied, the new
+`archived: N copied, N skipped, N failed` output, and why per-file failures exit 0. It also warns
+that `session-env/` can hold environment values.
+
+**Technical layer.** `docs/features/v1.1-inventory-retention-reassociate.md` drops the "implements
+part of it" marker, and its layout now matches the build. `rendered/` and `INDEX.md` are still not
+built. `docs/ROADMAP.md`, `plan_v1.0.0.md` (the tag row) and `docs/reference/claude-data-model.md`
+are updated to match.
+
+**Maintainer layer.** `maintainer-todo.md` marks 1.9 decided and the section 5 AR-09 entry fixed.
+
+**`awt associate --export` is stricter.** It shares the archive code, so it now exports more. It
+refuses before re-associating if any export file failed, because the export is the safety copy.
+
+**Unchanged.** The S-02 spec, the S-01 spec, the D10 sheet and `acceptance-run-2026-11-04.md` (a
+dated record). `AGENTS.md` and `CLAUDE.md` do not describe archive scope.
+
 ## 2026-11-04 - Adversarial acceptance repeated; AR-09 recorded
 
 No code changed in this entry.

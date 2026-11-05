@@ -124,7 +124,8 @@ refuses, archive skips) and byte-identical whole-tree rollback. **No technical s
 remains in the closeout; what is left is yours: 1.2 (D10 read) and 1.5 (S-01 sign-off).**
 That stopped being the whole list on 2026-11-03: 1.6 (acceptance re-run), 1.7 (FF-1 docs fix)
 and 1.8 (F-1 and F-2 engine fixes) also blocked the tag, and all three are done. The re-run then
-raised 1.9 (AR-09, `archive` copies less than it promises), which needs your decision.
+raised 1.9 (AR-09, `archive` copies less than it promises). You chose to fix it before the tag
+(2026-11-04), and the fix is done, so what is left is 1.2 and 1.5.
 
 ### 1.5 Sign off S-01 **[HUMAN - nobody else can do this]**
 
@@ -178,7 +179,9 @@ spec's AC-21 wording is unchanged, because you sign that text. The review guide 
 
 Decided 2026-11-03: both are fixed before the tag. See section 5.
 
-### 1.9 Decide whether AR-09 blocks the tag **[HUMAN]**
+### 1.9 Decide whether AR-09 blocks the tag **[DECIDED 2026-11-04: option A, fixed on a branch]**
+
+Decided 2026-11-04: option A, fix it before the tag. The fix is in `archive.rs` with tests, and the docs are back to the full claim. It still needs a merge, and the archive steps of the acceptance run should be repeated on the merged build. See section 5.
 
 `awt archive` does not copy subagent transcripts or most session artifacts, which AC-35 (archive
 includes session artifacts) promises in part. See section 5.
@@ -310,13 +313,15 @@ Whether FF-1 or FF-2 blocks the v1.0.0 tag is your call **[HUMAN]**. FF-1 is the
 
 **Decision (2026-11-03): the engine refuses.** It exits 2, before the scan, and leaves the file alone. There is no override flag, so refreshing an inventory now takes a delete or a new name. Add a flag later only if that proves annoying.
 
-### AR-09 (`archive` copies less than it promises) **[HUMAN decision at 1.9]**
+### AR-09 (`archive` copies less than it promises) **[FIXED 2026-11-04, decided at 1.9: option A]**
 
 **What happened.** The 2026-11-04 re-run checked a first sweep against the scratch copy. All 3,957 top-level transcripts and 24,683 of 24,689 file-history files were copied. The six others are likely orphans of sessions with no surviving transcript (inferred). The sweep did not copy 10,405 subagent transcripts (5.8 GB), 3,666 `tool-results` files (837 MB), or anything from `session-env/`, `tasks/` or `todos/`.
 
 **Why.** `archive_project_dir` in `crates/awt-core/src/archive.rs` copies only `*.jsonl` directly inside a project folder, plus `file-history/<sessionId>/`. AC-35 in the S-02 spec also names session-env, tasks and todos, and the design's layout names `tool-results` and `subagents`. Only file-history has a test, so the gap never showed.
 
-**Effect.** Nothing is lost by running `archive`, and a move and a rollback are unaffected. Files it skips remain exposed to auto-delete, and it does not say so. The pages that overstated the scope are corrected. The S-02 spec is unchanged, because narrowing a criterion is your call.
+**Effect.** Nothing was lost by running `archive`, and a move and a rollback were unaffected. Files it skipped remained exposed to auto-delete. The S-02 spec is unchanged, because the fix meets AC-35 as written.
+
+**Fixed.** `archive` now copies every file below every project subfolder except `memory/` (so subagents, `tool-results/` and `workflows/`, including session folders with no transcript beside them), and `session-env/<id>/`, `tasks/<id>/` and the matching `todos/` files for every session id, beside the existing file-history. `--session` and the `SessionEnd` hook archive the same set for their one session. A file that cannot be read, such as a lock file held by a running session, is reported as failed and the sweep continues; the exit code stays 0 for that case. Writes go through a temp file, so a failed write leaves no partial copy, and an archive folder inside the walked tree does not copy itself. `awt associate --export` also uses this code and now refuses before re-associating if any export file failed. The pages that carried the narrower claim are restored. What to do next: merge the branch, then rerun the archive steps of the acceptance run against a scratch copy (inferred as sufficient, since the change is confined to `archive.rs`, `associate.rs` and the archive output in the CLI).
 
 ---
 

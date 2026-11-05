@@ -172,9 +172,35 @@ Health values: `ok`, `stale` (contains stale references), `unresolved` (transcri
 
 ### `awt archive`
 
-Copy top-level session transcripts and file history to a durable folder before Claude's 30-day auto-delete removes them. Archives are incremental and deduplicated by content hash.
+Copy session history to a durable folder before Claude's 30-day auto-delete removes it. Archives are incremental and deduplicated by content hash.
 
-**It does not yet copy** subagent transcripts, `tool-results/`, `session-env/`, `tasks/` or `todos/`, so those files are not protected from auto-delete (AR-09 in `docs/internal/maintainer-todo.md` section 5).
+**What it copies.** For each project folder under `~/.claude/projects/<enc>/`, it copies these files byte for byte:
+
+- Each top-level `*.jsonl` transcript, to `<archive>/projects/<enc>/`.
+- Every file below every subfolder of the project folder, except `memory/`, to `<archive>/projects/<enc>/<subfolder>/`. These session folders hold `subagents/`, `tool-results/` and `workflows/`. A session folder is copied even when no transcript sits beside it.
+- For each session id, the session-keyed stores, to `<archive>/session-artifacts/`: `file-history/<id>/`, `session-env/<id>/`, `tasks/<id>/`, and the `todos/` files whose name contains the id. The ids come from the transcript names and the session folder names.
+
+**What it deliberately does not copy.**
+
+- Project `memory/` folders, because they are project notes and not session history.
+- Top-level files in a project folder that are not transcripts, for the same reason.
+- Anything behind a junction or symlink. The sweep skips the link and protects the rest (AC-61).
+
+**Care for the archive folder.** `session-env/` holds hook environment scripts that can contain environment values. Transcripts and tool results can hold pasted secrets. Give the archive folder the same protection as the Claude home.
+
+**Archive layout.**
+
+```
+<archive-dir>/
+  projects/<enc>/<sessionId>.jsonl
+  projects/<enc>/<sessionId>/...        subagents, tool-results, workflows
+  session-artifacts/{file-history,session-env,tasks}/<sessionId>/...
+  session-artifacts/todos/<sessionId>-*.json
+  manifest.json                         source path, destination and SHA-256 of every archived file
+  index.json
+```
+
+`--render` and a human-readable `INDEX.md` are not built yet.
 
 **Purpose:** preserve session history. Can be run manually, on a schedule, or wired into Claude Code as a `SessionEnd` hook so every session is archived automatically when it closes.
 
@@ -193,11 +219,17 @@ Copy top-level session transcripts and file history to a durable folder before C
 
 **Default behavior (no session or hook flags):** archive all transcripts not yet archived.
 
-**Output:** `archived: N copied, N skipped`.
+**Output:** `archived: N copied, N skipped, N failed`. With `--json`, one object with numeric `copied`, `skipped` and `failed` fields.
+
+**Failed files.** Running sessions hold some of these files open, such as `tasks/<id>/.lock`, so a read can be refused. The sweep records each file it cannot read or write, prints `archive failed: <path>: <reason>` to stderr, and carries on. A failed file is not listed in `manifest.json`, and a failed write never leaves a partial copy behind. The next run tries the file again.
+
+**Archive folder inside the tree.** A source path under `--archive-dir` is never copied, so an archive folder placed inside the Claude home does not copy itself.
 
 **Cloud-sync warning:** if `--archive-dir` resolves to a path under a known sync root (`OneDrive`, `Dropbox`), a warning is printed to stderr. The archive proceeds; the warning is advisory.
 
 **Exit codes used:** 0, 1, 2 (locked - missing required companion flag), 4 (hook stdin contained invalid JSON or missing `transcript_path`).
+
+Per-file failures exit 0. The installed `SessionEnd` hook runs while other sessions are live, and a locked file must not turn a working hook into a failing one. The failures are printed and counted instead. Exit 1 still means the sweep could not run: the archive folder or `manifest.json` could not be written, or the `--session` transcript does not exist. `awt associate --export` is stricter, because the export is a safety copy: it exits 1 and re-associates nothing if any file failed.
 
 ---
 
