@@ -25,6 +25,7 @@ This index lists every document in the repository, who it is for, and when to re
 | [docs/internal/release-plans/plan_v1.0.0/S-04_safety-closeout/spec.md](internal/release-plans/plan_v1.0.0/S-04_safety-closeout/spec.md) | Maintainers | **The v1 safety closeout (gate g)**: verified data-loss and false-success findings as acceptance criteria, each blocking the tag |
 | [docs/internal/release-plans/plan_v1.0.0/S-01_mover-cli/review-guide.md](internal/release-plans/plan_v1.0.0/S-01_mover-cli/review-guide.md) | Maintainer | The S-01 sign-off reading aid: every acceptance criterion in plain language, its evidence, and what currently contests it |
 | [docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-28.md](internal/release-plans/plan_v1.0.0/acceptance-run-2026-07-28.md) | Maintainers | The first run: FAIL, with the AR-01..AR-04 analysis and their resolutions |
+| [docs/internal/release-plans/_unassigned/S-05_desktop-app-store/spec.md](internal/release-plans/_unassigned/S-05_desktop-app-store/spec.md) | Maintainers | **Proposed, parked v1.x:** a store adapter for Claude desktop app records that name a moved or deleted folder |
 | [scripts/README.md](../scripts/README.md) | Everyone | What each helper script does, its parameters, and why it exists |
 | [docs/decisions/](decisions/) | Maintainers, AI agents | Architecture and naming decision records (MADR v4) |
 | [docs/internal/v2-gui-design-brief.md](internal/v2-gui-design-brief.md) | Designers, design agents | Generating v2 GUI concepts - self-contained, no repo access needed |

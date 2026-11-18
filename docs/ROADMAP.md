@@ -12,7 +12,7 @@ lives in `docs/superpowers/plans/2026-07-10-claude-project-mover.md`.
 |---|---|---|
 | v0.1.0 (milestone tag) | Read-only CLI: `doctor` + `scan` (TDD plan phases 1-4) | The honesty checkpoint: `awt doctor` on the real machine reports exactly the residue verified by hand (6 stale githubRepoPaths, ~11 stale history values, the orphaned plugin dir). No write code ships before this passes. |
 | v1.0.0 | The complete Windows-native CLI: mover (`plan`/`apply`/`verify`/`rollback`, phases 5-9), F13 `awt list`, F14 `awt archive`, F15 `awt associate` (phases 13-15), and `awt repair --drive-letter` (S-03, folded in per D9) | Release plan hygiene gates + doc checklist at `docs/internal/release-plans/plan_v1.0.0/`, including the S-04 safety closeout (gate g) |
-| v1.x (parked candidates) | P10 cross-volume move (AC-2); P11 Codex/Gemini adapters (AC-27) | Promotion into a release plan when scheduled; both sit behind the existing adapter boundary and copy primitives, no re-architecture needed |
+| v1.x (parked candidates) | P10 cross-volume move (AC-2); P11 Codex/Gemini adapters (AC-27); S-05 Claude desktop app store (AC-66..77, proposed 2026-11-18, [spec](internal/release-plans/_unassigned/S-05_desktop-app-store/spec.md)) | Promotion into a release plan when scheduled; both sit behind the existing adapter boundary and copy primitives, no re-architecture needed |
 | v2.0.0 | Tauri 2 + React GUI over the identical `awt-core` for every v1 capability (old phase 12; AC-25 parity) | GUI security baseline and native-parity requirements written into DESIGN.md BEFORE build starts; parity test `GUI plan model == awt plan --json`; signing + updater pipeline |
 
 Scope decision of record: the old numbering ("v1.0 mover" + "v1.1 features") folds

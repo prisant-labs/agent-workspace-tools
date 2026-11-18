@@ -3,6 +3,14 @@
 How the planning documents have changed, and how each change affects the others.
 Newest first. This is a doc-impact log, not a code changelog.
 
+## 2026-11-18 - S-05 desktop app store proposed
+
+No code changed in this entry. A folder rename left Claude desktop app records pointing at the old path after `~/.claude` had been repointed, because `awt` does not read the desktop app's state under `%APPDATA%\Claude\`. The new spec `docs/internal/release-plans/_unassigned/S-05_desktop-app-store/spec.md` proposes a read-only adapter first, an honesty checkpoint, and then gated writes that refuse while the app runs. It is parked as a v1.x candidate and does not touch the v1.0.0 plan.
+
+**Technical layer.** `docs/ROADMAP.md` lists S-05 among the parked v1.x candidates. `docs/index.md` links the spec.
+
+**Unchanged on purpose.** The v1.0.0 plan, its specs, and `docs/reference/claude-data-model.md`. The data model for the desktop app lives in the S-05 spec until the maintainer accepts it.
+
 ## 2026-11-05 (fourth entry) - AR-10 fixed
 
 Code changed in this entry. The maintainer chose to fix AR-10 (a project folder with no readable transcript could not be moved) before the tag. `docs/internal/release-plans/plan_v1.0.0/acceptance-run-2026-11-05-ar10.md` is the acceptance record. Three review rounds shaped the fix, and they found older defects on the same path, which this change also fixes.
